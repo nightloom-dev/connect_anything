@@ -1,7 +1,8 @@
-import type { SolanaRecipe } from '@aurora-is-near/intents-connect';
+import { BACKEND_PLACEHOLDERS, type Execution, type SolanaRecipe, type SolanaStep } from '@aurora-is-near/intents-connect';
 import { prepareSolanaSteps } from '@aurora-is-near/intents-connect-wallet/solana';
 import { argFields, buildInstruction, resolveAccounts, toRecipeCode, toSimRequest, type Field, type FieldType, type Idl, type ResolvedAccount } from '@connect-anything/core';
-import { PublicKey } from '@solana/web3.js';
+import { ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { PublicKey, SystemProgram, type TransactionInstruction } from '@solana/web3.js';
 
 // Screens 1 to 3 run without a wallet and resolveAccounts needs a real key to derive from, so a recipe is written with
 // this one and it is swapped for the real intermediary at every build. Nobody holds its private key.
@@ -144,6 +145,95 @@ export function matchesPublished(stored: StoredRecipe, program: string, publishe
     canonical(mine.types) === canonical(published.types) &&
     stored.steps.filter(step => step.program === program).every(({ ixName }) => canonical(instruction(mine, ixName)) === canonical(instruction(published, ixName)))
   );
+}
+
+// Program, data and account keys. Not the signer and writable flags: Solana keeps one pair per key for a whole message,
+// so a step rendered from the compiled transaction can show more than the recipe's own step did, and mean the same.
+const stepKey = (programId: string, data: string, args: unknown, accounts: string[]) => JSON.stringify([programId, data, args, accounts]);
+
+const heldKey = ({ programId, discriminator = '', args = [], accounts }: SolanaStep, intermediary: string) =>
+  stepKey(programId, discriminator.toLowerCase(), args, accounts.map(({ pubkey }) => (pubkey === BACKEND_PLACEHOLDERS.intermediary ? intermediary : pubkey)));
+
+const builtKey = ({ programId, data, keys }: TransactionInstruction) =>
+  stepKey(programId.toBase58(), data.toString('hex'), [], keys.map(({ pubkey }) => pubkey.toBase58()));
+
+const littleEndian = (bytes: Uint8Array) => bytes.reduceRight((value, byte) => value * 256n + BigInt(byte), 0n);
+
+/** Which bytes of a step's data hold the amount: the ones that differ between 0 and the largest amount. */
+function amountSpan(stored: StoredRecipe, intermediary: string, index: number) {
+  const { program, ixName, amountArg } = stored.steps[index];
+  const field = argFields(stored.idls[program], ixName).find(({ name }) => name === amountArg);
+  if (field?.kind !== 'int') throw new Error('no amount argument');
+  const low = buildRecipe(stored, intermediary, '0')[index].instruction.data;
+  const high = buildRecipe(stored, intermediary, field.max)[index].instruction.data;
+  const changed = [...low.keys()].filter(at => low[at] !== high[at]);
+  return [changed[0], changed[changed.length - 1] + 1];
+}
+
+/**
+ * What an execution holds around this recipe's steps, or undefined if it does not hold them all, in order and unbroken.
+ * Its metadata cannot say: whoever creates an execution writes that, and a steps-only one records no amount. So the amount
+ * is read from the data and the whole recipe built with it has to come out the same, which also refuses steps with different amounts.
+ */
+function extrasAround(stored: StoredRecipe, execution: Execution, intermediary: string): SolanaStep[] | undefined {
+  const destination = execution.quote?.destinationAsset;
+  if (destination && destination !== stored.destination.assetId) return undefined;
+  const held = execution.steps as SolanaStep[];
+  const count = stored.steps.length;
+  const keys = held.map(step => heldKey(step, intermediary));
+  const first = stored.steps.findIndex(step => step.amountArg !== undefined);
+  const span = first < 0 ? undefined : amountSpan(stored, intermediary, first);
+  for (let start = 0; start + count <= held.length; start++) {
+    const amount = span ? littleEndian(Buffer.from(held[start + first].discriminator ?? '', 'hex').subarray(span[0], span[1])) : 0n;
+    const wanted = buildRecipe(stored, intermediary, amount.toString()).map(({ instruction }) => builtKey(instruction));
+    if (wanted.every((key, index) => key === keys[start + index])) return [...held.slice(0, start), ...held.slice(start + count)];
+  }
+  return undefined;
+}
+
+/** Whether this execution ran the recipe on this page, so that a retry here runs the same thing. A title cannot say: every repay of another position has the same instruction names. */
+export function runsRecipe(stored: StoredRecipe, execution: Execution, intermediary: string) {
+  try {
+    return extrasAround(stored, execution, intermediary) !== undefined;
+  } catch {
+    return false;
+  }
+}
+
+const SYSTEM_PROGRAM = SystemProgram.programId.toBase58();
+const ADVANCE_NONCE = '04000000';
+const ATA_PROGRAM = ASSOCIATED_TOKEN_PROGRAM_ID.toBase58();
+const ATA_CREATE = ['', '00', '01'];
+const TOKEN_PROGRAMS = [TOKEN_PROGRAM_ID.toBase58(), TOKEN_2022_PROGRAM_ID.toBase58()];
+
+const addedByConnect = ({ programId, discriminator = '', args = [] }: SolanaStep) =>
+  args.length === 0 &&
+  (programId === COMPUTE_BUDGET ||
+    (programId === SYSTEM_PROGRAM && discriminator === ADVANCE_NONCE) ||
+    (programId === ATA_PROGRAM && ATA_CREATE.includes(discriminator)));
+
+/** The amount of a Transfer or TransferChecked of the token program, the shape Connect's fee has. */
+function transferred({ programId, discriminator = '', args = [] }: SolanaStep) {
+  const data = Buffer.from(discriminator, 'hex');
+  const isTransfer = (data[0] === 3 && data.length === 9) || (data[0] === 12 && data.length === 10);
+  return TOKEN_PROGRAMS.includes(programId) && args.length === 0 && isTransfer ? littleEndian(data.subarray(1, 9)) : undefined;
+}
+
+/**
+ * Whether a signature on this execution signs the recipe on this page and nothing of value besides. Anyone can create an
+ * execution for any wallet, so nothing else is signed from a resume. A real create adds a compute budget, its nonce, an ATA
+ * create and the one fee transfer it states, and only those are let through. A wrong no costs one Cancel signature and a new run.
+ * Known limit: Connect gives the funder of an account create to its fee payer, so a recipe with one does not match its own execution and loses Resume and Retry, not Cancel or Refund.
+ */
+export function signsOnlyRecipe(stored: StoredRecipe, execution: Execution, intermediary: string) {
+  try {
+    const others = extrasAround(stored, execution, intermediary)?.filter(step => !addedByConnect(step));
+    if (!others) return false;
+    const fee = others.length === 1 ? transferred(others[0]) : undefined;
+    return others.length === 0 || (fee !== undefined && fee <= BigInt(execution.details?.networkFee ?? 0));
+  } catch {
+    return false;
+  }
 }
 
 export const isByte = (type: FieldType) => type.kind === 'int' && type.type === 'u8';

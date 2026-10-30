@@ -2,17 +2,20 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { argFields, flatten, type Idl } from '@connect-anything/core';
-import { TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from '@solana/spl-token';
-import { PublicKey } from '@solana/web3.js';
-import { STAND_IN, buildRecipe, defaultValue, matchesPublished, parseStored, recipeCode, resolveStep, simulationRequest, toSolanaRecipe, variantValue, type StoredRecipe } from './recipe.ts';
+import type { Execution, SolanaStep } from '@aurora-is-near/intents-connect';
+import { ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from '@solana/spl-token';
+import { PublicKey, SystemProgram } from '@solana/web3.js';
+import { STAND_IN, buildRecipe, defaultValue, matchesPublished, parseStored, recipeCode, resolveStep, runsRecipe, signsOnlyRecipe, simulationRequest, toSolanaRecipe, variantValue, type StoredRecipe } from './recipe.ts';
 
 const KLEND_IDL: Idl = JSON.parse(readFileSync(new URL('../../../recipes/kamino-rescue/klend.idl.json', import.meta.url), 'utf8'));
 const KLEND = KLEND_IDL.address;
 const USDC = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 const VISITOR = '8FKDyH8gkPLTE6Jqm3vkLukeerf8FWJUSDjMKNfgrCpq';
 const ATTACKER = 'GoD6qy7kDpJQgkV5cZqdXtJmmjGhNvLzmdJNofjMCCN8';
+const EVIL = 'BUTND9T7Ux4KR8RAEgd4WoZwnP7xA279oA1y3iPVcvSh';
 const SOME = 'PfqP2R8NB8gNjegeNrsjTVv4epj3WqcH8S58QQL5UwH';
 const REPAY = 'repay_obligation_liquidity_v2';
+const COMPUTE_BUDGET = 'ComputeBudget111111111111111111111111111111';
 
 const inputs = () => {
   const names = flatten(KLEND_IDL.instructions.find(ix => ix.name === REPAY)!.accounts).map(({ path }) => path);
@@ -91,6 +94,112 @@ test('the author cannot make anyone else sign or point a step at another program
   assert.deepEqual(extra.keys.at(-1), { pubkey: new PublicKey(ATTACKER), isSigner: false, isWritable: true });
 
   refused(stored => (stored.idls[KLEND].address = ATTACKER), /no IDL for its program/);
+});
+
+// an execution as Connect keeps it: the steps the SDK sends, with what the service adds around them
+const execution = async (stored: StoredRecipe, amount: string, around: { before?: SolanaStep[]; after?: SolanaStep[]; networkFee?: string; destinationAsset?: string } = {}) => {
+  const { steps } = await toSolanaRecipe(stored).buildSteps({ intermediary: VISITOR, userAddress: '0xabc', amount }, undefined);
+  return {
+    id: 'ex',
+    status: 'CREATED',
+    quote: { destinationAsset: around.destinationAsset ?? stored.destination.assetId },
+    details: { intermediaryAddress: VISITOR, networkFee: around.networkFee },
+    steps: [...(around.before ?? []), ...steps, ...(around.after ?? [])],
+  } as unknown as Execution;
+};
+
+const step = (programId: string, discriminator: string): SolanaStep => ({ programId, discriminator, args: [], accounts: [{ pubkey: SOME, isSigner: false, isWritable: true }] });
+const TOKEN = TOKEN_PROGRAM_ID.toBase58();
+const le8 = (value: bigint) => {
+  const bytes = Buffer.alloc(8);
+  bytes.writeBigUInt64LE(value);
+  return bytes.toString('hex');
+};
+
+test('an execution of this recipe is recognised at whatever amount it was built with', async () => {
+  const stored = recipe();
+  for (const amount of ['0', '1', '4897725', '18446744073709551615']) assert.ok(runsRecipe(stored, await execution(stored, amount), VISITOR), amount);
+  // a real create answers with the steps it signs, where the placeholder has become the key
+  const resolved = await execution(stored, '77');
+  resolved.steps = JSON.parse(JSON.stringify(resolved.steps).replaceAll('{INTERMEDIARY}', VISITOR));
+  assert.ok(runsRecipe(stored, resolved, VISITOR));
+  // and a steps-only one records no amount and has no quote
+  const stepsOnly = await execution(stored, '77');
+  delete (stepsOnly as { quote?: unknown }).quote;
+  assert.ok(runsRecipe(stored, stepsOnly, VISITOR));
+});
+
+test('an execution of anything else is not this recipe, whatever it calls itself', async () => {
+  const stored = recipe();
+  const named = (other: Execution) => ({ ...other, metadata: { title: toSolanaRecipe(stored).title } });
+
+  const otherObligation = recipe({ inputs: { ...inputs(), 'repay_accounts.obligation': ATTACKER } });
+  assert.equal(toSolanaRecipe(otherObligation).title, toSolanaRecipe(stored).title, 'a title says nothing');
+  assert.ok(!runsRecipe(stored, named(await execution(otherObligation, '77')), VISITOR));
+
+  const another = await execution(stored, '77');
+  another.steps = JSON.parse(JSON.stringify(another.steps).replaceAll('{INTERMEDIARY}', ATTACKER));
+  assert.ok(!runsRecipe(stored, named(another), VISITOR), 'signed by another intermediary');
+  assert.ok(!runsRecipe(stored, await execution(stored, '77', { destinationAsset: 'nep141:other.omft.near' }), VISITOR), 'delivers another token');
+
+  const data = await execution(stored, '77');
+  (data.steps[0] as SolanaStep).discriminator = `${(data.steps[0] as SolanaStep).discriminator}00`;
+  assert.ok(!runsRecipe(stored, data, VISITOR), 'data with something appended');
+
+  const args = await execution(stored, '77');
+  (args.steps[0] as SolanaStep).args = [{ name: 'more', type: 'u64', value: '1' }];
+  assert.ok(!runsRecipe(stored, args, VISITOR), 'arguments the service would append to the data');
+
+  const reordered = await execution(stored, '77');
+  (reordered.steps[0] as SolanaStep).accounts.reverse();
+  assert.ok(!runsRecipe(stored, reordered, VISITOR), 'accounts in another order');
+
+  for (const steps of [[], [{}], [{ to: '0xabc', functionSignature: 'f()' }], null, 'x']) {
+    assert.ok(!runsRecipe(stored, { ...data, steps } as unknown as Execution, VISITOR), JSON.stringify(steps));
+  }
+});
+
+test('two steps of one recipe cannot have been built with two amounts', async () => {
+  const one = recipe().steps[0];
+  const stored = { ...recipe(), steps: [one, one] };
+  const same = await execution(stored, '5');
+  assert.ok(runsRecipe(stored, same, VISITOR));
+  const split = await execution(stored, '5');
+  split.steps[1] = (await execution(stored, '6')).steps[1];
+  assert.ok(!runsRecipe(stored, split, VISITOR));
+});
+
+test('a recipe with fixed amounts is compared as it stands', async () => {
+  const fixed = recipe({ args: { liquidity_amount: '999' }, amountArg: undefined });
+  assert.ok(runsRecipe(fixed, await execution(fixed, '5'), VISITOR));
+  assert.ok(!runsRecipe(fixed, await execution(recipe({ args: { liquidity_amount: '998' }, amountArg: undefined }), '5'), VISITOR));
+});
+
+test('a signature signs the recipe and what Connect adds, and nothing else of value', async () => {
+  const stored = recipe();
+  const fee = (amount: bigint, program = TOKEN) => step(program, `03${le8(amount)}`);
+  const signs = async (around: Parameters<typeof execution>[2]) => signsOnlyRecipe(stored, await execution(stored, '77', around), VISITOR);
+
+  assert.ok(await signs({}), 'as sent');
+  assert.ok(
+    await signs({
+      before: [step(COMPUTE_BUDGET, '02c0d40100'), step(SystemProgram.programId.toBase58(), '04000000'), step(ASSOCIATED_TOKEN_PROGRAM_ID.toBase58(), '01')],
+      after: [fee(40000n)],
+      networkFee: '40000',
+    }),
+    'as a real create answers',
+  );
+  assert.ok(await signs({ after: [step(TOKEN, `0c${le8(40000n)}06`)], networkFee: '40000' }), 'a TransferChecked fee');
+
+  assert.ok(!(await signs({ after: [fee(40001n)], networkFee: '40000' })), 'more than the fee it states');
+  assert.ok(!(await signs({ after: [fee(1n)] })), 'a transfer with no fee stated');
+  assert.ok(!(await signs({ after: [fee(1n), fee(1n)], networkFee: '40000' })), 'a second transfer');
+  assert.ok(!(await signs({ after: [step(EVIL, '00')] })), 'a program nobody listed');
+  assert.ok(!(await signs({ before: [step(KLEND, '00')] })), 'another call of a listed program');
+  assert.ok(!(await signs({ after: [step(SystemProgram.programId.toBase58(), `02000000${le8(1n)}`)] })), 'a transfer of SOL');
+  assert.ok(!(await signs({ after: [step(ASSOCIATED_TOKEN_PROGRAM_ID.toBase58(), '02')] })), 'a recover of a nested account');
+  assert.ok(!(await signs({ after: [step(TOKEN, `04${le8(1n)}`)], networkFee: '40000' })), 'an approval');
+  assert.ok(!signsOnlyRecipe(recipe({ inputs: { ...inputs(), 'repay_accounts.obligation': ATTACKER } }), await execution(stored, '77'), VISITOR), 'another recipe');
 });
 
 test('a malformed or forbidden recipe is refused with its reason', () => {
