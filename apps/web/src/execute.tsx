@@ -5,7 +5,7 @@ import { useIntentsConnectWallet } from '@aurora-is-near/intents-connect-wallet/
 import type { Idl } from '@connect-anything/core';
 import { checkCompat, issueText } from './compat.ts';
 import { CHAINS, STAGES, STAGE_OF, bridgePlan, bySymbol, existingOffer, explain, fromAtomic, isQuoteMoved, refundBody, retryPlan, stoppedFollowing, toAtomic, type Balance, type Token, type TokenList } from './connect.ts';
-import { STAND_IN, buildRecipe, matchesPublished, parseStored, signsOnlyRecipe, toSolanaRecipe, type StoredRecipe } from './recipe.ts';
+import { STAND_IN, buildRecipe, matchesPublished, parseStored, runsRecipe, signsOnlyRecipe, toSolanaRecipe, type StoredRecipe } from './recipe.ts';
 import { AccountList, Failure, FetchError, Notice, short, useAct, useAsync, useJson } from './ui.tsx';
 
 const SOLSCAN = 'https://solscan.io';
@@ -181,6 +181,9 @@ type RecoverProps = {
   act: ReturnType<typeof useAct>['act'];
   locked: boolean;
   recipe: SolanaRecipe;
+  stored: StoredRecipe;
+  /** Why this page asks the wallet for nothing that runs the recipe now. Refund sends the money back to the wallet, so it does not wait for this. */
+  gate: string;
   list: TokenList;
   intermediary?: string | null;
   source?: Token;
@@ -191,7 +194,7 @@ type RecoverProps = {
  * kind for it, so this follows the status, and the runner has no flow for an out-operation, so Refund goes to the API.
  * A surplus stays there too, and the balance is what shows it, so that it is still offered after a reload.
  */
-function Recover({ exec, execution, unsigned, act, locked, recipe, list, intermediary, source }: RecoverProps) {
+function Recover({ exec, execution, unsigned, act, locked, recipe, stored, gate, list, intermediary, source }: RecoverProps) {
   const { api, wallet } = useIntentsConnect();
   const [retry, setRetry] = useState<StepsPreview>();
   const [refund, setRefund] = useState<Execution>();
@@ -202,7 +205,7 @@ function Recover({ exec, execution, unsigned, act, locked, recipe, list, interme
   const held = balance.data;
   const backTo = list.sources.find(candidate => candidate.assetId === execution?.quote?.originAsset) ?? source;
   // a retry runs the recipe on this page, which must be the one that failed
-  const sameRecipe = execution?.metadata?.title === recipe.title && assetId === recipe.destination.assetId;
+  const sameRecipe = useMemo(() => !!execution && !!intermediary && runsRecipe(stored, execution, intermediary), [execution, stored, intermediary]);
   const address = wallet?.getAddress();
 
   const retryQuote = () => exec.previewSteps(retryPlan(recipe, held!.amount));
@@ -261,9 +264,10 @@ function Recover({ exec, execution, unsigned, act, locked, recipe, list, interme
             Your intermediary holds <strong>{amount(held.amount)}</strong>.
           </p>
           {execution && !sameRecipe && <p className="hint">Retry is offered on the page of the recipe that failed.</p>}
+          {sameRecipe && gate && <p className="hint">{gate}</p>}
           <div className="row">
             {sameRecipe && (
-              <button disabled={locked} onClick={askRetry}>
+              <button disabled={locked || !!gate} onClick={askRetry}>
                 Retry
               </button>
             )}
@@ -281,7 +285,7 @@ function Recover({ exec, execution, unsigned, act, locked, recipe, list, interme
               </dl>
               {moved && <Notice kind="warn">The fee moved before you signed. These are the new numbers, and nothing was charged.</Notice>}
               {unsigned && <Notice kind="warn">Your wallet will first ask you to sign the deletion of the earlier attempt. That moves no money.</Notice>}
-              <button className="primary" disabled={locked} onClick={signRetry}>
+              <button className="primary" disabled={locked || !!gate} onClick={signRetry}>
                 Sign and retry
               </button>
             </div>
@@ -800,7 +804,7 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
         </Notice>
       )}
       {exec.status === 'DEPOSIT_FAILED' && <Notice kind="error">The deposit failed, for example on an invalid amount, so nothing ran on Solana. What was transferred is refunded.</Notice>}
-      {list.data && (failed || atRest) && <Recover key={failed?.id} exec={exec} execution={failed} unsigned={unsigned} act={act} locked={locked || !!exec.recovery || unfinished} recipe={recipe} list={list.data} intermediary={intermediary} source={source} />}
+      {list.data && (failed || atRest) && <Recover key={failed?.id} exec={exec} execution={failed} unsigned={unsigned} act={act} locked={locked || !!exec.recovery || unfinished} recipe={recipe} stored={stored} gate={refused} list={list.data} intermediary={intermediary} source={source} />}
     </div>
   );
 }
