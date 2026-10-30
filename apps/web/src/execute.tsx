@@ -5,7 +5,7 @@ import { useIntentsConnectWallet } from '@aurora-is-near/intents-connect-wallet/
 import type { Idl } from '@connect-anything/core';
 import { checkCompat, issueText } from './compat.ts';
 import { CHAINS, STAGES, STAGE_OF, bridgePlan, bySymbol, existingOffer, explain, fromAtomic, isQuoteMoved, refundBody, retryPlan, stoppedFollowing, toAtomic, type Balance, type Token, type TokenList } from './connect.ts';
-import { STAND_IN, buildRecipe, matchesPublished, parseStored, runsRecipe, signsOnlyRecipe, toSolanaRecipe, type StoredRecipe } from './recipe.ts';
+import { STAND_IN, buildRecipe, matchesPublished, parseStored, runsRecipe, signsOnlyRecipe, takesAmount, toSolanaRecipe, type StoredRecipe } from './recipe.ts';
 import { AccountList, Failure, FetchError, Notice, short, useAct, useAsync, useJson } from './ui.tsx';
 
 const SOLSCAN = 'https://solscan.io';
@@ -172,6 +172,19 @@ function Progress({ exec, chain, resumed }: { exec: UseExecutionResult; chain: s
   );
 }
 
+const Spends = ({ stored, figure }: { stored: StoredRecipe; figure: string }) =>
+  takesAmount(stored) ? (
+    <>
+      <dt>The recipe spends</dt>
+      <dd>{figure}</dd>
+    </>
+  ) : (
+    <>
+      <dt>Amounts</dt>
+      <dd>Fixed in the recipe's instructions and listed under What will run, whatever you pay here. What they do not spend stays with your intermediary.</dd>
+    </>
+  );
+
 type RecoverProps = {
   exec: UseExecutionResult;
   /** Kept by the parent, since a new attempt wipes it from `exec` before anything is signed. Without one nothing failed, and this only offers to send back what a run left. */
@@ -280,8 +293,7 @@ function Recover({ exec, execution, unsigned, act, locked, recipe, stored, gate,
               <dl className="figures">
                 <dt>Fee</dt>
                 <dd>{amount(retry.networkFee)}</dd>
-                <dt>The recipe spends</dt>
-                <dd>{amount(retry.spendable)}</dd>
+                <Spends stored={stored} figure={amount(retry.spendable)} />
               </dl>
               {moved && <Notice kind="warn">The fee moved before you signed. These are the new numbers, and nothing was charged.</Notice>}
               {unsigned && <Notice kind="warn">Your wallet will first ask you to sign the deletion of the earlier attempt. That moves no money.</Notice>}
@@ -739,8 +751,7 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
             <dd>
               {preview.execution.details.networkFee ? `${fromAtomic(preview.execution.details.networkFee, target.decimals)} ${target.symbol}` : 'none stated'}, taken out of what is delivered
             </dd>
-            <dt>The recipe spends</dt>
-            <dd>{preview.spendable ? `${fromAtomic(preview.spendable, target.decimals)} ${target.symbol}` : '–'}</dd>
+            <Spends stored={stored} figure={preview.spendable ? `${fromAtomic(preview.spendable, target.decimals)} ${target.symbol}` : '–'} />
             {preview.spendable && outcome?.(preview.spendable)}
           </dl>
           {moved && <Notice kind="warn">The quote moved before you signed. These are the new numbers, and nothing was charged.</Notice>}

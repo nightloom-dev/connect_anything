@@ -5,7 +5,7 @@ import { argFields, flatten, type Idl } from '@connect-anything/core';
 import type { Execution, SolanaStep } from '@aurora-is-near/intents-connect';
 import { ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from '@solana/spl-token';
 import { PublicKey, SystemProgram } from '@solana/web3.js';
-import { STAND_IN, buildRecipe, defaultValue, matchesPublished, parseStored, recipeCode, resolveStep, runsRecipe, signsOnlyRecipe, simulationRequest, toSolanaRecipe, variantValue, type StoredRecipe } from './recipe.ts';
+import { STAND_IN, buildRecipe, defaultValue, matchesPublished, parseStored, recipeCode, resolveStep, runsRecipe, signsOnlyRecipe, simulationRequest, takesAmount, toSolanaRecipe, variantValue, type StoredRecipe } from './recipe.ts';
 
 const KLEND_IDL: Idl = JSON.parse(readFileSync(new URL('../../../recipes/kamino-rescue/klend.idl.json', import.meta.url), 'utf8'));
 const KLEND = KLEND_IDL.address;
@@ -167,6 +167,16 @@ test('two steps of one recipe cannot have been built with two amounts', async ()
   const split = await execution(stored, '5');
   split.steps[1] = (await execution(stored, '6')).steps[1];
   assert.ok(!runsRecipe(stored, split, VISITOR));
+});
+
+test('only a recipe with an amount argument spends the figure Connect quotes', () => {
+  const data = (stored: StoredRecipe, amount: string) => buildRecipe(stored, VISITOR, amount)[0].instruction.data.toString('hex');
+  const taking = recipe();
+  assert.equal(takesAmount(taking), true);
+  assert.notEqual(data(taking, '1'), data(taking, '4897725'));
+  const fixed = recipe({ amountArg: undefined, args: { liquidity_amount: '999000000' } });
+  assert.equal(takesAmount(fixed), false);
+  assert.equal(data(fixed, '1'), data(fixed, '4897725'));
 });
 
 test('a recipe with fixed amounts is compared as it stands', async () => {

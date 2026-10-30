@@ -103,6 +103,9 @@ export function buildRecipe(stored: StoredRecipe, intermediary: string, amount: 
   });
 }
 
+/** Whether the amount Connect delivers reaches the instructions at all. Without an amount argument they spend what their data says, whatever was paid. */
+export const takesAmount = (stored: StoredRecipe) => stored.steps.some(step => step.amountArg !== undefined);
+
 const recipeNames = (stored: StoredRecipe) => ({
   id: 'connect-anything',
   intent: 'connect_anything',
