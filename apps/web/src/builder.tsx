@@ -4,7 +4,7 @@ import { argFields, buildInstruction, flatten, listInstructions, type Field, typ
 import { checkCompat, issueText } from './compat.ts';
 import { bySymbol, fromAtomic, toAtomic, type Token, type TokenList } from './connect.ts';
 import { Execute } from './execute.tsx';
-import { STAND_IN, defaultValue, isByte, recipeCode, resolveStep, simulationRequest, toSolanaRecipe, variantValue, type Row, type StoredRecipe, type StoredStep } from './recipe.ts';
+import { STAND_IN, defaultValue, destinationIssue, isByte, recipeCode, resolveStep, simulationRequest, toSolanaRecipe, variantValue, type Row, type StoredRecipe, type StoredStep } from './recipe.ts';
 import { AccountList, Boundary, Copy, Failure, FetchError, Notice, fetchJson, short, useAct, useAsync, useJson } from './ui.tsx';
 
 const CU_LIMIT = 200_000;
@@ -256,7 +256,7 @@ function InstructionForm({ idl, ixName, mint, onAdd }: { idl: Idl; ixName: strin
 
       <h4>Compatibility with Connect</h4>
       {issues.length === 0 ? (
-        <Notice kind="ok">No problems found.</Notice>
+        <Notice>Not checked yet. This page only checks that the recipe touches the token it receives, so Connect may still refuse this instruction at the run.</Notice>
       ) : (
         <Notice kind="error">
           {issues.map(issue => (
@@ -280,11 +280,13 @@ type InstructionScreenProps = {
   onTarget: (assetId: string) => void;
   steps: StoredStep[];
   onSteps: (steps: StoredStep[]) => void;
+  /** Why Connect would refuse the recipe as it stands. */
+  destination?: string;
   onBack: () => void;
   onNext: () => void;
 };
 
-function InstructionScreen({ idl, list, targets, token, onTarget, steps, onSteps, onBack, onNext }: InstructionScreenProps) {
+function InstructionScreen({ idl, list, targets, token, onTarget, steps, onSteps, destination, onBack, onNext }: InstructionScreenProps) {
   const [chosen, setChosen] = useState<string>();
   const instructions = useMemo(() => (idl ? listInstructions(idl) : []), [idl]);
   const ixName = instructions.some(({ name }) => name === chosen) ? chosen : undefined; // another program may have been loaded since
@@ -360,7 +362,8 @@ function InstructionScreen({ idl, list, targets, token, onTarget, steps, onSteps
           ))}
         </ol>
       )}
-      <button className="primary" disabled={steps.length === 0 || !token} onClick={onNext}>
+      {destination && <Notice kind="error">{destination}</Notice>}
+      <button className="primary" disabled={steps.length === 0 || !token || !!destination} onClick={onNext}>
         Next: simulate
       </button>
     </section>
@@ -527,6 +530,7 @@ export function Builder() {
     [token, steps, idls],
   );
   const recipe = useMemo(() => stored && toSolanaRecipe(stored), [stored]);
+  const destination = useMemo(() => (stored ? destinationIssue(stored, STAND_IN) : undefined), [stored]);
 
   const onLoad = (loaded: Idl) => {
     setIdl(loaded);
@@ -539,7 +543,7 @@ export function Builder() {
       <nav className="tabs" aria-label="Steps">
         {SCREENS.map((name, index) => (
           // leaving screen 4 mid-run would hide the only way to act on a running execution
-          <button key={name} className={screen === index + 1 ? 'chosen' : ''} aria-current={screen === index + 1 ? 'step' : undefined} disabled={exec.isBusy} onClick={() => setScreen(index + 1)}>
+          <button key={name} className={screen === index + 1 ? 'chosen' : ''} aria-current={screen === index + 1 ? 'step' : undefined} disabled={exec.isBusy || (index >= 2 && !!destination)} onClick={() => setScreen(index + 1)}>
             {index + 1}. {name}
           </button>
         ))}
@@ -547,7 +551,7 @@ export function Builder() {
       {screen === 1 && <ProgramScreen onLoad={onLoad} />}
       {screen === 2 && (
         <Boundary>
-          <InstructionScreen idl={idl} list={list} targets={targets} token={token} onTarget={setTarget} steps={steps} onSteps={setSteps} onBack={() => setScreen(1)} onNext={() => setScreen(3)} />
+          <InstructionScreen idl={idl} list={list} targets={targets} token={token} onTarget={setTarget} steps={steps} onSteps={setSteps} destination={destination} onBack={() => setScreen(1)} onNext={() => setScreen(3)} />
         </Boundary>
       )}
       {screen === 3 && <SimulateScreen stored={stored} token={token} onBack={() => setScreen(idl ? 2 : 1)} onRun={() => setScreen(4)} />}

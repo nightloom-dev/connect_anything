@@ -1,7 +1,7 @@
 import { BACKEND_PLACEHOLDERS, type Execution, type SolanaRecipe, type SolanaStep } from '@aurora-is-near/intents-connect';
 import { prepareSolanaSteps } from '@aurora-is-near/intents-connect-wallet/solana';
 import { argFields, buildInstruction, resolveAccounts, toRecipeCode, toSimRequest, type Field, type FieldType, type Idl, type ResolvedAccount } from '@connect-anything/core';
-import { ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from '@solana/spl-token';
 import { PublicKey, SystemProgram, type TransactionInstruction } from '@solana/web3.js';
 
 // Screens 1 to 3 run without a wallet and resolveAccounts needs a real key to derive from, so a recipe is written with
@@ -101,6 +101,23 @@ export function buildRecipe(stored: StoredRecipe, intermediary: string, amount: 
     const { args, accounts } = resolveStep(idl, step, context);
     return { ...step, idl, args, accounts, instruction: buildInstruction(idl, step.ixName, args, accounts) };
   });
+}
+
+/**
+ * Why Connect would refuse this recipe over the token it delivers: Connect takes its fee in that token, and answers 400 for
+ * steps that reference neither its mint nor the intermediary's account of it. Unsaid, that shows only after a wallet and a
+ * quote. Which token program the mint has is not known here, so either account counts. A step that cannot be built yet has nothing to say.
+ */
+export function destinationIssue(stored: StoredRecipe, intermediary: string) {
+  const { tokenAddress } = stored.destination;
+  try {
+    const accounts = [TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID].map(program => getAssociatedTokenAddressSync(new PublicKey(tokenAddress), new PublicKey(intermediary), true, program).toBase58());
+    const touching = new Set([tokenAddress, ...accounts]);
+    if (buildRecipe(stored, intermediary, '0').some(({ instruction }) => instruction.keys.some(({ pubkey }) => touching.has(pubkey.toBase58())))) return undefined;
+  } catch {
+    return undefined;
+  }
+  return `No step references the token this recipe receives, ${tokenAddress}: neither its mint nor the intermediary's associated token account. Connect refuses such a recipe. Whoever builds it can add the mint as a remaining account of a step.`;
 }
 
 /** Whether the amount Connect delivers reaches the instructions at all. Without an amount argument they spend what their data says, whatever was paid. */

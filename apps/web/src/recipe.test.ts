@@ -3,9 +3,10 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { argFields, flatten, type Idl } from '@connect-anything/core';
 import type { Execution, SolanaStep } from '@aurora-is-near/intents-connect';
-import { ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from '@solana/spl-token';
+import { rescueRecipe, type Obligation, type ObligationRow } from '@connect-anything/kamino-rescue';
+import { ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from '@solana/spl-token';
 import { PublicKey, SystemProgram } from '@solana/web3.js';
-import { STAND_IN, buildRecipe, defaultValue, matchesPublished, parseStored, recipeCode, resolveStep, runsRecipe, signsOnlyRecipe, simulationRequest, takesAmount, toSolanaRecipe, variantValue, type StoredRecipe } from './recipe.ts';
+import { STAND_IN, buildRecipe, defaultValue, destinationIssue, matchesPublished, parseStored, recipeCode, resolveStep, runsRecipe, signsOnlyRecipe, simulationRequest, takesAmount, toSolanaRecipe, variantValue, type StoredRecipe } from './recipe.ts';
 
 const KLEND_IDL: Idl = JSON.parse(readFileSync(new URL('../../../recipes/kamino-rescue/klend.idl.json', import.meta.url), 'utf8'));
 const KLEND = KLEND_IDL.address;
@@ -167,6 +168,33 @@ test('two steps of one recipe cannot have been built with two amounts', async ()
   const split = await execution(stored, '5');
   split.steps[1] = (await execution(stored, '6')).steps[1];
   assert.ok(!runsRecipe(stored, split, VISITOR));
+});
+
+test('Connect refuses a recipe with no step that touches the token it receives', () => {
+  const ata = (mint: string, owner: string, program = TOKEN_PROGRAM_ID) => getAssociatedTokenAddressSync(new PublicKey(mint), new PublicKey(owner), true, program).toBase58();
+  const issue = (overrides: Parameters<typeof recipe>[0]) => destinationIssue(recipe(overrides), VISITOR);
+  const typed = (account: string) => ({ inputs: { ...inputs(), 'repay_accounts.user_source_liquidity': account } });
+
+  assert.match(issue({})!, new RegExp(`references the token this recipe receives, ${USDC}`));
+  assert.match(issue(typed(ata(SOME, VISITOR)))!, /Connect refuses/, "another token's account");
+  assert.match(issue(typed(ata(USDC, ATTACKER)))!, /Connect refuses/, "someone else's account");
+
+  assert.equal(issue(typed(USDC)), undefined, 'the mint as an account');
+  assert.equal(issue({ remaining: [{ pubkey: USDC, isWritable: false }] }), undefined, 'the mint as a remaining account');
+  assert.equal(issue(typed(ata(USDC, VISITOR))), undefined, "the intermediary's account");
+  assert.equal(issue(typed(ata(USDC, VISITOR, TOKEN_2022_PROGRAM_ID))), undefined, 'under Token-2022');
+  assert.equal(destinationIssue(recipe(typed(ata(USDC, STAND_IN))), STAND_IN), undefined, 'for the stand-in, as screen 2 asks');
+
+  const { 'repay_accounts.lending_market': _left, ...unfinished } = inputs();
+  assert.equal(issue({ inputs: unfinished }), undefined, 'a step that cannot be built yet has nothing to say');
+});
+
+test('the flagship touches what it receives', () => {
+  const debt: ObligationRow = { reserve: SOME, mint: USDC, symbol: 'USDC', decimals: 6, amount: '1000000000', usd: 1000, tokenProgram: TOKEN_PROGRAM_ID.toBase58(), supplyVault: SOME, debtFarm: null, pythOracle: null, switchboardPriceOracle: null, switchboardTwapOracle: null, scopePrices: SOME };
+  const position: Obligation = { address: SOME, market: SOME, deposits: [], borrows: [debt], collateralUsd: 2000, debtUsd: 1000, adjustedDebtUsd: 1000, ltv: 0.5, liquidationLtv: 0.8, refreshRemaining: [SOME], repayRemaining: [], unjoinedDebtFarms: [] };
+  const stored = rescueRecipe(position, debt);
+  assert.doesNotThrow(() => buildRecipe(stored, VISITOR, '0'), 'an answer from a recipe that builds');
+  assert.equal(destinationIssue(stored, VISITOR), undefined);
 });
 
 test('only a recipe with an amount argument spends the figure Connect quotes', () => {

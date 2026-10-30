@@ -5,7 +5,7 @@ import { useIntentsConnectWallet } from '@aurora-is-near/intents-connect-wallet/
 import type { Idl } from '@connect-anything/core';
 import { checkCompat, issueText } from './compat.ts';
 import { CHAINS, STAGES, STAGE_OF, bridgePlan, bySymbol, existingOffer, explain, fromAtomic, isQuoteMoved, legs, refundBody, retryPlan, stoppedFollowing, toAtomic, type Balance, type Token, type TokenList } from './connect.ts';
-import { STAND_IN, buildRecipe, matchesPublished, parseStored, runsRecipe, signsOnlyRecipe, takesAmount, toSolanaRecipe, type StoredRecipe } from './recipe.ts';
+import { STAND_IN, buildRecipe, destinationIssue, matchesPublished, parseStored, runsRecipe, signsOnlyRecipe, takesAmount, toSolanaRecipe, type StoredRecipe } from './recipe.ts';
 import { AccountList, Failure, FetchError, Notice, short, useAct, useAsync, useJson } from './ui.tsx';
 
 const SOLSCAN = 'https://solscan.io';
@@ -529,7 +529,10 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
       return { problem: (failure as Error).message };
     }
   }, [stored, intermediary, preview]);
-  const issues = stored.steps.flatMap(step => checkCompat(stored.idls[step.program], step.ixName));
+  const issues = useMemo(() => {
+    const untouched = destinationIssue(stored, intermediary ?? STAND_IN);
+    return [...stored.steps.flatMap(step => checkCompat(stored.idls[step.program], step.ixName)), ...(untouched ? [{ reason: untouched }] : [])];
+  }, [stored, intermediary]);
 
   // A signature cannot rest on a quote for other inputs or another wallet.
   useEffect(() => {

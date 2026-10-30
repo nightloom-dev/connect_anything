@@ -31,6 +31,7 @@ API Aurora SDK (`prepareSolanaSteps`, `SolanaRecipe`, раннер, `threeRound`
 | Одно исполнение на кошелёк на сеть (409)                 | Блокировать вторую кнопку, предлагать resume текущего                                               |
 | `OPERATION_FAILED` терминальный, деньги у интермедиари   | Кнопки «Повторить» (steps-only) и «Вернуть» (`outOperation`)                                        |
 | Mint в allow-list Kora                                   | Список токенов-целей только из `GET /api/v1/supported_tokens`                                       |
+| Шаг должен касаться токена-цели (mint или ATA)          | `destinationIssue`: причина на экране 2, экраны 3–4 закрыты; `/r/:id` и `/kamino` не запускаются    |
 | 503 — нет durable nonce                                  | Автоповтор через 2–3 с, до 3 раз                                                                    |
 | Ключ `x-api-key` на каждый create                        | Только в серверном прокси; в клиентском бандле ключа быть не должно                                 |
 | Solana-направления могут быть выключены (`solana: null`) | Запросить у Aurora 28.10                                                                            |
