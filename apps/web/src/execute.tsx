@@ -173,8 +173,8 @@ function Progress({ exec, chain, resumed }: { exec: UseExecutionResult; chain: s
 
 type RecoverProps = {
   exec: UseExecutionResult;
-  /** Kept by the parent, since a new attempt wipes it from `exec` before anything is signed. */
-  execution: Execution;
+  /** Kept by the parent, since a new attempt wipes it from `exec` before anything is signed. Without one nothing failed, and this only offers to send back what a run left. */
+  execution?: Execution;
   /** An attempt that was created and never signed, which a new one has to delete first. */
   unsigned?: string;
   act: ReturnType<typeof useAct>['act'];
@@ -188,19 +188,20 @@ type RecoverProps = {
 /**
  * OPERATION_FAILED is terminal and the money stays with the intermediary. In SDK 7.28.0 deriveExecutionRecovery has no
  * kind for it, so this follows the status, and the runner has no flow for an out-operation, so Refund goes to the API.
+ * A surplus stays there too, and the balance is what shows it, so that it is still offered after a reload.
  */
 function Recover({ exec, execution, unsigned, act, locked, recipe, list, intermediary, source }: RecoverProps) {
   const { api, wallet } = useIntentsConnect();
   const [retry, setRetry] = useState<StepsPreview>();
   const [refund, setRefund] = useState<Execution>();
   const [moved, setMoved] = useState(false);
-  const assetId = execution.quote?.destinationAsset ?? recipe.destination.assetId;
+  const assetId = execution?.quote?.destinationAsset ?? recipe.destination.assetId;
   const token = list.tokens.find(candidate => candidate.assetId === assetId);
   const balance = useJson<Balance>(intermediary && token?.contractAddress ? `/api/balance/${intermediary}/${token.contractAddress}` : null);
   const held = balance.data;
-  const backTo = list.sources.find(candidate => candidate.assetId === execution.quote?.originAsset) ?? source;
+  const backTo = list.sources.find(candidate => candidate.assetId === execution?.quote?.originAsset) ?? source;
   // a retry runs the recipe on this page, which must be the one that failed
-  const sameRecipe = execution.metadata?.title === recipe.title && assetId === recipe.destination.assetId;
+  const sameRecipe = execution?.metadata?.title === recipe.title && assetId === recipe.destination.assetId;
   const address = wallet?.getAddress();
 
   const retryQuote = () => exec.previewSteps(retryPlan(recipe, held!.amount));
@@ -244,9 +245,11 @@ function Recover({ exec, execution, unsigned, act, locked, recipe, list, interme
   const symbol = token?.symbol ?? 'tokens';
   const amount = (atomic?: string) => (atomic && token ? `${fromAtomic(atomic, token.decimals)} ${symbol}` : '–');
 
+  if (!execution && (!held || held.amount === '0')) return null;
+
   return (
     <div className="recover">
-      <Notice kind="error">The instructions failed on Solana, so the money stayed with your intermediary. You can run them again with it, or send it back.</Notice>
+      {execution ? <Notice kind="error">The instructions failed on Solana, so the money stayed with your intermediary. You can run them again with it, or send it back.</Notice> : <Notice>Whatever a run does not spend stays with your intermediary until you send it back.</Notice>}
       {!token && <Notice kind="error">Intents Connect no longer lists the token of this execution, so its balance cannot be read here.</Notice>}
       {balance.loading && <Notice>Reading what your intermediary holds…</Notice>}
       {balance.error && <Failure error={balance.error} retry={balance.retry} />}
@@ -256,7 +259,7 @@ function Recover({ exec, execution, unsigned, act, locked, recipe, list, interme
           <p>
             Your intermediary holds <strong>{amount(held.amount)}</strong>.
           </p>
-          {!sameRecipe && <p className="hint">Retry is offered on the page of the recipe that failed.</p>}
+          {execution && !sameRecipe && <p className="hint">Retry is offered on the page of the recipe that failed.</p>}
           <div className="row">
             {sameRecipe && (
               <button disabled={locked} onClick={askRetry}>
@@ -388,6 +391,8 @@ export function Execute({ exec, recipe, stored, shared = false }: ExecuteProps) 
   const last = address ? recent(address).find(id => !hidden.includes(id)) : undefined;
 
   const locked = exec.isBusy || working;
+  // a balance read while a run is in flight is about to change, and a second execution would meet the 409
+  const atRest = !exec.isBusy && !(exec.status && IN_FLIGHT_STATUSES.includes(exec.status));
   // A flow that fails after the real create, on a moved quote or a declined signature, leaves an execution holding this wallet's one in-flight slot.
   const unsigned = exec.phase === 'failed' && !exec.recovery && !exec.hasSubmittedSignature && exec.status === 'CREATED' ? exec.executionId : undefined;
   const unfinished = exec.phase === 'failed' && !exec.recovery && !unsigned && !!exec.executionId && !!exec.status && IN_FLIGHT_STATUSES.includes(exec.status);
@@ -619,7 +624,7 @@ export function Execute({ exec, recipe, stored, shared = false }: ExecuteProps) 
         </button>
       )}
       {exec.status === 'DEPOSIT_FAILED' && <Notice kind="error">The deposit failed, for example on an invalid amount, so nothing ran on Solana. What was transferred is refunded.</Notice>}
-      {failed && list.data && <Recover key={failed.id} exec={exec} execution={failed} unsigned={unsigned} act={act} locked={locked || !!exec.recovery} recipe={recipe} list={list.data} intermediary={intermediary} source={source} />}
+      {list.data && (failed || atRest) && <Recover key={failed?.id} exec={exec} execution={failed} unsigned={unsigned} act={act} locked={locked || !!exec.recovery} recipe={recipe} list={list.data} intermediary={intermediary} source={source} />}
     </div>
   );
 }
