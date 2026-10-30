@@ -132,8 +132,10 @@ export const estimateCu = (obligation: Obligation, debt: ObligationRow) => reser
 
 const writable = (pubkey: string) => ({ pubkey, isWritable: true, source: 'recipe' as const });
 
+type Step = { program: string; ixName: string; args: Record<string, unknown>; inputs: Record<string, string>; hints: Record<string, string | null>; remaining?: ReturnType<typeof writable>[]; amountArg?: string };
+
 /** refresh_reserve for every reserve, deposits first as the real repays do, then refresh_obligation, then repay v2 of the amount delivered. */
-export function rescueSteps(obligation: Obligation, debt: ObligationRow) {
+export function rescueSteps(obligation: Obligation, debt: ObligationRow): Step[] {
   const { address, market } = obligation;
   const step = { program: KLEND, inputs: {} };
   return [

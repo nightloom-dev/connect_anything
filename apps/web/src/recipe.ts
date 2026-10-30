@@ -19,7 +19,8 @@ export type StoredStep = {
   inputs: Record<string, string>;
   /** What a recipe knows about its accounts, by account name. null leaves an optional account out. */
   hints?: Record<string, string | null>;
-  remaining?: { pubkey: string; isWritable: boolean }[];
+  /** `source` says that the recipe found it, where a form's rows are typed by whoever made the recipe. */
+  remaining?: { pubkey: string; isWritable: boolean; source?: 'recipe' }[];
   /** A top-level unsigned integer argument that takes the amount delivered, known only when the recipe runs. */
   amountArg?: string;
 };
@@ -87,7 +88,7 @@ export function resolveStep(idl: Idl, step: StoredStep, { intermediary, mint, am
   const args: Record<string, unknown> = step.amountArg === undefined ? swap(step.args) : { ...swap(step.args), [step.amountArg]: amount };
   const named: Row[] = resolveAccounts(idl, step.ixName, args, { intermediary, mint, inputs: swap(step.inputs) }, swap(step.hints ?? {}));
   // Connect lets only the intermediary sign and a remaining account is not it, so the flag is not the author's to set
-  const extra: Row[] = swap(step.remaining ?? []).map(({ pubkey, isWritable }, index) => ({ name: `remaining ${index + 1}`, pubkey, isSigner: false, isWritable, source: 'input', optional: false }));
+  const extra: Row[] = swap(step.remaining ?? []).map(({ pubkey, isWritable, source }, index) => ({ name: `remaining ${index + 1}`, pubkey, isSigner: false, isWritable, source: source === 'recipe' ? 'recipe' : 'input', optional: false }));
   return { args, accounts: [...named, ...extra] };
 }
 

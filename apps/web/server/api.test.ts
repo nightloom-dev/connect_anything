@@ -6,7 +6,12 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, mock, test } from 'node:test';
+import { guards } from '@aurora-is-near/intents-connect';
+import { rescueRecipe, type Obligation, type ObligationRow } from '@connect-anything/kamino-rescue';
 import { BorshAccountsCoder, utils } from '@coral-xyz/anchor';
+import { PublicKey } from '@solana/web3.js';
+import { assertSameInstruction, recordedInstructions } from '../../../packages/core/test/recorded.ts';
+import { buildRecipe, parseStored, toSolanaRecipe } from '../src/recipe.ts';
 import { createApi, type Env } from './api.ts';
 
 // a converter on the developer's machine must not decide what these tests see
@@ -494,6 +499,89 @@ test('GET /api/kamino sees a debt farm and a Token-2022 mint', async () => {
   const obligations = await kaminoAnswer();
   const [debt] = obligations.find(o => o.address.startsWith('Pfq')).borrows;
   assert.deepEqual([debt.debtFarm, debt.tokenProgram], ['3Dsn7mXKCxQ54QxDtogFsGqgMhhgWnVtN5MGLHvowh3E', 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb']);
+});
+
+test('GET /api/kamino gives what the steps of a repay take after their named accounts', async () => {
+  const obligations = await kaminoAnswer();
+  const plain = obligations.find(o => o.address.startsWith('GoD6'));
+  assert.deepEqual(plain.refreshRemaining, [plain.deposits[0].reserve, plain.borrows[0].reserve]);
+  assert.deepEqual(plain.repayRemaining, []);
+  assert.deepEqual(plain.unjoinedDebtFarms, []);
+  assert.deepEqual(obligations.find(o => o.address.startsWith('Pfq')).unjoinedDebtFarms, [], 'this one joined the farm of its debt');
+});
+
+test('GET /api/kamino says when an obligation never joined the farm of its debt', async () => {
+  const { url } = await rpc((method, params) => (JSON.stringify(params).includes('EX4ixQThYbhomePQnVrH4ns1hBV32XPv6R69rGvHMVVL') ? { result: { context: { slot: 1 }, value: [null] } } : replayed(method, params)));
+  const { body } = await call(await app({ SOLANA_RPC_URL: url }), `/api/kamino/${WALLET}`);
+  assert.deepEqual(body.obligations.find((o: Obligation) => o.address.startsWith('Pfq')).unjoinedDebtFarms, ['3Dsn7mXKCxQ54QxDtogFsGqgMhhgWnVtN5MGLHvowh3E']);
+});
+
+test('GET /api/kamino gives a referred obligation its referrer token states, and one in an elevation group its deposit reserves', async () => {
+  const { Obligation: layout } = await import('@kamino-finance/klend-sdk');
+  const referrer = new PublicKey(USDC); // any key, only the addresses derived from it matter
+  const at = (field: string) => 8 + layout.layout.offsetOf(field)!;
+  const { url } = await rpc((method, params) => {
+    const answer = replayed(method, params);
+    if (method !== 'getProgramAccounts' || !('result' in answer)) return answer;
+    const patched = (answer.result as any[]).map(item => {
+      const data = Buffer.from(item.account.data[0], 'base64');
+      referrer.toBuffer().copy(data, at('referrer'));
+      data[at('elevationGroup')] = 1;
+      return { ...item, account: { ...item.account, data: [data.toString('base64'), 'base64'] } };
+    });
+    return { result: patched };
+  });
+  const { status, body } = await call(await app({ SOLANA_RPC_URL: url }), `/api/kamino/${WALLET}`);
+  assert.equal(status, 200, JSON.stringify(body));
+  const plain: Obligation = body.obligations.find((o: Obligation) => o.address.startsWith('GoD6'));
+  const [deposit, borrow] = [plain.deposits[0].reserve, plain.borrows[0].reserve];
+  const [tokenState] = PublicKey.findProgramAddressSync([Buffer.from('referrer_acc'), referrer.toBuffer(), new PublicKey(borrow).toBuffer()], new PublicKey(KLEND));
+  assert.deepEqual(plain.refreshRemaining, [deposit, borrow, tokenState.toBase58()]);
+  assert.deepEqual(plain.repayRemaining, [deposit]);
+});
+
+test('the rescue recipe of a real position builds the instructions of the real repay of it', async () => {
+  const obligation: Obligation = (await kaminoAnswer()).find(o => o.address.startsWith('GoD6'));
+  // the fixture's position owes USDT, which the screen refuses to run: this compares the shape of the accounts only
+  const stored = parseStored(JSON.parse(JSON.stringify(rescueRecipe(obligation, obligation.borrows[0]))));
+  const real = recordedInstructions('klend-repay-plain').filter(ix => ix.programId === KLEND);
+  const amount = real[3].data.readBigUInt64LE(8).toString();
+  const steps = buildRecipe(stored, WALLET, amount);
+
+  assert.deepEqual(steps.map(step => step.ixName), ['refresh_reserve', 'refresh_reserve', 'refresh_obligation', 'repay_obligation_liquidity_v2']);
+  // the owner pays the fee of the real transaction, which raises it to writable there and only there
+  steps.forEach((step, index) => assertSameInstruction(step.instruction, real[index], index === 3 ? [0] : []));
+  assert.equal(steps[3].args.liquidity_amount, amount);
+
+  const labelled = (rows: { name: string; source: string }[]) => rows.filter(row => row.source !== 'recipe').map(row => row.name);
+  for (const step of steps.slice(0, 3)) assert.deepEqual(labelled(step.accounts), [], `${step.ixName} comes from the obligation`);
+  assert.deepEqual(labelled(steps[3].accounts), ['repay_accounts.owner', 'repay_accounts.user_source_liquidity', 'repay_accounts.instruction_sysvar_account', 'lending_market_authority', 'farms_program']);
+});
+
+test('the rescue recipe of a USDC debt with a farm builds the instructions of a real repay of one', async () => {
+  // this one repays in the middle of a larger transaction, after its own refreshes
+  const all = recordedInstructions('klend-repay-farms').filter(ix => ix.programId === KLEND);
+  const at = all.findIndex(ix => ix.data.subarray(0, 8).toString('hex') === '74aed54cb435d290');
+  const real = all.slice(at - 3, at + 1);
+  const [deposit, borrow, refresh, repay] = real;
+  const [owner, address, market, reserve, mint, supplyVault, , tokenProgram, , , debtFarm] = repay.accounts.map(account => account.pubkey);
+  const row = (ix: typeof deposit, over: Partial<ObligationRow> = {}): ObligationRow => ({ reserve: ix.accounts[0].pubkey, mint: 'not this one', symbol: 'X', decimals: 6, amount: '1', usd: 1, tokenProgram, supplyVault, debtFarm: null, pythOracle: null, switchboardPriceOracle: null, switchboardTwapOracle: null, scopePrices: ix.accounts[5].pubkey, ...over });
+  const debt = row(borrow, { reserve, mint, symbol: 'USDC', debtFarm });
+  const obligation: Obligation = { address, market, deposits: [row(deposit)], borrows: [debt], collateralUsd: 2, debtUsd: 1, adjustedDebtUsd: 1, ltv: 0.5, liquidationLtv: 0.8, refreshRemaining: refresh.accounts.slice(2).map(account => account.pubkey), repayRemaining: [], unjoinedDebtFarms: [] };
+  const stored = rescueRecipe(obligation, debt);
+  assert.equal(stored.destination.tokenAddress, mint, 'this one is USDC, the token the recipe delivers');
+
+  const amount = repay.data.readBigUInt64LE(8).toString();
+  const steps = buildRecipe(stored, owner, amount);
+  steps.forEach((step, index) => assertSameInstruction(step.instruction, real[index], index === 3 ? [0] : []));
+
+  // and Connect takes it: a concrete amount, the intermediary as a placeholder, and no other signer
+  const { steps: prepared } = await toSolanaRecipe(stored).buildSteps({ intermediary: owner, userAddress: '0xabc', amount }, undefined);
+  guards.solanaStepsAreLegal(prepared);
+  assert.equal(prepared.length, 4);
+  assert.equal(prepared[3].discriminator, repay.data.toString('hex'));
+  assert.ok(!JSON.stringify(prepared).includes(owner));
+  assert.deepEqual(prepared[3].accounts.filter(account => account.isSigner).map(account => account.pubkey), ['{INTERMEDIARY}']);
 });
 
 test('GET /api/kamino gives an empty list for a wallet without positions', async () => {

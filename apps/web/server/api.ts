@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { LegacyIdlError, listInstructions, loadIdl, parseIdl, type Idl } from '@connect-anything/core';
+import type { Obligation as RescuePosition, ObligationRow } from '@connect-anything/kamino-rescue';
 import type { Position } from '@kamino-finance/klend-sdk';
 import {
   SOLANA_ERROR__RPC__TRANSPORT_HTTP_ERROR,
@@ -149,9 +150,9 @@ const kaminoRpc = (url: string) => createSolanaRpcFromTransport(patient(createDe
 // the SDK's own math on only the reserves a wallet uses, because KaminoMarket.load pulls every reserve of a market
 // through getProgramAccounts on each call and the public RPC does not take that
 // Known limit: one getMultipleAccounts per kind of account, so a wallet using over 100 reserves gets a 502
-async function readObligations(wallet: string, rpc: ReturnType<typeof kaminoRpc>) {
+async function readObligations(wallet: string, rpc: ReturnType<typeof kaminoRpc>): Promise<RescuePosition[]> {
   // 170 MB and over a second to load, so only once somebody asks and never in a build
-  const { DEFAULT_RECENT_SLOT_DURATION_MS, KaminoMarket, KaminoObligation, KaminoReserve, LendingMarket, Obligation, PROGRAM_ID, Reserve, getCurrentLedgerInstant, getTokenOracleData, isNotNullPubkey } =
+  const { DEFAULT_RECENT_SLOT_DURATION_MS, KaminoMarket, KaminoObligation, KaminoReserve, LendingMarket, Obligation, PROGRAM_ID, Reserve, getCurrentLedgerInstant, getTokenOracleData, isNotNullPubkey, obligationFarmStatePda } =
     await import('@kamino-finance/klend-sdk');
 
   const accounts = await rpc
@@ -196,12 +197,12 @@ async function readObligations(wallet: string, rpc: ReturnType<typeof kaminoRpc>
 
   const orNull = (key: Address) => (isNotNullPubkey(key) ? key : null);
 
-  return found.map(({ address, data, state }) => {
+  return Promise.all(found.map(async ({ address, data, state }) => {
     const market = markets.get(state.lendingMarket)!;
     const obligation = KaminoObligation.fromAccountData(markets, address, data, instant)!;
     const stats = obligation.refreshedStats;
     // the reserve's accounts are here because only the server decodes reserves, and a recipe takes them as hints
-    const row = (position: Position) => {
+    const row = (position: Position): ObligationRow => {
       const reserve = market.getReserveByAddress(position.reserveAddress)!;
       const { liquidity, farmDebt, config: { tokenInfo } } = reserve.state;
       return {
@@ -220,18 +221,28 @@ async function readObligations(wallet: string, rpc: ReturnType<typeof kaminoRpc>
         scopePrices: orNull(tokenInfo.scopeConfiguration.priceFeed),
       };
     };
+    const borrows = obligation.getBorrows().map(row);
+    // a farm added after the borrow leaves no user state, which the SDK creates first and a recipe has no rent to create
+    const farms = [...new Set(borrows.flatMap(({ debtFarm }) => debtFarm ?? []))] as Address[];
+    const farmUsers = await Promise.all(farms.map(farm => obligationFarmStatePda(farm, address)));
+    const { value: joined } = farmUsers.length ? await rpc.getMultipleAccounts(farmUsers, { encoding: 'base64' }).send() : { value: [] };
     return {
       address,
       market: state.lendingMarket,
       deposits: obligation.getDeposits().map(row),
-      borrows: obligation.getBorrows().map(row),
+      borrows,
       collateralUsd: stats.userTotalCollateralDeposit.toNumber(),
       debtUsd: stats.userTotalBorrow.toNumber(),
       adjustedDebtUsd: stats.userTotalBorrowBorrowFactorAdjusted.toNumber(), // the debt LTV counts, with the borrow factor
       ltv: stats.loanToValue.toNumber(),
       liquidationLtv: stats.liquidationLtv.toNumber(),
+      // the SDK's own answers, or the program refuses the repay: refresh_obligation takes the reserves and then a referred
+      // obligation's referrer token states, and repay takes the deposit reserves too in an elevation group
+      refreshRemaining: (await obligation.getRefreshObligationIx()).accounts!.slice(2).map(account => account.address),
+      repayRemaining: state.elevationGroup > 0 ? obligation.getDepositReserves() : [],
+      unjoinedDebtFarms: farms.filter((_, index) => !joined[index]),
     };
-  });
+  }));
 }
 
 type Handler = (params: string[], context: { req: IncomingMessage; res: ServerResponse; query: string }) => Promise<unknown>;
