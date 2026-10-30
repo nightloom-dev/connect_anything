@@ -221,6 +221,8 @@ function Recover({ exec, execution, unsigned, act, locked, recipe, stored, gate,
   // a retry runs the recipe on this page, which must be the one that failed
   const sameRecipe = useMemo(() => !!execution && !!intermediary && runsRecipe(stored, execution, intermediary), [execution, stored, intermediary]);
   const address = wallet?.getAddress();
+  // the figures were asked for this target and this wallet, and the card would read them in the decimals of another
+  useEffect(() => setRefund(undefined), [backTo?.assetId, address]);
 
   const retryQuote = () => exec.previewSteps(retryPlan(recipe, held!.amount));
   const askRetry = act(async () => {
