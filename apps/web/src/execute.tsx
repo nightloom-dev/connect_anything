@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { BACKEND_PLACEHOLDERS, IN_FLIGHT_STATUSES, guards, parseOriginAsset, signIntentsConnectPayload, type Execution, type ExecutionPreview, type ExecutionStep, type SolanaRecipe, type StepsPreview } from '@aurora-is-near/intents-connect';
+import { BACKEND_PLACEHOLDERS, TERMINAL_STATUSES, guards, parseOriginAsset, signIntentsConnectPayload, type Execution, type ExecutionPreview, type ExecutionStep, type SolanaRecipe, type StepsPreview } from '@aurora-is-near/intents-connect';
 import { useExecution, useIntentsConnect, type UseExecutionResult } from '@aurora-is-near/intents-connect/react';
 import { useIntentsConnectWallet } from '@aurora-is-near/intents-connect-wallet/connect/appkit';
 import type { Idl } from '@connect-anything/core';
 import { checkCompat, issueText } from './compat.ts';
-import { CHAINS, STAGES, STAGE_OF, bridgePlan, bySymbol, existingOffer, explain, fromAtomic, isQuoteMoved, refundBody, retryPlan, toAtomic, type Balance, type Token, type TokenList } from './connect.ts';
+import { CHAINS, STAGES, STAGE_OF, bridgePlan, bySymbol, existingOffer, explain, fromAtomic, isQuoteMoved, refundBody, retryPlan, stoppedFollowing, toAtomic, type Balance, type Token, type TokenList } from './connect.ts';
 import { STAND_IN, buildRecipe, matchesPublished, parseStored, signsOnlyRecipe, toSolanaRecipe, type StoredRecipe } from './recipe.ts';
 import { AccountList, Failure, FetchError, Notice, short, useAct, useAsync, useJson } from './ui.tsx';
 
@@ -553,10 +553,10 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
 
   const locked = exec.isBusy || working;
   // a balance read while a run is in flight is about to change, and a second execution would meet the 409
-  const atRest = !exec.isBusy && !(exec.status && IN_FLIGHT_STATUSES.includes(exec.status));
+  const atRest = !exec.isBusy && (!exec.status || TERMINAL_STATUSES.includes(exec.status));
   // A flow that fails after the real create, on a moved quote or a declined signature, leaves an execution holding this wallet's one in-flight slot.
   const unsigned = exec.phase === 'failed' && !exec.recovery && !exec.hasSubmittedSignature && exec.status === 'CREATED' ? exec.executionId : undefined;
-  const unfinished = exec.phase === 'failed' && !exec.recovery && !unsigned && !!exec.executionId && !!exec.status && IN_FLIGHT_STATUSES.includes(exec.status);
+  const unfinished = !unsigned && stoppedFollowing(exec);
 
   // What keeps this recipe from running at all, so nothing on this page asks the wallet to sign for it.
   const refused =
@@ -582,7 +582,7 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
                       : '');
   const missing = lookup.error ? '' : !source ? 'Intents Connect takes no token from this chain right now.' : !atomic ? `Enter an amount of ${source.symbol}.` : '';
   const blocked = refused || missing;
-  const canQuote = !blocked && !lookup.error && !locked && !exec.recovery;
+  const canQuote = !blocked && !lookup.error && !locked && !exec.recovery && !unfinished;
 
   const quote = async () => {
     for (let tries = 1; ; tries++) {
@@ -742,7 +742,7 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
           {moved && <Notice kind="warn">The quote moved before you signed. These are the new numbers, and nothing was charged.</Notice>}
           {unsigned && <Notice kind="warn">Your wallet will first ask you to sign the deletion of the earlier attempt. That moves no money.</Notice>}
           <p className="hint">Your wallet asks for one signature, then for the deposit, switching to {CHAINS.find(({ id }) => id === source.blockchain)?.name} if it is on another network.</p>
-          <button className="primary" disabled={locked || !!exec.recovery || !!blocked} onClick={sign}>
+          <button className="primary" disabled={locked || !!exec.recovery || !!blocked || unfinished} onClick={sign}>
             Sign and run
           </button>
         </div>
@@ -767,7 +767,7 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
       )}
       {unfinished && (
         <Notice kind="warn">
-          This execution is still running, but this page stopped following it.{' '}
+          This execution has not finished, and this page stopped following it. Do not pay again before you know how it ended.{' '}
           <button disabled={locked} onClick={resume(exec.executionId!)}>
             Resume
           </button>
@@ -800,7 +800,7 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
         </Notice>
       )}
       {exec.status === 'DEPOSIT_FAILED' && <Notice kind="error">The deposit failed, for example on an invalid amount, so nothing ran on Solana. What was transferred is refunded.</Notice>}
-      {list.data && (failed || atRest) && <Recover key={failed?.id} exec={exec} execution={failed} unsigned={unsigned} act={act} locked={locked || !!exec.recovery} recipe={recipe} list={list.data} intermediary={intermediary} source={source} />}
+      {list.data && (failed || atRest) && <Recover key={failed?.id} exec={exec} execution={failed} unsigned={unsigned} act={act} locked={locked || !!exec.recovery || unfinished} recipe={recipe} list={list.data} intermediary={intermediary} source={source} />}
     </div>
   );
 }

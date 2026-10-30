@@ -1,4 +1,4 @@
-import { EVM_CHAIN_IDS, ExecutionCancelledError, IN_FLIGHT_STATUSES, TERMINAL_STATUSES, isUserRejection, type CreateExecutionBody, type Execution, type ExecutionPlan, type ExecutionStatus, type FetchLike, type SolanaRecipe, type StepsPlan } from '@aurora-is-near/intents-connect';
+import { EVM_CHAIN_IDS, ExecutionCancelledError, IN_FLIGHT_STATUSES, TERMINAL_STATUSES, isUserRejection, type CreateExecutionBody, type Execution, type ExecutionPlan, type ExecutionStatus, type FetchLike, type Phase, type SolanaRecipe, type StepsPlan } from '@aurora-is-near/intents-connect';
 
 export type Token = { assetId: string; symbol: string; blockchain: string; contractAddress?: string; decimals: number };
 export type TokenList = { tokens: Token[]; sources: Token[] };
@@ -20,9 +20,14 @@ const quoteDeadline = () => new Date(Date.now() + 15 * 60_000).toISOString();
 const RETRY_DELAY = 2500;
 const RETRIES = 3;
 
+const NO_NONCE = 'Connect has no durable nonce free right now, even after a few tries. Nothing was created, so try again in a minute.';
+const NOT_ANSWERING = 'Intents Connect is not answering right now (503). An execution already started may still be running, so check it before paying again.';
+
 /**
  * Connect answers a create with 503 when it has no durable nonce free. The SDK does not retry and nothing was created,
- * so this does. Only a create goes through the key proxy, and only a create is retried.
+ * so this does. Only a create goes through the key proxy, and only a create is retried. A 503 on anything else, a poll
+ * above all, says nothing about what was created. The SDK's error says only the status and the body, so the body is where
+ * the two get told apart.
  */
 export const retry503 =
   (fetchImpl: FetchLike, wait = (ms: number) => new Promise(done => setTimeout(done, ms))): FetchLike =>
@@ -30,7 +35,8 @@ export const retry503 =
     const isCreate = init?.method === 'POST' && input.includes('/api/intents-connect/');
     for (let left = RETRIES; ; left--) {
       const response = await fetchImpl(input, init);
-      if (response.status !== 503 || !isCreate || left === 0) return response;
+      if (response.status !== 503) return response;
+      if (!isCreate || left === 0) return { ok: false, status: 503, text: async () => JSON.stringify({ error: isCreate ? NO_NONCE : NOT_ANSWERING }) };
       await wait(RETRY_DELAY);
     }
   };
@@ -169,6 +175,13 @@ export function existingOffer({ status, details }: Pick<Execution, 'status' | 'd
   };
 }
 
+/**
+ * A flow that stopped with its execution not over, usually because a poll failed. The money can be on its way, so a second
+ * payment now could be a second payment for real. EXPIRED counts: a late deposit revives it.
+ */
+export const stoppedFollowing = ({ phase, recovery, executionId, status }: { phase: Phase; recovery?: unknown; executionId?: string; status?: ExecutionStatus }) =>
+  phase === 'failed' && !recovery && !!executionId && !!status && !TERMINAL_STATUSES.includes(status);
+
 const code = (error: unknown) => (error as { code?: unknown } | null | undefined)?.code;
 
 export const isQuoteMoved = (error: unknown) => code(error) === 'QUOTE_MOVED';
@@ -179,7 +192,6 @@ export function explain(error: unknown): string {
   if (isUserRejection(error)) return 'The request was rejected in the wallet.';
   if (code(error) === 'NO_INTERMEDIARY') return 'Solana is not enabled for this Connect key yet.';
   if (code(error) === 'FEE_EXCEEDS_AMOUNT') return 'The amount does not cover the network fee.';
-  if ((error as { status?: unknown } | null | undefined)?.status === 503) return 'Connect has no durable nonce free right now, even after a few tries. Nothing was created, so try again in a minute.';
   const message = error instanceof Error ? error.message : String(error);
   // the status panel says this already, along with what to do next
   return /^execution (DEPOSIT|OPERATION)_FAILED$/.test(message) ? '' : message;

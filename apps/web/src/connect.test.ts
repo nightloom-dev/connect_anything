@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { Execution, FetchLike, SolanaRecipe, SolanaStep } from '@aurora-is-near/intents-connect';
+import { createIntentsConnectApi, type Execution, type FetchLike, type SolanaRecipe, type SolanaStep } from '@aurora-is-near/intents-connect';
 import { usdToAtomic } from '@connect-anything/kamino-rescue';
-import { STAGE_OF, bridgePlan, existingOffer, explain, fromAtomic, isQuoteMoved, refundBody, retry503, retryPlan, toAtomic, type Token } from './connect.ts';
+import { STAGE_OF, bridgePlan, existingOffer, explain, fromAtomic, isQuoteMoved, refundBody, retry503, retryPlan, stoppedFollowing, toAtomic, type Token } from './connect.ts';
 import { BASE_USDC, SOLANA_USDC, supplyPlan } from './kamino.ts';
 
 const answering = (...statuses: number[]) => {
@@ -45,6 +45,34 @@ test('only a create is retried, and only on 503', async () => {
     assert.equal((await retry503(fetchImpl, wait)(url, init)).status, status);
     assert.equal(seen.length, 1);
   }
+});
+
+test('only a create that stayed at 503 says nothing was created: a 503 on a poll or a signature may have money behind it', async () => {
+  const wait = async () => {};
+  const api = createIntentsConnectApi({ baseUrl: 'https://connect.example', apiKeyProxyUrl: 'https://app.example/api/intents-connect', fetch: retry503(async () => ({ ok: false, status: 503, text: async () => '{"error":"no durable nonce account available, retry shortly"}' }), wait) });
+  const told = (call: Promise<unknown>) => call.then(() => assert.fail('must fail'), explain);
+
+  for (const create of [api.createExecution('0xabc', {} as never), api.createStepsExecution('0xabc', {} as never)]) {
+    assert.match(await told(create), /no durable nonce free.*Nothing was created/);
+  }
+  for (const other of [api.listExecutions('0xabc', { id: 'ex-1' }), api.submitSignature('0xabc', {} as never), api.getIntermediary('0xabc')]) {
+    const said = await told(other);
+    assert.match(said, /may still be running/);
+    assert.doesNotMatch(said, /Nothing was created|nonce/);
+  }
+});
+
+test('a 503 from the routes of this app keeps its own message', () => {
+  assert.equal(explain(Object.assign(new Error('The simulator is offline: it did not answer'), { status: 503 })), 'The simulator is offline: it did not answer');
+});
+
+test('a flow that stopped before its execution ended holds the page, whatever status it stopped at, EXPIRED too', () => {
+  const stopped = { phase: 'failed', executionId: 'ex-1' } as const;
+  for (const status of ['CREATED', 'DEPOSIT_PENDING', 'DEPOSIT_PROCESSING', 'OPERATION_PENDING', 'OPERATION_PROCESSING', 'EXPIRED'] as const) assert.equal(stoppedFollowing({ ...stopped, status }), true, status);
+  for (const status of ['SUCCESS', 'DEPOSIT_FAILED', 'OPERATION_FAILED'] as const) assert.equal(stoppedFollowing({ ...stopped, status }), false, status);
+  assert.equal(stoppedFollowing({ ...stopped, status: 'DEPOSIT_PENDING', recovery: {} }), false, 'a recovery has its own buttons');
+  assert.equal(stoppedFollowing({ phase: 'settling', executionId: 'ex-1', status: 'DEPOSIT_PENDING' }), false, 'still following');
+  assert.equal(stoppedFollowing({ phase: 'failed' }), false, 'nothing was created');
 });
 
 const BASE: Token = { assetId: BASE_USDC.assetId, symbol: 'USDC', blockchain: 'base', contractAddress: BASE_USDC.contractAddress, decimals: BASE_USDC.decimals };
