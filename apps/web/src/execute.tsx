@@ -4,7 +4,7 @@ import { useExecution, useIntentsConnect, type UseExecutionResult } from '@auror
 import { useIntentsConnectWallet } from '@aurora-is-near/intents-connect-wallet/connect/appkit';
 import type { Idl } from '@connect-anything/core';
 import { checkCompat, issueText } from './compat.ts';
-import { CHAINS, STAGES, STAGE_OF, bridgePlan, bySymbol, existingOffer, explain, fromAtomic, isQuoteMoved, refundBody, retryPlan, stoppedFollowing, toAtomic, type Balance, type Token, type TokenList } from './connect.ts';
+import { CHAINS, STAGES, STAGE_OF, bridgePlan, bySymbol, existingOffer, explain, fromAtomic, isQuoteMoved, legs, refundBody, retryPlan, stoppedFollowing, toAtomic, type Balance, type Token, type TokenList } from './connect.ts';
 import { STAND_IN, buildRecipe, matchesPublished, parseStored, runsRecipe, signsOnlyRecipe, takesAmount, toSolanaRecipe, type StoredRecipe } from './recipe.ts';
 import { AccountList, Failure, FetchError, Notice, short, useAct, useAsync, useJson } from './ui.tsx';
 
@@ -212,11 +212,12 @@ function Recover({ exec, execution, unsigned, act, locked, recipe, stored, gate,
   const [retry, setRetry] = useState<StepsPreview>();
   const [refund, setRefund] = useState<Execution>();
   const [moved, setMoved] = useState(false);
-  const assetId = execution?.quote?.destinationAsset ?? recipe.destination.assetId;
+  const { isRefund, held: heldAsset, back } = legs(execution?.quote);
+  const assetId = heldAsset ?? recipe.destination.assetId;
   const token = list.tokens.find(candidate => candidate.assetId === assetId);
   const balance = useJson<Balance>(intermediary && token?.contractAddress ? `/api/balance/${intermediary}/${token.contractAddress}` : null);
   const held = balance.data;
-  const backTo = list.sources.find(candidate => candidate.assetId === execution?.quote?.originAsset) ?? source;
+  const backTo = list.sources.find(candidate => candidate.assetId === back) ?? source;
   // a retry runs the recipe on this page, which must be the one that failed
   const sameRecipe = useMemo(() => !!execution && !!intermediary && runsRecipe(stored, execution, intermediary), [execution, stored, intermediary]);
   const address = wallet?.getAddress();
@@ -266,7 +267,7 @@ function Recover({ exec, execution, unsigned, act, locked, recipe, stored, gate,
 
   return (
     <div className="recover">
-      {execution ? <Notice kind="error">The instructions failed on Solana, so the money stayed with your intermediary. You can run them again with it, or send it back.</Notice> : <Notice>Whatever a run does not spend stays with your intermediary until you send it back.</Notice>}
+      {execution ? <Notice kind="error">{isRefund ? 'The Refund failed, so the money is still with your intermediary. You can send it back again.' : 'The instructions failed on Solana, so the money stayed with your intermediary. You can run them again with it, or send it back.'}</Notice> : <Notice>Whatever a run does not spend stays with your intermediary until you send it back.</Notice>}
       {!token && <Notice kind="error">Intents Connect no longer lists the token of this execution, so its balance cannot be read here.</Notice>}
       {balance.loading && <Notice>Reading what your intermediary holds…</Notice>}
       {balance.error && <Failure error={balance.error} retry={balance.retry} />}
@@ -276,7 +277,7 @@ function Recover({ exec, execution, unsigned, act, locked, recipe, stored, gate,
           <p>
             Your intermediary holds <strong>{amount(held.amount)}</strong>.
           </p>
-          {execution && !sameRecipe && <p className="hint">Retry is offered on the page of the recipe that failed.</p>}
+          {execution && !isRefund && !sameRecipe && <p className="hint">Retry is offered on the page of the recipe that failed.</p>}
           {sameRecipe && gate && <p className="hint">{gate}</p>}
           <div className="row">
             {sameRecipe && (

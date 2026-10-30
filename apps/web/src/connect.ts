@@ -1,4 +1,4 @@
-import { EVM_CHAIN_IDS, ExecutionCancelledError, IN_FLIGHT_STATUSES, TERMINAL_STATUSES, isUserRejection, type CreateExecutionBody, type Execution, type ExecutionPlan, type ExecutionStatus, type FetchLike, type Phase, type SolanaRecipe, type StepsPlan } from '@aurora-is-near/intents-connect';
+import { EVM_CHAIN_IDS, ExecutionCancelledError, IN_FLIGHT_STATUSES, TERMINAL_STATUSES, isUserRejection, parseOriginAsset, type CreateExecutionBody, type Execution, type ExecutionPlan, type ExecutionStatus, type FetchLike, type Phase, type SolanaRecipe, type StepsPlan } from '@aurora-is-near/intents-connect';
 
 export type Token = { assetId: string; symbol: string; blockchain: string; contractAddress?: string; decimals: number };
 export type TokenList = { tokens: Token[]; sources: Token[] };
@@ -173,6 +173,16 @@ export function existingOffer({ status, details }: Pick<Execution, 'status' | 'd
     open: asksWallet ? same === true && !gate : !terminal || !gate,
     deletable: needsSignature && status === 'CREATED',
   };
+}
+
+/**
+ * Which side of a failed execution's quote the money is at. A bridge-in delivers to Solana, so what it left with the
+ * intermediary is at its destination. A Refund leaves from Solana, so it is at its origin and the EVM asset is where it was
+ * going. With no quote (a run of steps only) the execution names neither.
+ */
+export function legs(quote?: { originAsset?: string; destinationAsset?: string }) {
+  const isRefund = !!quote?.originAsset && parseOriginAsset(quote.originAsset)?.chain === 'sol';
+  return { isRefund, held: isRefund ? quote?.originAsset : quote?.destinationAsset, back: isRefund ? quote?.destinationAsset : quote?.originAsset };
 }
 
 /**

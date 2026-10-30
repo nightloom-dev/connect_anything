@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createIntentsConnectApi, type Execution, type FetchLike, type SolanaRecipe, type SolanaStep } from '@aurora-is-near/intents-connect';
 import { usdToAtomic } from '@connect-anything/kamino-rescue';
-import { STAGE_OF, bridgePlan, existingOffer, explain, fromAtomic, isQuoteMoved, refundBody, retry503, retryPlan, stoppedFollowing, toAtomic, type Token } from './connect.ts';
+import { STAGE_OF, bridgePlan, existingOffer, explain, fromAtomic, isQuoteMoved, legs, refundBody, retry503, retryPlan, stoppedFollowing, toAtomic, type Token } from './connect.ts';
 import { BASE_USDC, SOLANA_USDC, supplyPlan } from './kamino.ts';
 
 const answering = (...statuses: number[]) => {
@@ -73,6 +73,15 @@ test('a flow that stopped before its execution ended holds the page, whatever st
   assert.equal(stoppedFollowing({ ...stopped, status: 'DEPOSIT_PENDING', recovery: {} }), false, 'a recovery has its own buttons');
   assert.equal(stoppedFollowing({ phase: 'settling', executionId: 'ex-1', status: 'DEPOSIT_PENDING' }), false, 'still following');
   assert.equal(stoppedFollowing({ phase: 'failed' }), false, 'nothing was created');
+});
+
+test('a failed execution holds its money at the destination of a bridge-in and at the origin of a Refund', () => {
+  const base = 'nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near';
+  const sol = 'nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near';
+  assert.deepEqual(legs({ originAsset: base, destinationAsset: sol }), { isRefund: false, held: sol, back: base });
+  assert.deepEqual(legs({ originAsset: sol, destinationAsset: base }), { isRefund: true, held: sol, back: base });
+  assert.deepEqual(legs(undefined), { isRefund: false, held: undefined, back: undefined }, 'a run of steps only');
+  assert.equal(legs(refundBody({ account: 'ATA', tokenProgram: 'Tokenkeg', token: { assetId: sol, decimals: 6, symbol: 'USDC' } as Token, amount: '1', backTo: base, recipient: '0xabc', dry: true }).quote).isRefund, true, 'as this app sends it');
 });
 
 const BASE: Token = { assetId: BASE_USDC.assetId, symbol: 'USDC', blockchain: 'base', contractAddress: BASE_USDC.contractAddress, decimals: BASE_USDC.decimals };
