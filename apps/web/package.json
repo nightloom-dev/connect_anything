@@ -2,18 +2,25 @@
   "name": "web",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test 'server/**/*.test.ts'"
   },
   "dependencies": {
-    "@aurora-is-near/intents-connect": "^7.28.0",
-    "@aurora-is-near/intents-connect-wallet": "^7.28.0",
+    "@aurora-is-near/intents-connect": "7.28.0",
+    "@aurora-is-near/intents-connect-wallet": "7.28.0",
+    "@connect-anything/core": "*",
     "@headlessui/react": "^2.2.10",
+    "@kamino-finance/klend-sdk": "^13.0.6",
     "@reown/appkit": "^1.8.11",
     "@reown/appkit-adapter-ethers": "^1.8.11",
     "@reown/appkit-adapter-solana": "^1.8.11",
+    "@solana/kit": "^2.3.0",
     "@solana/spl-token": "^0.4.15",
     "@solana/wallet-adapter-phantom": "^0.9.28",
     "@solana/wallet-adapter-solflare": "^0.6.32",
@@ -23,6 +30,8 @@
     "viem": "^2.55.19"
   },
   "devDependencies": {
+    "@coral-xyz/anchor": "0.32.1",
+    "@types/node": "^22.0.0",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^4.7.0",
