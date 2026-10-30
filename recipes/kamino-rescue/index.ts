@@ -79,6 +79,12 @@ export type Obligation = {
   unjoinedDebtFarms: string[];
 };
 
+/** A target LTV typed in percent, as a fraction, or null if it is not one. */
+export function targetFrom(percent: string): number | null {
+  const value = Number(percent);
+  return percent.trim() && value >= 0 && value <= 100 ? value / 100 : null;
+}
+
 /** x = B - t*C clamped to [0, B]: the dollars that bring debt B over collateral C down to the LTV t. */
 export const repayUsd = (debtUsd: number, collateralUsd: number, targetLtv: number) => Math.min(Math.max(debtUsd - targetLtv * collateralUsd, 0), debtUsd);
 

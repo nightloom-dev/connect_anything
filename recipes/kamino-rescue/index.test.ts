@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CU_LIMIT, estimateCu, ltvAfter, repayUsd, rescuable, rescueAmount, rescueRecipe, usdToAtomic, type Obligation, type ObligationRow } from './index.ts';
+import { CU_LIMIT, estimateCu, ltvAfter, repayUsd, rescuable, rescueAmount, rescueRecipe, targetFrom, usdToAtomic, type Obligation, type ObligationRow } from './index.ts';
 
 const USDC = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 const USDT = 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB';
@@ -36,6 +36,14 @@ const position = (over: Partial<Obligation> = {}): Obligation => ({
   repayRemaining: [],
   unjoinedDebtFarms: [],
   ...over,
+});
+
+test('a target is a percent from 0 to 100', () => {
+  assert.equal(targetFrom('66'), 0.66);
+  assert.equal(targetFrom('66.5'), 0.665);
+  assert.equal(targetFrom(' 0 '), 0);
+  assert.equal(targetFrom('100'), 1);
+  for (const bad of ['', ' ', 'abc', '-1', '100.1', '66,5', 'Infinity']) assert.equal(targetFrom(bad), null, bad);
 });
 
 test('the amount is B - t*C', () => {

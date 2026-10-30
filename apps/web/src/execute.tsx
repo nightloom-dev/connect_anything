@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { IN_FLIGHT_STATUSES, guards, parseOriginAsset, signIntentsConnectPayload, type Execution, type ExecutionPreview, type SolanaRecipe, type StepsPreview } from '@aurora-is-near/intents-connect';
 import { useExecution, useIntentsConnect, type UseExecutionResult } from '@aurora-is-near/intents-connect/react';
 import { useIntentsConnectWallet } from '@aurora-is-near/intents-connect-wallet/connect/appkit';
@@ -316,13 +316,18 @@ type ExecuteProps = {
   /** Held by the parent, so that its state outlives this screen. */
   exec: UseExecutionResult;
   recipe: SolanaRecipe;
-  /** Without one there is nothing to list: a recipe written in code, like the Kamino supply. */
-  stored?: StoredRecipe;
+  stored: StoredRecipe;
   /** Opened through a link: someone else's recipe that spends the visitor's money. */
   shared?: boolean;
+  /** An amount of the token the recipe receives, filled in until the person types their own. */
+  suggested?: string;
+  /** What the amount the recipe spends will do, shown with the quote. */
+  outcome?: (spendable: string) => ReactNode;
+  /** Why nothing can run now. What this page offers for money already sent stays open. */
+  closed?: string;
 };
 
-export function Execute({ exec, recipe, stored, shared = false }: ExecuteProps) {
+export function Execute({ exec, recipe, stored, shared = false, suggested, outcome, closed }: ExecuteProps) {
   const { api, wallet } = useIntentsConnect();
   const { connect, disconnect, isConnecting } = useIntentsConnectWallet();
   const address = wallet?.getAddress() ?? undefined;
@@ -334,7 +339,7 @@ export function Execute({ exec, recipe, stored, shared = false }: ExecuteProps) 
 
   const [chain, setChain] = useState(CHAINS[0].id);
   const [pick, setPick] = useState('');
-  const [amount, setAmount] = useState('');
+  const [typed, setTyped] = useState<string>();
   const [understood, setUnderstood] = useState(false);
   const [preview, setPreview] = useState<ExecutionPreview | null>(null);
   const [moved, setMoved] = useState(false);
@@ -346,24 +351,31 @@ export function Execute({ exec, recipe, stored, shared = false }: ExecuteProps) 
   const source = sources.find(token => token.assetId === pick) ?? sources.find(token => token.symbol === 'USDC') ?? sources[0];
   // the link's author writes both ids, and only together do they name a token Connect delivers
   const target = list.data?.tokens.find(token => token.assetId === recipe.destination.assetId && token.contractAddress === recipe.destination.tokenAddress);
+  // a figure in the token the recipe receives says nothing about an amount of another
+  const amount = typed ?? (source && source.symbol === target?.symbol ? suggested ?? '' : '');
   const atomic = source ? toAtomic(amount, source.decimals) : null;
 
   // The same function runs in buildSteps, so with the real intermediary and the quoted amount this is what Connect receives.
   const built = useMemo(() => {
-    if (!stored) return {};
     try {
       return { steps: buildRecipe(stored, intermediary ?? STAND_IN, preview?.spendable ?? '0') };
     } catch (failure) {
       return { problem: (failure as Error).message };
     }
   }, [stored, intermediary, preview]);
-  const issues = stored ? stored.steps.flatMap(step => checkCompat(stored.idls[step.program], step.ixName)) : [];
+  const issues = stored.steps.flatMap(step => checkCompat(stored.idls[step.program], step.ixName));
 
   // A signature cannot rest on a quote for other inputs or another wallet.
   useEffect(() => {
     setPreview(null);
     setFailed(undefined);
   }, [recipe, address]);
+  // A new figure takes the place of what was typed for the old one, and of its quote.
+  useEffect(() => {
+    setTyped(undefined);
+    setPreview(null);
+    setMoved(false);
+  }, [suggested]);
   // and one quote is good for one signature
   useEffect(() => {
     if (exec.hasSubmittedSignature) setPreview(null);
@@ -397,7 +409,7 @@ export function Execute({ exec, recipe, stored, shared = false }: ExecuteProps) 
   const unsigned = exec.phase === 'failed' && !exec.recovery && !exec.hasSubmittedSignature && exec.status === 'CREATED' ? exec.executionId : undefined;
   const unfinished = exec.phase === 'failed' && !exec.recovery && !unsigned && !!exec.executionId && !!exec.status && IN_FLIGHT_STATUSES.includes(exec.status);
 
-  const blocked = !wallet
+  const missing = !wallet
     ? 'Connect an EVM wallet to continue.'
     : !isEvm
       ? 'This is not an EVM wallet. Recipes are paid from Base, Arbitrum or Ethereum, so connect an EVM wallet.'
@@ -420,6 +432,7 @@ export function Execute({ exec, recipe, stored, shared = false }: ExecuteProps) 
                       : !atomic
                         ? `Enter an amount of ${source.symbol}.`
                         : '';
+  const blocked = closed ?? missing;
   const canQuote = !blocked && !lookup.error && !locked && !exec.recovery;
 
   const quote = async () => {
@@ -469,7 +482,7 @@ export function Execute({ exec, recipe, stored, shared = false }: ExecuteProps) 
           your intermediary holds. Run it only if you trust the person who sent you the link and you understand what is listed here.
         </Notice>
       )}
-      {built.steps && stored && <Summary stored={stored} steps={built.steps} intermediary={intermediary ?? STAND_IN} real={!!intermediary} amountKnown={!!preview} shared={shared} />}
+      {built.steps && <Summary stored={stored} steps={built.steps} intermediary={intermediary ?? STAND_IN} real={!!intermediary} amountKnown={!!preview} shared={shared} />}
       {built.problem && <Notice kind="error">This recipe cannot be built: {built.problem}</Notice>}
       {issues.length > 0 && (
         <Notice kind="error">
@@ -531,9 +544,14 @@ export function Execute({ exec, recipe, stored, shared = false }: ExecuteProps) 
             </select>
           </label>
           <label>
-            Amount <input inputMode="decimal" placeholder="0.00" value={amount} disabled={locked} onChange={event => clearing(setAmount)(event.target.value)} />
+            Amount <input inputMode="decimal" placeholder="0.00" value={amount} disabled={locked} onChange={event => clearing(setTyped)(event.target.value)} />
           </label>
         </div>
+      )}
+      {suggested && source && target && source.symbol !== target.symbol && (
+        <p className="hint">
+          The amount above is worked out in {target.symbol}. For {source.symbol}, enter what it is worth.
+        </p>
       )}
       <p className="hint">{TIME_NOTE}</p>
       {target && <p className="hint">It arrives on Solana as {target.symbol}.</p>}
@@ -556,6 +574,7 @@ export function Execute({ exec, recipe, stored, shared = false }: ExecuteProps) 
             </dd>
             <dt>The recipe spends</dt>
             <dd>{preview.spendable ? `${fromAtomic(preview.spendable, target.decimals)} ${target.symbol}` : '–'}</dd>
+            {preview.spendable && outcome?.(preview.spendable)}
           </dl>
           {moved && <Notice kind="warn">The quote moved before you signed. These are the new numbers, and nothing was charged.</Notice>}
           {unsigned && <Notice kind="warn">Your wallet will first ask you to sign the deletion of the earlier attempt. That moves no money.</Notice>}

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { FetchLike, SolanaRecipe, SolanaStep } from '@aurora-is-near/intents-connect';
+import { usdToAtomic } from '@connect-anything/kamino-rescue';
 import { STAGE_OF, bridgePlan, explain, fromAtomic, isQuoteMoved, refundBody, retry503, retryPlan, toAtomic, type Token } from './connect.ts';
 import { BASE_USDC, SOLANA_USDC, supplyPlan } from './kamino.ts';
 
@@ -117,4 +118,13 @@ test('errors the screens act on are told apart', () => {
 
 test('every status has a place on the status line', () => {
   assert.deepEqual([STAGE_OF.CREATED, STAGE_OF.DEPOSIT_PENDING, STAGE_OF.DEPOSIT_PROCESSING, STAGE_OF.OPERATION_PROCESSING, STAGE_OF.SUCCESS, STAGE_OF.OPERATION_FAILED], [0, 1, 2, 3, 4, 4]);
+});
+
+test('the rescue amount in dollars reaches the amount box as USDC and comes back the same', () => {
+  const debt = { amount: '100000000', usd: 99.98 };
+  const atomic = usdToAtomic(10, debt);
+  assert.equal(fromAtomic(atomic, 6), '10.002001');
+  assert.equal(toAtomic(fromAtomic(atomic, 6), 6), atomic);
+  assert.equal(fromAtomic(usdToAtomic(0.000001, { amount: '1000000', usd: 1 }), 6), '0.000001');
+  assert.equal(toAtomic(fromAtomic(usdToAtomic(1234.5, { amount: '5000000000', usd: 5000 }), 6), 6), '1234500000');
 });
