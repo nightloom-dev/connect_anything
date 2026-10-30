@@ -351,7 +351,7 @@ type ExistingProps = {
 };
 
 /**
- * An execution this page did not just create. Anyone can create one for any wallet through the key proxy, so it is read and
+ * An execution this page did not just create. Anyone with an API key can create one for any wallet, so it is read and
  * listed before the wallet is asked anything, and only the recipe on this page is signed or funded from here.
  */
 function Existing({ id, head, address, intermediary, stored, list, gate, locked, act, resume, drop, onHide }: ExistingProps) {

@@ -99,16 +99,26 @@ recipe with two real repay transactions, in `packages/core/test/fixtures`. Publi
   `recipes/kamino-rescue`.
 
 The limits of Connect are in `tz/ts.agent.md`. `threeRound` only. `QUOTE_MOVED` recalculates and shows the figures again
-before any signature. A 409 blocks a second run and offers resume or cancel. A 503 on a create is retried 3 times, 2.5 s
-apart. `OPERATION_FAILED` offers Retry and Refund: in SDK 7.28.0 `deriveExecutionRecovery` has no kind for that status
-and the runner has no flow for an out-operation, so both follow the status and Refund goes through the API directly.
+before any signature. A 409 blocks a second run, reads the execution holding the slot and lists it. Anyone with an API key
+can create an execution for any wallet, so the wallet signs or funds one only if its steps are the recipe on the page, and
+only an unsigned one can be deleted without a warning. A 503 on a create is retried 3 times, 2.5 s apart. A 503 on
+anything else says the execution may still be running, and the page holds a second run until it has followed the first
+to its end. `OPERATION_FAILED` offers Refund, and Retry on the page of the recipe whose steps failed: in SDK 7.28.0
+`deriveExecutionRecovery` has no kind for that status and the runner has no flow for an out-operation, so both follow the
+status and Refund goes through the API directly. A failed Refund offers Refund again. A recipe that references neither
+the token it receives nor the intermediary's account of it is stopped on screen 2 and on the run screens, since Connect
+refuses it.
 
 Still open:
 
 - From role R: the simulator (screen 3 says it is offline and still exports), the legacy IDL converter (on-chain klend
-  asks for a file) and `checkCompat`, whose seam `apps/web/src/compat.ts` finds nothing until then.
+  asks for a file) and `checkCompat`, whose seam `apps/web/src/compat.ts` finds nothing until then, so screen 2 says
+  "Not checked yet".
 - Run, Retry and Refund have run only against an in-memory backend, not with real money on mainnet, and neither has
   the repay at `/kamino`.
+- Connect's rule on the delivered token is documented for steps-only and was seen on its dry steps route. The create with
+  a bridge quote has not been tried against it. Nor is it known what Connect does with a deposit that arrives after a
+  delete, so the page says only that a delete does not call one back.
 - The compute units on `/kamino` are an estimate from real repays, and it warns but does not refuse, until the simulator
   can measure them.
 
