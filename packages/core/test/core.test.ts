@@ -677,6 +677,16 @@ function kaminoSteps(intermediary: string) {
   };
 }
 
+test('an account named like an Object property is still an unknown input', () => {
+  const idl = {
+    address: KLEND,
+    metadata: { name: 'names', version: '0.0.0', spec: '0.1.0' },
+    instructions: [{ name: 'names', discriminator: [1], args: [], accounts: [{ name: 'constructor' }, { name: 'toString' }] }],
+  } as unknown as Idl;
+  const accounts = resolveAccounts(idl, 'names', {}, { intermediary: KLEND });
+  assert.deepEqual(accounts.map(a => [a.pubkey, a.source]), [[null, 'input'], [null, 'input']]);
+});
+
 test('toSimRequest follows the /simulate contract with any key as the intermediary', () => {
   const { refreshes, repay } = kaminoSteps(ANY_KEY);
   const built = [...refreshes, repay('1000000')].map(s => buildInstruction(s.idl, s.ixName, s.args, s.accounts));
