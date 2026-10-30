@@ -3,8 +3,11 @@ import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { test } from 'node:test';
-import { BorshCoder } from '@coral-xyz/anchor';
-import { Keypair, PublicKey, type Connection } from '@solana/web3.js';
+import { guards } from '@aurora-is-near/intents-connect';
+import { prepareSolanaSteps } from '@aurora-is-near/intents-connect-wallet/solana';
+import { BorshCoder, utils } from '@coral-xyz/anchor';
+import { getAssociatedTokenAddressSync } from '@solana/spl-token';
+import { Keypair, PublicKey, type Connection, type TransactionInstruction } from '@solana/web3.js';
 import BN from 'bn.js';
 import {
   LegacyIdlError,
@@ -13,9 +16,12 @@ import {
   listInstructions,
   loadIdl,
   parseIdl,
+  resolveAccounts,
+  type AccountHints,
   type FieldType,
   type Idl,
 } from '../src/index.ts';
+import { flatten } from '../src/idl.ts';
 
 const fixture = (name: string) => JSON.parse(readFileSync(new URL(`fixtures/${name}`, import.meta.url), 'utf8'));
 
@@ -334,9 +340,10 @@ for (const name of OTHER_PROGRAMS) {
     const idl = await onChainIdl(name);
     const coder = new BorshCoder(idl);
     assert.ok(idl.instructions.length > 10);
-    for (const { name: ixName, accounts: count } of listInstructions(idl)) {
+    for (const { name: ixName } of listInstructions(idl)) {
       const args = sample({ kind: 'struct', fields: argFields(idl, ixName) }) as Record<string, unknown>;
-      const accounts = Array.from({ length: count }, () => ({ pubkey: ANY_KEY, isSigner: false, isWritable: false }));
+      // What the form would still ask for gets a filler key, so every instruction goes all the way to bytes.
+      const accounts = resolveAccounts(idl, ixName, args, { intermediary: ANY_KEY }).map(a => ({ ...a, pubkey: a.pubkey ?? ANY_KEY }));
       const { data } = buildInstruction(idl, ixName, args, accounts);
       const decoded = coder.instruction.decode(data) as { name: string; data: object };
       assert.equal(decoded.name, ixName);
@@ -344,3 +351,297 @@ for (const name of OTHER_PROGRAMS) {
     }
   });
 }
+
+// The instructions of a recorded getTransaction answer, with lookup tables resolved and tx-level flags.
+function recordedInstructions(name: string) {
+  const tx = fixture(`${name}.tx.json`);
+  assert.equal(tx.meta.err, null);
+  const { accountKeys, header, instructions } = tx.transaction.message;
+  const { writable = [], readonly = [] } = tx.meta.loadedAddresses ?? {};
+  const keys: string[] = [...accountKeys, ...writable, ...readonly];
+  const isSigner = (i: number) => i < header.numRequiredSignatures;
+  const isWritable = (i: number) => {
+    if (i >= accountKeys.length) return i < accountKeys.length + writable.length;
+    return isSigner(i) ? i < header.numRequiredSignatures - header.numReadonlySignedAccounts : i < accountKeys.length - header.numReadonlyUnsignedAccounts;
+  };
+  return instructions.map((ix: any) => ({
+    programId: keys[ix.programIdIndex],
+    data: Buffer.from(utils.bytes.bs58.decode(ix.data)),
+    accounts: ix.accounts.map((i: number) => ({ pubkey: keys[i], isSigner: isSigner(i), isWritable: isWritable(i) })),
+  })) as { programId: string; data: Buffer; accounts: { pubkey: string; isSigner: boolean; isWritable: boolean }[] }[];
+}
+
+function assertSameInstruction(built: TransactionInstruction, real: ReturnType<typeof recordedInstructions>[number]) {
+  assert.equal(built.programId.toBase58(), real.programId);
+  assert.equal(built.data.toString('hex'), real.data.toString('hex'));
+  assert.deepEqual(built.keys.map(k => k.pubkey.toBase58()), real.accounts.map(a => a.pubkey));
+  // Compiled flags belong to the whole transaction, where another instruction can raise them, so only one way holds.
+  built.keys.forEach((key, i) => {
+    if (key.isSigner) assert.ok(real.accounts[i].isSigner, `account ${i} should sign`);
+    if (key.isWritable) assert.ok(real.accounts[i].isWritable, `account ${i} should be writable`);
+  });
+}
+
+const FARMS = 'FarmsPZpWu9i7Kky8tPN37rs2TpmMrAZrC7S7vJa91Hr';
+const seedText = (text: string) => ({ kind: 'const', value: [...Buffer.from(text)] });
+
+// No klend IDL anywhere has seeds or fixed addresses: the on-chain one has none and conversion cannot add them. These
+// come from the public klend source (handler_repay_obligation_liquidity.rs, seeds.rs), and the comparison below with
+// real transactions is what proves them. Without them these accounts stay form inputs, as the next test shows.
+const KLEND_NOTES: Record<string, object> = {
+  lending_market_authority: { pda: { seeds: [seedText('lma'), { kind: 'account', path: 'repay_accounts.lending_market' }] } },
+  'repay_accounts.instruction_sysvar_account': { address: 'Sysvar1nstructions1111111111111111111111111' },
+  'farms_accounts.obligation_farm_user_state': {
+    pda: {
+      seeds: [seedText('user'), { kind: 'account', path: 'reserve_farm_state' }, { kind: 'account', path: 'repay_accounts.obligation' }],
+      program: { kind: 'const', value: [...new PublicKey(FARMS).toBuffer()] },
+    },
+  },
+  farms_program: { address: FARMS },
+};
+
+function annotated(idl: Idl, ixName: string, notes: Record<string, object>): Idl {
+  const copy = structuredClone(idl);
+  const visit = (items: any[], prefix: string) => {
+    for (const item of items) {
+      if (item.accounts) visit(item.accounts, `${prefix}${item.name}.`);
+      else Object.assign(item, notes[`${prefix}${item.name}`]);
+    }
+  };
+  visit(copy.instructions.find(ix => ix.name === ixName)!.accounts, '');
+  return copy;
+}
+
+const REPAY = 'repay_obligation_liquidity_v2';
+const KLEND_REPAY = annotated(KLEND_MODERN, REPAY, KLEND_NOTES);
+
+const namesOf = (idl: Idl, ixName: string) => flatten(idl.instructions.find(ix => ix.name === ixName)!.accounts).map(a => a.path);
+
+// Hints for the named accounts, read from the real transaction. Everything not named here has to be found by the resolver.
+const hintsFrom = (idl: Idl, ixName: string, real: { accounts: { pubkey: string }[] }, names: string[]): AccountHints => {
+  const order = namesOf(idl, ixName);
+  return Object.fromEntries(names.map(name => [name, real.accounts[order.indexOf(name)].pubkey]));
+};
+
+const repayCase = (name: string) => {
+  const real = recordedInstructions(name).find(ix => ix.programId === KLEND && ix.data.subarray(0, 8).toString('hex') === '74aed54cb435d290')!;
+  const owner = real.accounts[0].pubkey;
+  const hints = hintsFrom(KLEND_REPAY, REPAY, real, [
+    'repay_accounts.lending_market',
+    'repay_accounts.repay_reserve',
+    'repay_accounts.reserve_liquidity_mint',
+    'repay_accounts.reserve_destination_liquidity',
+    'repay_accounts.token_program',
+  ]);
+  const obligation = real.accounts[1].pubkey;
+  return { real, owner, obligation, hints };
+};
+
+test('klend repay from a real transaction without farms: data, PDA, ATA, order and absent optionals', () => {
+  const { real, owner, obligation, hints } = repayCase('klend-repay-plain');
+  const args = { liquidity_amount: '491736661' };
+  const accounts = resolveAccounts(KLEND_REPAY, REPAY, args, { intermediary: owner, inputs: { obligation } }, { ...hints, reserve_farm_state: null });
+  const source = Object.fromEntries(accounts.map(a => [a.name, a.source]));
+
+  assert.deepEqual(source, {
+    'repay_accounts.owner': 'auto',
+    'repay_accounts.obligation': 'input',
+    'repay_accounts.lending_market': 'recipe',
+    'repay_accounts.repay_reserve': 'recipe',
+    'repay_accounts.reserve_liquidity_mint': 'recipe',
+    'repay_accounts.reserve_destination_liquidity': 'recipe',
+    'repay_accounts.user_source_liquidity': 'auto',
+    'repay_accounts.token_program': 'recipe',
+    'repay_accounts.instruction_sysvar_account': 'auto',
+    'farms_accounts.obligation_farm_user_state': 'input',
+    'farms_accounts.reserve_farm_state': 'recipe',
+    lending_market_authority: 'auto',
+    farms_program: 'auto',
+  });
+  const account = (name: string) => accounts.find(a => a.name === name)!;
+  assert.equal(account('lending_market_authority').pubkey, '9DrvZvyWh1HuAoZxvYWMvkf2XCzryCpGgHqrMjyDWpmo');
+  assert.equal(
+    account('repay_accounts.user_source_liquidity').pubkey,
+    getAssociatedTokenAddressSync(new PublicKey(hints['repay_accounts.reserve_liquidity_mint']!), new PublicKey(owner), true).toBase58(),
+  );
+  for (const name of ['farms_accounts.obligation_farm_user_state', 'farms_accounts.reserve_farm_state']) {
+    assert.deepEqual([account(name).pubkey, account(name).isWritable], [KLEND, false]);
+  }
+
+  assertSameInstruction(buildInstruction(KLEND_REPAY, REPAY, args, accounts), real);
+});
+
+test('klend repay from a real transaction with farms: the farm PDA with its own program and u64::MAX', () => {
+  const { real, owner, obligation, hints } = repayCase('klend-repay-farms');
+  const accounts = resolveAccounts(KLEND_REPAY, REPAY, { liquidity_amount: '18446744073709551615' }, { intermediary: owner }, {
+    ...hints,
+    obligation,
+    ...hintsFrom(KLEND_REPAY, REPAY, real, ['farms_accounts.reserve_farm_state']),
+  });
+  const farm = accounts.find(a => a.name === 'farms_accounts.obligation_farm_user_state')!;
+  assert.equal(farm.source, 'auto');
+  assert.equal(farm.pubkey, '3TCNjCm6vGJxcjzYug1VNXdsFPwJPtHcPh5rLSVfNdXj');
+  assert.equal(farm.derived?.program, FARMS);
+  assertSameInstruction(buildInstruction(KLEND_REPAY, REPAY, { liquidity_amount: '18446744073709551615' }, accounts), real);
+});
+
+test('what a klend IDL alone can resolve: the signer and the ATA, the rest stays for hints and inputs', () => {
+  const owner = Keypair.generate().publicKey.toBase58();
+  const accounts = resolveAccounts(KLEND_MODERN, REPAY, { liquidity_amount: '1' }, { intermediary: owner, mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' });
+  assert.deepEqual(accounts.filter(a => a.source === 'auto').map(a => a.name), ['repay_accounts.owner', 'repay_accounts.user_source_liquidity']);
+  assert.equal(accounts.find(a => a.name === 'lending_market_authority')?.pubkey, null);
+  assert.throws(() => buildInstruction(KLEND_MODERN, REPAY, { liquidity_amount: '1' }, accounts), /no address for .*lending_market_authority/);
+});
+
+test('refresh_reserve and refresh_obligation resolve and encode as in the real transaction, and pass the SDK', () => {
+  const [reserveA, reserveB, obligation, repay] = recordedInstructions('klend-repay-plain').filter(ix => ix.programId === KLEND);
+  const owner = repay.accounts[0].pubkey;
+
+  const refreshReserve = (real: typeof reserveA) => {
+    const hints = hintsFrom(KLEND_MODERN, 'refresh_reserve', real, ['reserve', 'lending_market', 'scope_prices']);
+    const accounts = resolveAccounts(KLEND_MODERN, 'refresh_reserve', {}, { intermediary: owner }, hints);
+    assert.deepEqual(accounts.filter(a => a.pubkey === KLEND).map(a => a.name), ['pyth_oracle', 'switchboard_price_oracle', 'switchboard_twap_oracle']);
+    const built = buildInstruction(KLEND_MODERN, 'refresh_reserve', {}, accounts);
+    assertSameInstruction(built, real);
+    return built;
+  };
+  const built = [refreshReserve(reserveA), refreshReserve(reserveB)];
+
+  const refreshHints = hintsFrom(KLEND_MODERN, 'refresh_obligation', obligation, ['lending_market', 'obligation']);
+  const refreshAccounts = resolveAccounts(KLEND_MODERN, 'refresh_obligation', {}, { intermediary: owner }, refreshHints);
+  const remaining = obligation.accounts.slice(refreshAccounts.length);
+  assert.equal(remaining.length, 2);
+  const refresh = buildInstruction(KLEND_MODERN, 'refresh_obligation', {}, [...refreshAccounts, ...remaining]);
+  assertSameInstruction(refresh, obligation);
+  built.push(refresh);
+
+  const { hints } = repayCase('klend-repay-plain');
+  const args = { liquidity_amount: '491736661' };
+  const inputs = { obligation: repay.accounts[1].pubkey };
+  built.push(buildInstruction(KLEND_REPAY, REPAY, args, resolveAccounts(KLEND_REPAY, REPAY, args, { intermediary: owner, inputs }, { ...hints, reserve_farm_state: null })));
+
+  const { steps } = prepareSolanaSteps(built, { intermediary: owner });
+  guards.solanaStepsAreLegal(steps);
+  assert.equal(steps.length, 4);
+  assert.equal(steps[3].discriminator, repay.data.toString('hex'));
+  assert.deepEqual(steps[3].accounts[0], { pubkey: '{INTERMEDIARY}', isSigner: true, isWritable: false });
+  assert.ok(!JSON.stringify(steps).includes(owner), 'the intermediary must not stay in the steps');
+  assert.ok(steps.flatMap(s => s.accounts).filter(a => a.isSigner).every(a => a.pubkey === '{INTERMEDIARY}'));
+});
+
+test('an unmodified on-chain IDL with a real transaction: pump_amm sell, with own-program seeds and ATAs by name', async () => {
+  const idl = await onChainIdl('pump_amm');
+  const real = recordedInstructions('pump_amm-sell').find(ix => ix.programId === programIdOf('pump_amm'))!;
+  const args = { base_amount_in: real.data.readBigUInt64LE(8), min_quote_amount_out: real.data.readBigUInt64LE(16) };
+  const hints = hintsFrom(idl, 'sell', real, [
+    'global_config',
+    'base_mint',
+    'quote_mint',
+    'pool_base_token_account',
+    'pool_quote_token_account',
+    'protocol_fee_recipient',
+    'base_token_program',
+    'quote_token_program',
+    'coin_creator_vault_authority', // its seed is pool.coin_creator, a field inside account data
+  ]);
+  const pool = real.accounts[0].pubkey;
+  const accounts = resolveAccounts(idl, 'sell', args, { intermediary: real.accounts[1].pubkey, inputs: { pool } }, hints);
+  assert.deepEqual(accounts.filter(a => a.source === 'auto').map(a => a.name), [
+    'user',
+    'user_base_token_account',
+    'user_quote_token_account',
+    'protocol_fee_recipient_token_account',
+    'system_program',
+    'associated_token_program',
+    'event_authority',
+    'program',
+    'coin_creator_vault_ata',
+    'fee_config',
+    'fee_program',
+  ]);
+  const remaining = real.accounts.slice(accounts.length);
+  assertSameInstruction(buildInstruction(idl, 'sell', args, [...accounts, ...remaining]), real);
+});
+
+test('an unmodified on-chain IDL with a real transaction: meteora_dlmm, a negative i64 argument as a seed', async () => {
+  const idl = await onChainIdl('meteora_dlmm');
+  const real = recordedInstructions('meteora_dlmm-init-bin-array').find(ix => ix.programId === programIdOf('meteora_dlmm'))!;
+  const args = { index: '-7' };
+  const accounts = resolveAccounts(idl, 'initialize_bin_array', args, { intermediary: real.accounts[2].pubkey, inputs: { lb_pair: real.accounts[0].pubkey } });
+  assert.deepEqual(accounts.map(a => a.source), ['input', 'auto', 'auto', 'auto']);
+  assert.equal(accounts[1].derived?.seeds.length, 3);
+  assertSameInstruction(buildInstruction(idl, 'initialize_bin_array', args, accounts), real);
+  // The seed waits for the argument instead of failing the form.
+  assert.equal(resolveAccounts(idl, 'initialize_bin_array', {}, { intermediary: ANY_KEY, inputs: { lb_pair: ANY_KEY } })[1].pubkey, null);
+});
+
+test('the resolver keeps the priority order, in any account order and inside groups', () => {
+  const other = Keypair.generate().publicKey.toBase58();
+  const mint = Keypair.generate().publicKey.toBase58();
+  const pda = (text: string) => ({ seeds: [seedText(text)] });
+  const idl = {
+    address: KLEND,
+    metadata: { name: 'order', version: '0.0.0', spec: '0.1.0' },
+    instructions: [
+      {
+        name: 'order',
+        discriminator: [1],
+        args: [],
+        accounts: [
+          { name: 'signer_first', signer: true, writable: true, address: other, pda: pda('a') },
+          { name: 'address_second', address: other, pda: pda('a') },
+          { name: 'user_token_account', pda: pda('b') },
+          { name: 'user_source_token', optional: true },
+          { name: 'plain_hinted' },
+          { name: 'plain_asked' },
+          { name: 'plain_open' },
+          { name: 'optional_open', optional: true, writable: true },
+          { name: 'optional_out', optional: true, writable: true, signer: true },
+          { name: 'forward_seed', pda: { seeds: [{ kind: 'account', path: 'plain_hinted' }, { kind: 'account', path: 'group.inner.deep' }] } },
+          { name: 'data_seed', pda: { seeds: [{ kind: 'account', path: 'plain_hinted.owner' }] } },
+          { name: 'cycle_a', pda: { seeds: [{ kind: 'account', path: 'cycle_b' }] } },
+          { name: 'cycle_b', pda: { seeds: [{ kind: 'account', path: 'cycle_a' }] } },
+          { name: 'long_seed', pda: { seeds: [{ kind: 'const', value: Array(33).fill(1) }] } },
+          {
+            name: 'group',
+            accounts: [
+              { name: 'sibling', pda: pda('c') },
+              { name: 'inner', accounts: [{ name: 'deep', pda: { seeds: [{ kind: 'account', path: 'sibling' }, { kind: 'account', path: 'group.sibling' }] } }] },
+            ],
+          },
+        ],
+      },
+    ],
+  } as unknown as Idl;
+  const accounts = resolveAccounts(
+    idl,
+    'order',
+    {},
+    { intermediary: ANY_KEY, mint, inputs: { plain_asked: other, plain_hinted: mint } },
+    { plain_hinted: other, optional_out: null, user_source_token: mint },
+  );
+  const get = (name: string) => accounts.find(a => a.name === name)!;
+  const programPda = (...seeds: (string | Buffer)[]) =>
+    PublicKey.findProgramAddressSync(seeds.map(s => (typeof s === 'string' ? Buffer.from(s) : s)), new PublicKey(KLEND))[0].toBase58();
+  const sibling = programPda('c');
+  const deep = programPda(keyBytes(sibling), keyBytes(sibling));
+
+  assert.deepEqual([get('signer_first').pubkey, get('signer_first').source], [ANY_KEY, 'auto']);
+  assert.deepEqual([get('address_second').pubkey, get('address_second').source], [other, 'auto']);
+  assert.deepEqual([get('user_token_account').pubkey, get('user_token_account').source], [programPda('b'), 'auto']);
+  // The ATA rule outranks the hint, and the funded mint stands in when the instruction names no mint.
+  assert.deepEqual([get('user_source_token').pubkey, get('user_source_token').source], [getAssociatedTokenAddressSync(new PublicKey(mint), new PublicKey(ANY_KEY), true).toBase58(), 'auto']);
+  assert.deepEqual([get('plain_hinted').pubkey, get('plain_hinted').source], [other, 'recipe']);
+  assert.deepEqual([get('plain_asked').pubkey, get('plain_asked').source], [other, 'input']);
+  assert.deepEqual([get('plain_open').pubkey, get('plain_open').source], [null, 'input']);
+  assert.deepEqual([get('optional_open').pubkey, get('optional_open').isWritable, get('optional_open').source], [KLEND, false, 'input']);
+  assert.deepEqual([get('optional_out').pubkey, get('optional_out').isSigner, get('optional_out').source], [KLEND, false, 'recipe']);
+  assert.equal(get('group.sibling').pubkey, sibling);
+  assert.equal(get('group.inner.deep').pubkey, deep);
+  assert.equal(get('forward_seed').pubkey, programPda(keyBytes(other), keyBytes(deep)));
+  assert.equal(get('forward_seed').derived?.seeds.length, 2);
+  for (const name of ['data_seed', 'cycle_a', 'cycle_b', 'long_seed']) assert.deepEqual([get(name).pubkey, get(name).source], [null, 'input']);
+
+  assert.throws(() => resolveAccounts(idl, 'order', {}, { intermediary: '{INTERMEDIARY}' }), /ctx\.intermediary: not a public key/);
+  assert.throws(() => resolveAccounts(idl, 'order', {}, { intermediary: ANY_KEY }, { plain_hinted: 'nope' }), /plain_hinted: not a public key/);
+});

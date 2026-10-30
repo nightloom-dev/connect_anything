@@ -12,3 +12,4 @@ export {
   type IxInfo,
   type ParseOptions,
 } from './idl.ts';
+export { resolveAccounts, type AccountHints, type AccountSource, type Derived, type ResolveContext, type ResolvedAccount } from './accounts.ts';
