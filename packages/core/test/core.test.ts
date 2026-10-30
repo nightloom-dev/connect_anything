@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { guards } from '@aurora-is-near/intents-connect';
 import { prepareSolanaSteps } from '@aurora-is-near/intents-connect-wallet/solana';
 import { BorshCoder, utils } from '@coral-xyz/anchor';
-import { getAssociatedTokenAddressSync } from '@solana/spl-token';
+import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from '@solana/spl-token';
 import { Keypair, PublicKey, type Connection, type TransactionInstruction } from '@solana/web3.js';
 import BN from 'bn.js';
 import {
@@ -26,6 +26,9 @@ import {
   type Idl,
 } from '../src/index.ts';
 import { flatten } from '../src/idl.ts';
+
+// A converter on the developer's machine must not decide what these tests see.
+delete process.env.SIM_URL;
 
 const fixture = (name: string) => JSON.parse(readFileSync(new URL(`fixtures/${name}`, import.meta.url), 'utf8'));
 
@@ -66,12 +69,12 @@ test('loadIdl reports a program without an IDL account', async () => {
 
 test('parseIdl sends a legacy IDL to POST /idl/convert and surfaces the 400 message', async t => {
   const legacy = (await legacyKlend()).idl as any;
-  const received: { url?: string; body: any }[] = [];
+  const received: { url?: string; headers: Record<string, unknown>; body: any }[] = [];
   const server = createServer(async (req, res) => {
     let raw = '';
     for await (const chunk of req) raw += chunk;
     const body = JSON.parse(raw);
-    received.push({ url: req.url, body });
+    received.push({ url: req.url, headers: req.headers, body });
     res.setHeader('content-type', 'application/json');
     if (!body.metadata?.address) {
       res.statusCode = 400;
@@ -92,8 +95,19 @@ test('parseIdl sends a legacy IDL to POST /idl/convert and surfaces the 400 mess
   const { metadata, ...withoutProgramId } = legacy;
   await assert.rejects(parseIdl(withoutProgramId, { convertUrl }), /400: Program id missing/);
   assert.equal((await parseIdl(withoutProgramId, { convertUrl, programId: KLEND })).address, KLEND);
-  delete process.env.SIM_URL;
+
+  await parseIdl(legacy, { convertUrl: `${convertUrl}/`, headers: { 'x-sim-key': 'secret' } });
+  assert.equal(received.at(-1)!.url, '/idl/convert');
+  assert.equal(received.at(-1)!.headers['x-sim-key'], 'secret');
+  assert.equal(received.at(-1)!.headers['content-type'], 'application/json');
+
   await assert.rejects(parseIdl(legacy), LegacyIdlError);
+  process.env.SIM_URL = convertUrl;
+  try {
+    assert.equal((await parseIdl(legacy)).address, KLEND);
+  } finally {
+    delete process.env.SIM_URL;
+  }
 });
 
 test('parseIdl takes a modern IDL as it is, from an object or JSON text, and refuses anything else', async () => {
@@ -378,14 +392,16 @@ function recordedInstructions(name: string) {
   })) as { programId: string; data: Buffer; accounts: { pubkey: string; isSigner: boolean; isWritable: boolean }[] }[];
 }
 
-function assertSameInstruction(built: TransactionInstruction, real: ReturnType<typeof recordedInstructions>[number]) {
+// Compiled flags belong to the whole transaction, where another instruction can raise them. `raised` names the accounts
+// where that happened in the recording, so that every other flag has to match both ways.
+function assertSameInstruction(built: TransactionInstruction, real: ReturnType<typeof recordedInstructions>[number], raised: number[] = []) {
   assert.equal(built.programId.toBase58(), real.programId);
   assert.equal(built.data.toString('hex'), real.data.toString('hex'));
   assert.deepEqual(built.keys.map(k => k.pubkey.toBase58()), real.accounts.map(a => a.pubkey));
-  // Compiled flags belong to the whole transaction, where another instruction can raise them, so only one way holds.
   built.keys.forEach((key, i) => {
-    if (key.isSigner) assert.ok(real.accounts[i].isSigner, `account ${i} should sign`);
-    if (key.isWritable) assert.ok(real.accounts[i].isWritable, `account ${i} should be writable`);
+    assert.equal(key.isSigner, real.accounts[i].isSigner, `account ${i} signer flag`);
+    if (raised.includes(i)) assert.deepEqual([key.isWritable, real.accounts[i].isWritable], [false, true], `account ${i} should be raised`);
+    else assert.equal(key.isWritable, real.accounts[i].isWritable, `account ${i} writable flag`);
   });
 }
 
@@ -475,7 +491,7 @@ test('klend repay from a real transaction without farms: data, PDA, ATA, order a
     assert.deepEqual([account(name).pubkey, account(name).isWritable], [KLEND, false]);
   }
 
-  assertSameInstruction(buildInstruction(KLEND_REPAY, REPAY, args, accounts), real);
+  assertSameInstruction(buildInstruction(KLEND_REPAY, REPAY, args, accounts), real, [0]); // the owner pays the fee
 });
 
 test('klend repay from a real transaction with farms: the farm PDA with its own program and u64::MAX', () => {
@@ -489,7 +505,7 @@ test('klend repay from a real transaction with farms: the farm PDA with its own 
   assert.equal(farm.source, 'auto');
   assert.equal(farm.pubkey, '3TCNjCm6vGJxcjzYug1VNXdsFPwJPtHcPh5rLSVfNdXj');
   assert.equal(farm.derived?.program, FARMS);
-  assertSameInstruction(buildInstruction(KLEND_REPAY, REPAY, { liquidity_amount: '18446744073709551615' }, accounts), real);
+  assertSameInstruction(buildInstruction(KLEND_REPAY, REPAY, { liquidity_amount: '18446744073709551615' }, accounts), real, [0]); // the owner pays the fee
 });
 
 test('what a klend IDL alone can resolve: the signer and the ATA, the rest stays for hints and inputs', () => {
@@ -577,7 +593,7 @@ test('an unmodified on-chain IDL with a real transaction: meteora_dlmm, a negati
   const accounts = resolveAccounts(idl, 'initialize_bin_array', args, { intermediary: real.accounts[2].pubkey, inputs: { lb_pair: real.accounts[0].pubkey } });
   assert.deepEqual(accounts.map(a => a.source), ['input', 'auto', 'auto', 'auto']);
   assert.equal(accounts[1].derived?.seeds.length, 3);
-  assertSameInstruction(buildInstruction(idl, 'initialize_bin_array', args, accounts), real);
+  assertSameInstruction(buildInstruction(idl, 'initialize_bin_array', args, accounts), real, [0]); // rebalance_liquidity writes to lb_pair in the same transaction
   // The seed waits for the argument instead of failing the form.
   assert.equal(resolveAccounts(idl, 'initialize_bin_array', {}, { intermediary: ANY_KEY, inputs: { lb_pair: ANY_KEY } })[1].pubkey, null);
 });
@@ -701,6 +717,10 @@ test('toSimRequest follows the /simulate contract with any key as the intermedia
   assert.equal(last.programId, KLEND);
   assert.equal(Buffer.from(last.data, 'base64').toString('hex'), '74aed54cb435d29040420f0000000000');
   assert.deepEqual(last.accounts[0], { pubkey: ANY_KEY, isSigner: true, isWritable: false });
+  built.forEach((ix, index) => {
+    assert.deepEqual(request.instructions[index].accounts, ix.keys.map(key => ({ pubkey: key.pubkey.toBase58(), isSigner: key.isSigner, isWritable: key.isWritable })));
+  });
+  assert.ok(last.accounts.some(a => a.isWritable) && last.accounts.some(a => !a.isSigner && !a.isWritable));
   assert.ok(!JSON.stringify(request).includes('{INTERMEDIARY}'));
   // Optional fields disappear on the wire when they are not given.
   assert.deepEqual(Object.keys(JSON.parse(JSON.stringify(toSimRequest(built, { intermediary: ANY_KEY, fund })))).sort(), ['fund', 'instructions', 'intermediary']);
@@ -755,4 +775,64 @@ test('toRecipeCode keeps an untrusted IDL name out of the code', () => {
   assert.ok(!code.split('\n').some(line => line.trim().startsWith('process.exit')));
   assert.ok(code.includes(`title: ${JSON.stringify("'; process.exit(1); //")}`));
   assert.ok(!code.includes('const le ='), 'helpers the code does not use are left out');
+});
+
+const T22 = TOKEN_2022_PROGRAM_ID.toBase58();
+const ata = (owner: string, mint: string, program = TOKEN_PROGRAM_ID.toBase58()) =>
+  getAssociatedTokenAddressSync(new PublicKey(mint), new PublicKey(owner), true, new PublicKey(program)).toBase58();
+const rowOf = (accounts: ReturnType<typeof resolveAccounts>, name: string) => accounts.find(a => a.name === name)!;
+
+// An instruction small enough to read, for what no recorded transaction shows.
+const handIdl = (accounts: unknown[], args: unknown[] = [], types: unknown[] = []) =>
+  ({
+    address: KLEND,
+    metadata: { name: 'hand', version: '0.0.0', spec: '0.1.0' },
+    instructions: [{ name: 'ix', discriminator: [1, 2, 3, 4, 5, 6, 7, 8], accounts, args }],
+    types,
+  }) as unknown as Idl;
+const DISCRIMINATOR = '0102030405060708';
+
+test('klend repay from a real Token-2022 transaction: the ATA follows the token program', () => {
+  const { real, owner, obligation, hints } = repayCase('klend-repay-token2022');
+  assert.equal(hints['repay_accounts.token_program'], T22);
+  const args = { liquidity_amount: real.data.readBigUInt64LE(8) };
+  const accounts = resolveAccounts(KLEND_REPAY, REPAY, args, { intermediary: owner, inputs: { obligation } }, { ...hints, reserve_farm_state: null });
+  const mint = hints['repay_accounts.reserve_liquidity_mint'] as string;
+  assert.equal(rowOf(accounts, 'repay_accounts.user_source_liquidity').pubkey, ata(owner, mint, T22));
+  assert.notEqual(ata(owner, mint, T22), ata(owner, mint));
+  assertSameInstruction(buildInstruction(KLEND_REPAY, REPAY, args, accounts), real, [0]);
+});
+
+test('every kind of argument seed gives the bytes the program feeds its seeds', () => {
+  const seeded = (name: string, path: string) => ({ name, pda: { seeds: [{ kind: 'arg', path }] } });
+  const idl = handIdl(
+    [seeded('by_text', 'text'), seeded('by_key', 'key'), seeded('by_blob', 'blob'), seeded('by_hash', 'hash'), seeded('by_field', 'pair.deep'), seeded('by_u16', 'small'), seeded('by_list', 'list')],
+    [
+      { name: 'text', type: 'string' },
+      { name: 'key', type: 'pubkey' },
+      { name: 'blob', type: 'bytes' },
+      { name: 'hash', type: { array: ['u8', 4] } },
+      { name: 'pair', type: { defined: { name: 'Pair' } } },
+      { name: 'small', type: 'u16' },
+      { name: 'list', type: { vec: 'u8' } },
+    ],
+    [{ name: 'Pair', type: { kind: 'struct', fields: [{ name: 'deep', type: 'u64' }] } }],
+  );
+  const args = { text: 'hello', key: ANY_KEY, blob: 'cafe', hash: 'deadbeef', pair: { deep: '258' }, small: 4660, list: [1, 2] };
+  const accounts = resolveAccounts(idl, 'ix', args, { intermediary: ANY_KEY });
+  const pda = (seed: Buffer) => PublicKey.findProgramAddressSync([seed], new PublicKey(KLEND))[0].toBase58();
+  assert.deepEqual(Object.fromEntries(accounts.map(a => [a.name, a.pubkey])), {
+    by_text: pda(Buffer.from('hello')),
+    by_key: pda(keyBytes(ANY_KEY)),
+    by_blob: pda(Buffer.from('cafe', 'hex')),
+    by_hash: pda(Buffer.from('deadbeef', 'hex')),
+    by_field: pda(Buffer.from('0201000000000000', 'hex')),
+    by_u16: pda(Buffer.from('3412', 'hex')),
+    by_list: null, // not a supported seed: none of the 35 IDLs surveyed seeds with a Vec
+  });
+});
+
+test('npm test also runs the tests next to the sources', () => {
+  const { scripts } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.match(scripts.test, /\{src,test\}\/\*\*\/\*\.test\.ts/);
 });
