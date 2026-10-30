@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { join } from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { guards } from '@aurora-is-near/intents-connect';
 import { prepareSolanaSteps } from '@aurora-is-near/intents-connect-wallet/solana';
 import { BorshCoder, utils } from '@coral-xyz/anchor';
@@ -17,6 +19,7 @@ import {
   loadIdl,
   parseIdl,
   resolveAccounts,
+  toRecipeCode,
   toSimRequest,
   type AccountHints,
   type FieldType,
@@ -688,4 +691,55 @@ test('toSimRequest follows the /simulate contract with any key as the intermedia
   assert.ok(!JSON.stringify(request).includes('{INTERMEDIARY}'));
   // Optional fields disappear on the wire when they are not given.
   assert.deepEqual(Object.keys(JSON.parse(JSON.stringify(toSimRequest(built, { intermediary: ANY_KEY, fund })))).sort(), ['fund', 'instructions', 'intermediary']);
+});
+
+test('toRecipeCode exports a recipe that gives the same steps for another intermediary and amount', async t => {
+  const generatedWith = Keypair.generate().publicKey.toBase58();
+  const { refreshes, repay } = kaminoSteps(generatedWith);
+  const destination = { chain: 'sol' as const, assetId: 'nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near', tokenAddress: USDC };
+  const meta = { id: 'kamino-rescue', intent: 'kamino_repay', title: 'Repay "a" Kamino debt', destination, intermediary: generatedWith };
+  const code = toRecipeCode([...refreshes, { ...repay('5'), amountArg: 'liquidity_amount' }], meta);
+
+  // Inside the package, so that the code resolves its imports the way a consumer's would.
+  const dir = mkdtempSync(fileURLToPath(new URL('.generated-', import.meta.url)));
+  t.after(() => rmSync(dir, { recursive: true }));
+  const file = join(dir, 'recipe.ts');
+  writeFileSync(file, code);
+  const { recipe } = await import(pathToFileURL(file).href);
+  assert.deepEqual([recipe.id, recipe.intent, recipe.title, recipe.type, recipe.flow], ['kamino-rescue', 'kamino_repay', 'Repay "a" Kamino debt', 'solana', 'bridge-in']);
+  assert.deepEqual(recipe.destination, destination);
+
+  const user = Keypair.generate().publicKey.toBase58();
+  const amount = '1234567';
+  const actual = recipe.buildSteps({ intermediary: user, userAddress: '0x0', amount });
+
+  const direct = kaminoSteps(user);
+  const built = [...direct.refreshes, direct.repay(amount)].map(s => buildInstruction(s.idl, s.ixName, s.args, s.accounts));
+  assert.deepEqual(actual, prepareSolanaSteps(built, { intermediary: user }));
+  guards.solanaStepsAreLegal(actual.steps);
+
+  const steps = actual.steps;
+  assert.equal(steps[3].discriminator, '74aed54cb435d29087d6120000000000');
+  assert.equal(steps[3].accounts[0].pubkey, '{INTERMEDIARY}');
+  const mint = new PublicKey(steps[3].accounts[4].pubkey);
+  assert.equal(steps[3].accounts[6].pubkey, getAssociatedTokenAddressSync(mint, new PublicKey(user), true).toBase58());
+  assert.ok(!code.includes(generatedWith), 'nothing of the key used for generation may stay in the code');
+
+  assert.throws(() => recipe.buildSteps({ intermediary: user, userAddress: '0x0', amount: '18446744073709551616' }), /does not fit 8 bytes/);
+  assert.throws(() => recipe.buildSteps({ intermediary: user, userAddress: '0x0', amount: '' }), /does not fit/);
+  assert.throws(() => toRecipeCode([{ ...repay('5'), amountArg: 'nope' }], meta), /amountArg "nope"/);
+  assert.throws(() => toRecipeCode([{ ...repay('5'), accounts: repay('5').accounts.map(a => ({ ...a, pubkey: null })) }], meta), /no address for/);
+});
+
+test('toRecipeCode keeps an untrusted IDL name out of the code', () => {
+  const idl = {
+    address: KLEND,
+    metadata: { name: 'x', version: '0', spec: '0.1.0' },
+    instructions: [{ name: 'evil\nprocess.exit(1)', discriminator: [1], args: [], accounts: [] }],
+  } as unknown as Idl;
+  const destination = { chain: 'sol' as const, assetId: 'x' };
+  const code = toRecipeCode([{ idl, ixName: 'evil\nprocess.exit(1)', args: {}, accounts: [] }], { id: 'a', intent: 'b', title: '\'; process.exit(1); //', destination, intermediary: ANY_KEY });
+  assert.ok(!code.split('\n').some(line => line.trim().startsWith('process.exit')));
+  assert.ok(code.includes(`title: ${JSON.stringify("'; process.exit(1); //")}`));
+  assert.ok(!code.includes('const le ='), 'helpers the code does not use are left out');
 });
