@@ -31,6 +31,7 @@ const MAX_STEPS = 50; // Connect's limits, a recipe over them could not run anyw
 const MAX_LOOKUP_TABLES = 16;
 const RPC_TIMEOUT = 30_000;
 const UPSTREAM_TIMEOUT = 60_000;
+const SOURCE_CHAINS = ['base', 'arb', 'eth'];
 const LEGACY_IDL = "This IDL is in the legacy pre-0.30 format. Converting it is the job of role R's service, which is not connected here. Upload a 0.30+ IDL file instead.";
 
 class HttpError extends Error {
@@ -343,10 +344,26 @@ export function createApi(env: Env) {
 
     ['GET', /^\/api\/tokens$/, async () => {
       const upstream = await connect('api/v1/supported_tokens');
-      const body = (await upstream.json().catch(() => null)) as { result?: { out?: unknown } } | null;
-      const out = body?.result?.out;
-      if (!upstream.ok || !Array.isArray(out)) throw new HttpError(502, `Intents Connect gave no token list (${upstream.status})`);
-      return { tokens: out.filter(token => token?.blockchain === 'sol') }; // every recipe runs on Solana, so nothing else is a target
+      const body = (await upstream.json().catch(() => null)) as { result?: { in?: unknown; out?: unknown } } | null;
+      const { in: incoming, out } = body?.result ?? {};
+      if (!upstream.ok || !Array.isArray(incoming) || !Array.isArray(out)) throw new HttpError(502, `Intents Connect gave no token list (${upstream.status})`);
+      return {
+        tokens: out.filter(token => token?.blockchain === 'sol'), // every recipe runs on Solana, so nothing else is a target
+        sources: incoming.filter(token => SOURCE_CHAINS.includes(token?.blockchain)),
+      };
+    }],
+
+    // what an intermediary holds after an execution, which sizes Retry and Refund
+    ['GET', /^\/api\/balance\/([^/]+)\/([^/]+)$/, async ([owner, mint]) => {
+      requirePubkey(owner);
+      requirePubkey(mint);
+      const { value } = await connection.getParsedTokenAccountsByOwner(new PublicKey(owner), { mint: new PublicKey(mint) }).catch(error => {
+        logged('balance', error);
+        throw new HttpError(502, 'Could not read the balance from Solana, try again');
+      });
+      const accounts = value.map(({ pubkey, account }) => ({ account: pubkey.toBase58(), tokenProgram: account.owner.toBase58(), amount: String(account.data.parsed.info.tokenAmount.amount) }));
+      // an intermediary holds a mint in its one associated account, so the largest is that one
+      return accounts.sort((a, b) => Number(BigInt(b.amount) - BigInt(a.amount)))[0] ?? { account: null, tokenProgram: null, amount: '0' };
     }],
   ];
 

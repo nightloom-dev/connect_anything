@@ -96,6 +96,8 @@ test('a public key has to be one, before anything goes upstream', async () => {
   for (const key of notKeys) {
     assert.equal((await call(base, `/api/idl/${key}`)).status, 400, `idl ${key}`);
     assert.equal((await call(base, `/api/kamino/${key}`)).status, 400, `kamino ${key}`);
+    assert.equal((await call(base, `/api/balance/${key}/${USDC}`)).status, 400, `balance owner ${key}`);
+    assert.equal((await call(base, `/api/balance/${USDC}/${key}`)).status, 400, `balance mint ${key}`);
     assert.equal((await post(base, `/api/idl/parse?programId=${key}`, KLEND_IDL)).status, 400, `parse ${key}`);
   }
 });
@@ -276,11 +278,12 @@ test('the store is created on first use', async () => {
   assert.equal(status, 201);
 });
 
-test('GET /api/tokens lists the Solana targets, asked for with the key', async () => {
+test('GET /api/tokens lists the Solana targets and the EVM sources, asked for with the key', async () => {
   const sol = { blockchain: 'sol', symbol: 'USDC', contractAddress: USDC };
-  const connect = await fake((_, res) => send(res, 200, { result: { in: [{ blockchain: 'sol', symbol: 'ONLY-IN' }], out: [sol, { blockchain: 'base', symbol: 'USDC' }] } }));
+  const base = { blockchain: 'base', symbol: 'USDC' };
+  const connect = await fake((_, res) => send(res, 200, { result: { in: [{ blockchain: 'sol', symbol: 'ONLY-IN' }, { blockchain: 'bsc', symbol: 'USDT' }, base], out: [sol, { blockchain: 'base', symbol: 'USDC' }] } }));
   const { status, body } = await call(await app({ CONNECT_API_URL: connect.url }), '/api/tokens');
-  assert.deepEqual([status, body], [200, { tokens: [sol] }]);
+  assert.deepEqual([status, body], [200, { tokens: [sol], sources: [base] }]);
   const [{ method, url, headers }] = connect.seen;
   assert.deepEqual([method, url, headers['x-api-key']], ['GET', '/api/v1/supported_tokens', KEY]);
 });
@@ -347,6 +350,33 @@ test('the proxy has a body limit', async () => {
 
 // read once from mainnet through this route at slot 463374955, the wallet that signed klend-repay-plain in core's fixtures
 const WALLET = '8FKDyH8gkPLTE6Jqm3vkLukeerf8FWJUSDjMKNfgrCpq';
+
+test('GET /api/balance gives what an owner holds of a mint, with the account and program a refund needs', async () => {
+  const held = (pubkey: string, amount: string, owner: string) => ({
+    pubkey,
+    account: { data: { program: 'spl-token', parsed: { info: { tokenAmount: { amount } } }, space: 165 }, executable: false, lamports: 1, owner, rentEpoch: 0, space: 165 },
+  });
+  const TOKEN = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+  let accounts = [held(KLEND, '5', TOKEN), held(PUMP_AMM, '18446744073709551615', TOKEN)];
+  const { url, seen } = await rpc(() => ({ result: { context: { slot: 1 }, value: accounts } }));
+  const base = await app({ SOLANA_RPC_URL: url });
+
+  const { status, body } = await call(base, `/api/balance/${WALLET}/${USDC}`);
+  assert.deepEqual([status, body], [200, { account: PUMP_AMM, tokenProgram: TOKEN, amount: '18446744073709551615' }]);
+  const { method, params } = JSON.parse(seen[0].body);
+  assert.equal(method, 'getTokenAccountsByOwner');
+  assert.deepEqual(params.slice(0, 2), [WALLET, { mint: USDC }]);
+
+  accounts = [];
+  assert.deepEqual((await call(base, `/api/balance/${WALLET}/${USDC}`)).body, { account: null, tokenProgram: null, amount: '0' });
+});
+
+test('GET /api/balance says when Solana does not answer', async () => {
+  const { url } = await rpc(() => ({ error: { code: -32000, message: 'down' } }));
+  const { status, body } = await call(await app({ SOLANA_RPC_URL: url }), `/api/balance/${WALLET}/${USDC}`);
+  assert.equal(status, 502);
+  assert.match(body.error, /balance/);
+});
 const RECORDED: Record<string, any> = JSON.parse(readFileSync(new URL('fixtures/kamino-8FKDyH8g.rpc.json', import.meta.url), 'utf8'));
 const replayed = (method: string, params: unknown[]) => {
   const key = `${method} ${JSON.stringify(params)}`;
