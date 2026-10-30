@@ -108,6 +108,10 @@ test('parseIdl sends a legacy IDL to POST /idl/convert and surfaces the 400 mess
   } finally {
     delete process.env.SIM_URL;
   }
+
+  const loaded = await loadIdl(KLEND, recordedConnection('klend'), { convertUrl });
+  assert.equal(loaded.address, KLEND);
+  assert.equal(received.at(-1)!.body.metadata.address, KLEND);
 });
 
 test('parseIdl takes a modern IDL as it is, from an object or JSON text, and refuses anything else', async () => {
@@ -136,7 +140,11 @@ test('modern on-chain IDLs load, and listInstructions counts accounts inside gro
   assert.equal(dlmm.address, programIdOf('meteora_dlmm'));
   // A fork can keep the original's address in its IDL, and instructions must still go to the program that was asked for.
   const anywhere = { getAccountInfo: async () => ({ data: Buffer.from(fixture('pump_amm.idl-account.json').data, 'base64') }) } as unknown as Connection;
-  assert.equal((await loadIdl(KLEND, anywhere)).address, KLEND);
+  const fork = await loadIdl(KLEND, anywhere);
+  assert.equal(fork.address, KLEND);
+  const sell = flatten(fork.instructions.find(ix => ix.name === 'sell')!.accounts);
+  assert.equal(sell.find(a => a.path === 'program')?.account.address, KLEND);
+  assert.ok(!JSON.stringify(fork).includes(programIdOf('pump_amm')), 'nothing of the original program may stay');
   const repay = listInstructions(KLEND_MODERN).find(ix => ix.name === 'repay_obligation_liquidity_v2');
   assert.deepEqual([repay?.args, repay?.accounts], [1, 13]);
 });
@@ -301,6 +309,7 @@ test('unsupported IDL types fail on their own instruction with a clear error', (
       { name: 'coption', discriminator: [2], accounts: [], args: [{ name: 'a', type: { coption: 'u8' } }] },
       { name: 'recursive', discriminator: [3], accounts: [], args: [{ name: 'a', type: { defined: { name: 'Node' } } }] },
       { name: 'unknown', discriminator: [4], accounts: [], args: [{ name: 'a', type: { defined: { name: 'Gone' } } }] },
+      { name: 'wide', discriminator: [5], accounts: [], args: [{ name: 'a', type: 'u256' }] },
     ],
     types: [
       { name: 'Node', type: { kind: 'struct', fields: [{ name: 'next', type: { option: { defined: { name: 'Node' } } } }] } },
@@ -311,6 +320,7 @@ test('unsupported IDL types fail on their own instruction with a clear error', (
   assert.throws(() => argFields(idl, 'coption'), /Unsupported IDL type/);
   assert.throws(() => argFields(idl, 'recursive'), /Recursive IDL type Node/);
   assert.throws(() => argFields(idl, 'unknown'), /Type Gone is missing/);
+  assert.throws(() => argFields(idl, 'wide'), /Unsupported IDL type "u256"/);
 });
 
 test('accounts must be complete, and extra ones are kept as remaining accounts', () => {
@@ -830,6 +840,84 @@ test('every kind of argument seed gives the bytes the program feeds its seeds', 
     by_u16: pda(Buffer.from('3412', 'hex')),
     by_list: null, // not a supported seed: none of the 35 IDLs surveyed seeds with a Vec
   });
+});
+
+test('a struct with no fields takes no bytes and costs the rest of the arguments none', () => {
+  const empty = { defined: { name: 'Empty' } };
+  const types = [
+    { name: 'Empty', type: { kind: 'struct' } },
+    { name: 'NoFields', type: { kind: 'struct', fields: [] } },
+    { name: 'Tail', type: { kind: 'struct', fields: [{ name: 'a', type: 'u8' }, { name: 'e', type: { defined: { name: 'NoFields' } } }] } },
+  ];
+  const encoded = (args: unknown[], values: Record<string, unknown>) => buildInstruction(handIdl([], args, types), 'ix', values, []).data.toString('hex');
+  assert.equal(encoded([{ name: 'a', type: 'u64' }, { name: 'e', type: empty }], { a: '258', e: {} }), `${DISCRIMINATOR}0201000000000000`);
+  assert.equal(encoded([{ name: 'o', type: { option: empty } }], { o: {} }), `${DISCRIMINATOR}01`);
+  assert.equal(encoded([{ name: 'a', type: 'u8' }, { name: 'o', type: { option: empty } }], { a: 9, o: {} }), `${DISCRIMINATOR}0901`);
+  assert.equal(encoded([{ name: 'v', type: { vec: { defined: { name: 'Tail' } } } }], { v: [{ a: 1, e: {} }, { a: 2, e: {} }] }), `${DISCRIMINATOR}020000000102`);
+  assert.equal(encoded([{ name: 'e', type: empty }], { e: {} }), DISCRIMINATOR);
+  assert.equal(encoded([{ name: 'e', type: empty }, { name: 'a', type: 'u8' }], { e: {}, a: 7 }), `${DISCRIMINATOR}07`);
+});
+
+test('floats stay inside their type and are written as decimal text', () => {
+  const idl = handIdl([], [{ name: 'single', type: 'f32' }, { name: 'double', type: 'f64' }]);
+  const encoded = (values: Record<string, unknown>) => buildInstruction(idl, 'ix', values, []).data.toString('hex');
+  assert.equal(encoded({ single: '1.5', double: 2.5 }), `${DISCRIMINATOR}0000c03f0000000000000440`);
+  assert.equal(encoded({ single: 1e38, double: '1e39' }).length, (8 + 4 + 8) * 2);
+  assert.throws(() => encoded({ single: 1e39, double: 0 }), /ix\.single: 1e\+39 is out of range for f32/);
+  assert.throws(() => encoded({ single: '-1e39', double: 0 }), /out of range for f32/);
+  assert.throws(() => encoded({ single: '0x10', double: 0 }), /ix\.single: not a number: 0x10/);
+  assert.throws(() => encoded({ single: 1, double: '' }), /ix\.double: not a number/);
+});
+
+test('a small IDL cannot make the form schema explode', () => {
+  const depth = 16;
+  const type = (level: number) => (level === depth ? 'u8' : { defined: { name: `T${level}` } });
+  const types = Array.from({ length: depth }, (_, level) => ({
+    name: `T${level}`,
+    type: { kind: 'struct', fields: [{ name: 'a', type: type(level + 1) }, { name: 'b', type: type(level + 1) }] },
+  }));
+  const fields = (...levels: number[]) => argFields(handIdl([], levels.map((level, i) => ({ name: `x${i}`, type: type(level) })), types), 'ix');
+  assert.throws(() => fields(0), /IDL type expands past 10000 fields/);
+  assert.equal(fields(4).length, 1); // 8191 nodes
+  assert.throws(() => fields(4, 4), /IDL type expands past 10000 fields/); // the limit is for the whole instruction
+});
+
+test('arguments over the coder buffer are refused with the instruction name', () => {
+  const idl = handIdl([], [{ name: 'blob', type: 'bytes' }]);
+  assert.equal(buildInstruction(idl, 'ix', { blob: Buffer.alloc(990) }, []).data.length, 8 + 4 + 990);
+  assert.throws(() => buildInstruction(idl, 'ix', { blob: Buffer.alloc(1200) }, []), /ix: arguments exceed the 1000 bytes/);
+  const list = handIdl([], [{ name: 'list', type: { vec: 'u64' } }]);
+  assert.throws(() => buildInstruction(list, 'ix', { list: Array(200).fill('1') }, []), /ix: arguments exceed the 1000 bytes/);
+});
+
+test('a field named like an Object property is missing when it was not given', () => {
+  const idl = handIdl([], [{ name: 'constructor', type: { option: 'u8' } }]);
+  assert.equal(buildInstruction(idl, 'ix', {}, []).data.toString('hex'), `${DISCRIMINATOR}00`);
+  assert.throws(() => buildInstruction(handIdl([], [{ name: 'toString', type: 'u8' }]), 'ix', {}, []), /ix\.toString: missing/);
+});
+
+test('a program id replaces the old one wherever the IDL says it, and only when given', async () => {
+  const ORIGINAL = Keypair.generate().publicKey.toBase58();
+  const bytes = [...keyBytes(ORIGINAL)];
+  const idl = {
+    ...handIdl([
+      { name: 'program', address: ORIGINAL },
+      { name: 'system_program', address: '11111111111111111111111111111111' },
+      { name: 'own_seed', pda: { seeds: [{ kind: 'const', value: bytes }] } },
+      { name: 'own_program', pda: { seeds: [seedText('a')], program: { kind: 'const', value: bytes } } },
+    ]),
+    address: ORIGINAL,
+  };
+  assert.equal(await parseIdl(idl), idl);
+  assert.equal(await parseIdl(idl, { programId: ORIGINAL }), idl);
+
+  const fork = await parseIdl(idl, { programId: KLEND });
+  assert.equal(fork.address, KLEND);
+  const accounts = resolveAccounts(fork, 'ix', {}, { intermediary: ANY_KEY });
+  const pda = (seed: Buffer) => PublicKey.findProgramAddressSync([seed], new PublicKey(KLEND))[0].toBase58();
+  assert.deepEqual(accounts.map(a => a.pubkey), [KLEND, '11111111111111111111111111111111', pda(keyBytes(KLEND)), pda(Buffer.from('a'))]);
+  assert.equal(buildInstruction(fork, 'ix', {}, accounts).programId.toBase58(), KLEND);
+  assert.equal((await parseIdl({ ...idl, address: 'not-a-key' }, { programId: KLEND })).address, KLEND);
 });
 
 test('npm test also runs the tests next to the sources', () => {
