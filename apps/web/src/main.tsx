@@ -37,7 +37,9 @@ function App() {
         <h1>
           <a href="/">Connect Anything</a>
         </h1>
-        <p>An instruction of an Anchor program on Solana, paid with one signature from an EVM chain.</p>
+        <p>
+          An instruction of an Anchor program on Solana, paid with one signature from an EVM chain. <a href="/kamino">Repay a Kamino debt</a>
+        </p>
       </header>
       <main>
         <Boundary>
