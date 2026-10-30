@@ -7,9 +7,9 @@ import { test } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { guards } from '@aurora-is-near/intents-connect';
 import { prepareSolanaSteps } from '@aurora-is-near/intents-connect-wallet/solana';
-import { BorshCoder, utils } from '@coral-xyz/anchor';
+import { BorshCoder } from '@coral-xyz/anchor';
 import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from '@solana/spl-token';
-import { Keypair, PublicKey, type Connection, type TransactionInstruction } from '@solana/web3.js';
+import { Keypair, PublicKey, type Connection } from '@solana/web3.js';
 import BN from 'bn.js';
 import {
   LegacyIdlError,
@@ -26,6 +26,8 @@ import {
   type Idl,
 } from '../src/index.ts';
 import { flatten } from '../src/idl.ts';
+import { assertSameInstruction, recordedInstructions } from './recorded.ts';
+import { FARMS, KLEND_IDL as KLEND_REPAY } from '../../../recipes/kamino-rescue/index.ts';
 
 // A converter on the developer's machine must not decide what these tests see.
 delete process.env.SIM_URL;
@@ -44,7 +46,7 @@ const onChainIdl = (name: string) => loadIdl(programIdOf(name), recordedConnecti
 
 // klend publishes only legacy IDLs, on chain and in @kamino-finance/klend-sdk 13.0.6. This is a converted copy,
 // byte-identical to sava-software/idl-clients@88f5f31 (Apache-2.0), idl-clients-bundle/.../kamino/lend/gen/idl.json.
-const KLEND_MODERN: Idl = fixture('klend.modern-idl.json');
+const KLEND_MODERN: Idl = JSON.parse(readFileSync(new URL('../../../recipes/kamino-rescue/klend.idl.json', import.meta.url), 'utf8'));
 
 const KLEND = 'KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD';
 const keyBytes = (key: string) => new PublicKey(key).toBuffer();
@@ -383,70 +385,9 @@ for (const name of OTHER_PROGRAMS) {
   });
 }
 
-// The instructions of a recorded getTransaction answer, with lookup tables resolved and tx-level flags.
-function recordedInstructions(name: string) {
-  const tx = fixture(`${name}.tx.json`);
-  assert.equal(tx.meta.err, null);
-  const { accountKeys, header, instructions } = tx.transaction.message;
-  const { writable = [], readonly = [] } = tx.meta.loadedAddresses ?? {};
-  const keys: string[] = [...accountKeys, ...writable, ...readonly];
-  const isSigner = (i: number) => i < header.numRequiredSignatures;
-  const isWritable = (i: number) => {
-    if (i >= accountKeys.length) return i < accountKeys.length + writable.length;
-    return isSigner(i) ? i < header.numRequiredSignatures - header.numReadonlySignedAccounts : i < accountKeys.length - header.numReadonlyUnsignedAccounts;
-  };
-  return instructions.map((ix: any) => ({
-    programId: keys[ix.programIdIndex],
-    data: Buffer.from(utils.bytes.bs58.decode(ix.data)),
-    accounts: ix.accounts.map((i: number) => ({ pubkey: keys[i], isSigner: isSigner(i), isWritable: isWritable(i) })),
-  })) as { programId: string; data: Buffer; accounts: { pubkey: string; isSigner: boolean; isWritable: boolean }[] }[];
-}
-
-// Compiled flags belong to the whole transaction, where another instruction can raise them. `raised` names the accounts
-// where that happened in the recording, so that every other flag has to match both ways.
-function assertSameInstruction(built: TransactionInstruction, real: ReturnType<typeof recordedInstructions>[number], raised: number[] = []) {
-  assert.equal(built.programId.toBase58(), real.programId);
-  assert.equal(built.data.toString('hex'), real.data.toString('hex'));
-  assert.deepEqual(built.keys.map(k => k.pubkey.toBase58()), real.accounts.map(a => a.pubkey));
-  built.keys.forEach((key, i) => {
-    assert.equal(key.isSigner, real.accounts[i].isSigner, `account ${i} signer flag`);
-    if (raised.includes(i)) assert.deepEqual([key.isWritable, real.accounts[i].isWritable], [false, true], `account ${i} should be raised`);
-    else assert.equal(key.isWritable, real.accounts[i].isWritable, `account ${i} writable flag`);
-  });
-}
-
-const FARMS = 'FarmsPZpWu9i7Kky8tPN37rs2TpmMrAZrC7S7vJa91Hr';
 const seedText = (text: string) => ({ kind: 'const', value: [...Buffer.from(text)] });
 
-// No klend IDL anywhere has seeds or fixed addresses: the on-chain one has none and conversion cannot add them. These
-// come from the public klend source (handler_repay_obligation_liquidity.rs, seeds.rs), and the comparison below with
-// real transactions is what proves them. Without them these accounts stay form inputs, as a test below shows.
-const KLEND_NOTES: Record<string, object> = {
-  lending_market_authority: { pda: { seeds: [seedText('lma'), { kind: 'account', path: 'repay_accounts.lending_market' }] } },
-  'repay_accounts.instruction_sysvar_account': { address: 'Sysvar1nstructions1111111111111111111111111' },
-  'farms_accounts.obligation_farm_user_state': {
-    pda: {
-      seeds: [seedText('user'), { kind: 'account', path: 'reserve_farm_state' }, { kind: 'account', path: 'repay_accounts.obligation' }],
-      program: { kind: 'const', value: [...new PublicKey(FARMS).toBuffer()] },
-    },
-  },
-  farms_program: { address: FARMS },
-};
-
-function annotated(idl: Idl, ixName: string, notes: Record<string, object>): Idl {
-  const copy = structuredClone(idl);
-  const visit = (items: any[], prefix: string) => {
-    for (const item of items) {
-      if (item.accounts) visit(item.accounts, `${prefix}${item.name}.`);
-      else Object.assign(item, notes[`${prefix}${item.name}`]);
-    }
-  };
-  visit(copy.instructions.find(ix => ix.name === ixName)!.accounts, '');
-  return copy;
-}
-
 const REPAY = 'repay_obligation_liquidity_v2';
-const KLEND_REPAY = annotated(KLEND_MODERN, REPAY, KLEND_NOTES);
 
 const namesOf = (idl: Idl, ixName: string) => flatten(idl.instructions.find(ix => ix.name === ixName)!.accounts).map(a => a.path);
 

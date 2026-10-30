@@ -20,7 +20,7 @@ const PUMP_AMM = 'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA';
 const USDC = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
 const coreFixture = (name: string) => JSON.parse(readFileSync(new URL(`../../../packages/core/test/fixtures/${name}`, import.meta.url), 'utf8'));
-const KLEND_IDL = coreFixture('klend.modern-idl.json');
+const KLEND_IDL = JSON.parse(readFileSync(new URL('../../../recipes/kamino-rescue/klend.idl.json', import.meta.url), 'utf8'));
 
 const recipesDir = mkdtempSync(join(tmpdir(), 'recipes-'));
 const servers: Server[] = [];

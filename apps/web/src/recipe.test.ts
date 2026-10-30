@@ -6,7 +6,7 @@ import { TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from '@solana/spl-tok
 import { PublicKey } from '@solana/web3.js';
 import { STAND_IN, buildRecipe, defaultValue, matchesPublished, parseStored, recipeCode, resolveStep, simulationRequest, toSolanaRecipe, variantValue, type StoredRecipe } from './recipe.ts';
 
-const KLEND_IDL: Idl = JSON.parse(readFileSync(new URL('../../../packages/core/test/fixtures/klend.modern-idl.json', import.meta.url), 'utf8'));
+const KLEND_IDL: Idl = JSON.parse(readFileSync(new URL('../../../recipes/kamino-rescue/klend.idl.json', import.meta.url), 'utf8'));
 const KLEND = KLEND_IDL.address;
 const USDC = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 const VISITOR = '8FKDyH8gkPLTE6Jqm3vkLukeerf8FWJUSDjMKNfgrCpq';

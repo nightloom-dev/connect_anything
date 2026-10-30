@@ -1,7 +1,7 @@
 {
   "name": "connect-anything",
   "private": true,
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": ["apps/*", "packages/*", "recipes/*"],
   "scripts": {
     "dev": "npm run dev -w apps/web",
     "build": "npm run build -w apps/web"

@@ -1,0 +1,17 @@
+{
+  "name": "@connect-anything/kamino-rescue",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./index.ts",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "node --test '*.test.ts'"
+  },
+  "dependencies": {
+    "@connect-anything/core": "*",
+    "@solana/web3.js": "^1.99.0"
+  }
+}

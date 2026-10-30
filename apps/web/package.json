@@ -15,6 +15,7 @@
     "@aurora-is-near/intents-connect": "7.28.0",
     "@aurora-is-near/intents-connect-wallet": "7.28.0",
     "@connect-anything/core": "*",
+    "@connect-anything/kamino-rescue": "*",
     "@headlessui/react": "^2.2.10",
     "@kamino-finance/klend-sdk": "^13.0.6",
     "@reown/appkit": "^1.8.11",
