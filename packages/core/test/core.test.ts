@@ -813,6 +813,176 @@ test('klend repay from a real Token-2022 transaction: the ATA follows the token 
   assertSameInstruction(buildInstruction(KLEND_REPAY, REPAY, args, accounts), real, [0]);
 });
 
+test('jupiter route from a real transaction: source and destination each take their own side', async () => {
+  const idl = await onChainIdl('jupiter_v6');
+  const real = recordedInstructions('jupiter_v6-route').find(ix => ix.programId === idl.address)!;
+  const names = namesOf(idl, 'route');
+  const at = (name: string) => real.accounts[names.indexOf(name)].pubkey;
+  const me = at('user_transfer_authority');
+  const funded = '9Pq7aLAbhDG2tTnS22cm6kuysZVcZpLFE368HWuypump';
+  const destination = at('destination_mint');
+  const args = new BorshCoder(idl).instruction.decode(real.data)!.data as Record<string, unknown>;
+  const hints = { token_program: at('token_program'), destination_mint: destination, platform_fee_account: null, destination_token_account: null };
+
+  const accounts = resolveAccounts(idl, 'route', args, { intermediary: me, mint: funded }, hints);
+  const source = rowOf(accounts, 'user_source_token_account');
+  assert.deepEqual([source.pubkey, source.source], [ata(me, funded), 'auto']);
+  assert.equal(rowOf(accounts, 'user_destination_token_account').pubkey, at('user_destination_token_account'));
+  assert.equal(rowOf(resolveAccounts(idl, 'route', args, { intermediary: me }, hints), 'user_source_token_account').pubkey, null);
+
+  // route names only the classic token program, while the real source is a Token-2022 ATA that nothing in the IDL can
+  // show. Replacing the pubkey on the row is how such an answer is corrected.
+  const realSource = at('user_source_token_account');
+  assert.equal(realSource, ata(me, funded, T22));
+  const corrected = accounts.map(row => (row.name === 'user_source_token_account' ? { ...row, pubkey: realSource } : row));
+  assertSameInstruction(buildInstruction(idl, 'route', args, [...corrected, ...real.accounts.slice(corrected.length)]), real, [names.indexOf('user_transfer_authority')]); // it pays the fee
+});
+
+test('the funded mint goes to the one account that spends it and picks no side', async () => {
+  const me = ANY_KEY;
+  const open = (accounts: unknown[], name: string, hints: AccountHints = {}) => rowOf(resolveAccounts(handIdl(accounts), 'ix', {}, { intermediary: me, mint: USDC }, hints), name).pubkey;
+  const swap = [{ name: 'token_owner_account_a' }, { name: 'token_owner_account_b' }];
+  assert.equal(open(swap, 'token_owner_account_a'), null);
+  assert.equal(open(swap, 'token_owner_account_b'), null);
+  const named = [...swap, { name: 'token_mint_a' }, { name: 'token_mint_b' }];
+  assert.equal(open(named, 'token_owner_account_a', { token_mint_a: KLEND }), ata(me, KLEND));
+  assert.equal(open(named, 'token_owner_account_b', { token_mint_a: KLEND }), null);
+
+  // An output is not what the intermediary holds, and two spenders cannot both be the funded token.
+  assert.equal(open([{ name: 'user_destination_token_account' }], 'user_destination_token_account'), null);
+  const two = [{ name: 'user_source_collateral' }, { name: 'user_source_liquidity' }];
+  assert.equal(open(two, 'user_source_collateral'), null);
+  assert.equal(open(two, 'user_source_liquidity'), null);
+  const inOut = [{ name: 'user_token_in' }, { name: 'user_token_out' }];
+  assert.equal(open(inOut, 'user_token_in'), ata(me, USDC));
+  assert.equal(open(inOut, 'user_token_out'), null);
+
+  const pump = await onChainIdl('pump_amm');
+  const deposit = resolveAccounts(pump, 'deposit', {}, { intermediary: me, mint: USDC });
+  for (const name of ['user_base_token_account', 'user_quote_token_account', 'user_pool_token_account']) assert.equal(rowOf(deposit, name).pubkey, null, name);
+});
+
+test('a mint or token program on the other side, or in another group, is not the one of this account', async () => {
+  const me = ANY_KEY;
+  const PYUSD = '2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo';
+  const combined = resolveAccounts(KLEND_MODERN, 'repay_and_withdraw_and_redeem', {}, { intermediary: me, mint: USDC }, {
+    'repay_accounts.reserve_liquidity_mint': PYUSD,
+    'repay_accounts.token_program': T22,
+    'withdraw_accounts.reserve_liquidity_mint': USDC,
+    'withdraw_accounts.liquidity_token_program': TOKEN_PROGRAM_ID.toBase58(),
+  });
+  assert.equal(rowOf(combined, 'repay_accounts.user_source_liquidity').pubkey, ata(me, PYUSD, T22));
+  assert.equal(rowOf(combined, 'withdraw_accounts.user_destination_liquidity').pubkey, ata(me, USDC));
+
+  const jupiter = await onChainIdl('jupiter_v6');
+  const route = resolveAccounts(jupiter, 'route_v2', {}, { intermediary: me }, { source_mint: PYUSD, destination_mint: USDC, source_token_program: T22, destination_token_program: TOKEN_PROGRAM_ID.toBase58() });
+  assert.equal(rowOf(route, 'user_source_token_account').pubkey, ata(me, PYUSD, T22));
+  assert.equal(rowOf(route, 'user_destination_token_account').pubkey, ata(me, USDC));
+
+  // A mint_authority is not a mint: `mint` stays the only sibling and is used.
+  const authority = resolveAccounts(handIdl([{ name: 'user_ata' }, { name: 'mint' }, { name: 'mint_authority' }, { name: 'pool_authority_mint_account' }]), 'ix', {}, { intermediary: me, mint: KLEND }, { mint: USDC });
+  assert.equal(rowOf(authority, 'user_ata').pubkey, ata(me, USDC));
+});
+
+test('with several token programs the rule answers only when it can tell which one', async () => {
+  const me = ANY_KEY;
+  const PYUSD = '2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo';
+  const dlmm = await onChainIdl('meteora_dlmm');
+  const noMints = resolveAccounts(dlmm, 'swap2', {}, { intermediary: me, mint: PYUSD });
+  assert.deepEqual([rowOf(noMints, 'user_token_in').pubkey, rowOf(noMints, 'user_token_in').source], [null, 'input']);
+
+  // The funded mint being token_x_mint is what says token_x_program.
+  const sides = { token_x_mint: PYUSD, token_y_mint: USDC, token_x_program: T22, token_y_program: TOKEN_PROGRAM_ID.toBase58() };
+  assert.equal(rowOf(resolveAccounts(dlmm, 'swap2', {}, { intermediary: me, mint: PYUSD }, sides), 'user_token_in').pubkey, ata(me, PYUSD, T22));
+  assert.equal(rowOf(resolveAccounts(dlmm, 'swap2', {}, { intermediary: me, mint: USDC }, sides), 'user_token_in').pubkey, ata(me, USDC));
+
+  const programs = [{ name: 'user_token_account' }, { name: 'liquidity_token_program' }, { name: 'collateral_token_program' }];
+  assert.equal(rowOf(resolveAccounts(handIdl(programs), 'ix', {}, { intermediary: me, mint: USDC }), 'user_token_account').pubkey, null);
+  // A metadata program holds no tokens, so it leaves the token program alone.
+  const metadata = [{ name: 'user_token_account' }, { name: 'token_program', address: T22 }, { name: 'token_metadata_program' }];
+  assert.equal(rowOf(resolveAccounts(handIdl(metadata), 'ix', {}, { intermediary: me, mint: USDC }), 'user_token_account').pubkey, ata(me, USDC, T22));
+});
+
+test('the name rule claims token accounts of whoever signs, and nothing else', async () => {
+  const me = ANY_KEY;
+  const claimed = (name: string, others: unknown[] = []) => {
+    return rowOf(resolveAccounts(handIdl([{ name }, ...others]), 'ix', {}, { intermediary: me, mint: USDC }, { mint: USDC }), name).pubkey;
+  };
+  for (const name of [
+    'user_token_account',
+    'user_token',
+    'user_ata',
+    'user_source_token',
+    'user_source_token_account',
+    'user_in_ata',
+    'user_token_in',
+    'owner_token_account',
+    'owner_ata',
+    'funder_token_account',
+    'payer_token_account',
+    'payer_token_ta',
+    'signer_token_account',
+    'token_owner_account',
+    'user_source_liquidity',
+    'user_source_collateral_ta',
+    'user_collateral',
+  ]) {
+    assert.equal(claimed(name), ata(me, USDC), name);
+  }
+  for (const name of [
+    'payer_token_mint',
+    'user_token_program',
+    'owner_token_record',
+    'user_collateral_state',
+    'authority_token_metadata',
+    'wallet_token_config',
+    'user_in_flight_state',
+    'owner_tokens_locked',
+    'user_vault_receipt_token_account',
+    'user_token_vault',
+    'pool_token_account',
+  ]) {
+    assert.equal(claimed(name, [{ name: 'mint' }]), null, name);
+  }
+  assert.equal(claimed('user_pool_token_account'), null);
+
+  // The holder is named and does not sign: its token account is not the intermediary's.
+  assert.equal(claimed('user_token_account', [{ name: 'user' }]), null);
+  assert.equal(claimed('user_token_account', [{ name: 'user', signer: true }]), ata(me, USDC));
+
+  const dlmm = await onChainIdl('meteora_dlmm');
+  const hint = Keypair.generate().publicKey.toBase58();
+  const operator = resolveAccounts(dlmm, 'initialize_position_by_operator', {}, { intermediary: me, mint: USDC }, { owner_token_x: hint });
+  assert.deepEqual([rowOf(operator, 'owner_token_x').pubkey, rowOf(operator, 'owner_token_x').source], [hint, 'recipe']);
+});
+
+test('seeds the IDL states and that are still open leave the account open', async () => {
+  const idl = handIdl([{ name: 'user_ata', pda: { seeds: [{ kind: 'account', path: 'mint' }] } }, { name: 'mint' }]);
+  const open = rowOf(resolveAccounts(idl, 'ix', {}, { intermediary: ANY_KEY, mint: USDC }), 'user_ata');
+  assert.deepEqual([open.pubkey, open.source], [null, 'input']);
+  const pump = await onChainIdl('pump_amm');
+  const claim = resolveAccounts(pump, 'claim_cashback', {}, { intermediary: ANY_KEY, mint: USDC });
+  assert.equal(rowOf(claim, 'user_wsol_token_account').pubkey, null);
+});
+
+test('a half-typed account input counts as not filled in, while a bad hint is still an error', () => {
+  const idl = handIdl([{ name: 'pool' }, { name: 'optional_pool', optional: true }]);
+  const accounts = resolveAccounts(idl, 'ix', {}, { intermediary: ANY_KEY, inputs: { pool: 'abc', optional_pool: '' } });
+  assert.deepEqual([accounts[0].pubkey, accounts[0].source], [null, 'input']);
+  assert.equal(accounts[1].pubkey, KLEND);
+  assert.throws(() => resolveAccounts(idl, 'ix', {}, { intermediary: ANY_KEY }, { pool: 'abc' }), /pool: not a public key/);
+});
+
+test('the program account of an event CPI is the program itself, unless told otherwise', async () => {
+  const dlmm = await onChainIdl('meteora_dlmm');
+  const swap = rowOf(resolveAccounts(dlmm, 'swap2', {}, { intermediary: ANY_KEY }), 'program');
+  assert.deepEqual([swap.pubkey, swap.source], [dlmm.address, 'auto']);
+  const other = Keypair.generate().publicKey.toBase58();
+  assert.equal(rowOf(resolveAccounts(dlmm, 'swap2', {}, { intermediary: ANY_KEY }, { program: other }), 'program').pubkey, other);
+  const plain = rowOf(resolveAccounts(handIdl([{ name: 'program' }]), 'ix', {}, { intermediary: ANY_KEY }), 'program');
+  assert.deepEqual([plain.pubkey, plain.source], [null, 'input']);
+});
+
 test('every kind of argument seed gives the bytes the program feeds its seeds', () => {
   const seeded = (name: string, path: string) => ({ name, pda: { seeds: [{ kind: 'arg', path }] } });
   const idl = handIdl(

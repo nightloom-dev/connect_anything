@@ -25,7 +25,7 @@ export type ResolvedAccount = {
 export type ResolveContext = {
   /** A real key: the {INTERMEDIARY} placeholder comes later, from prepareSolanaSteps, and cannot seed a PDA. */
   intermediary: string;
-  /** The funded token, for the intermediary's token account when the instruction names no mint. */
+  /** The funded token, for the one token account of the intermediary that the instruction's mints leave without one. */
   mint?: string;
   /** What the form has collected so far, by account name or path. */
   inputs?: Record<string, string>;
@@ -41,12 +41,18 @@ type Found = { pubkey: string | null; source: AccountSource; derived?: Derived }
 
 const keyHex = (key: string) => new PublicKey(key).toBuffer().toString('hex');
 
-function checkedKey(value: unknown, what: string): string {
+function keyOrNull(value: unknown): string | null {
   try {
     return new PublicKey(String(value)).toBase58();
   } catch {
-    throw new Error(`${what}: not a public key: ${String(value)}`);
+    return null;
   }
+}
+
+function checkedKey(value: unknown, what: string): string {
+  const key = keyOrNull(value);
+  if (!key) throw new Error(`${what}: not a public key: ${String(value)}`);
+  return key;
 }
 
 function derive(program: SeedValue, seeds: SeedValue[]): Derived | null {
@@ -96,13 +102,15 @@ function argSeed(idl: Idl, ix: IdlInstruction, args: Record<string, unknown>, pa
 }
 
 // ponytail: an IDL does not say which accounts hold tokens, so the intermediary's token account is recognized by its
-// name and its mint and token program by the words the names share. A wrong guess shows as auto and fails simulation;
-// a miss falls through to hints. Replace with a real marker if IDLs ever carry one.
+// name and its mint and token program by the words the names share. Names that leave more than one answer get none and
+// fall through to hints. A wrong answer shows as auto and fails simulation, and because this step outranks hints it is
+// corrected by replacing the pubkey on the returned row. Replace with a real marker if IDLs ever carry one.
 const OWN_TOKEN_ACCOUNT =
-  /^(?:token_owner_account|(?:user|owner|payer|signer|funder|authority|wallet)_(?!.*vault)(?:.*_)?(?:tokens?|ata|liquidity|collateral|source|destination|in|out)(?:_|$))/;
-const OUTGOING = /(?:^|_)(?:destination|out)(?:_|$)/;
-const MINT = /(?:^|_)mint(?:_|$)/;
-const TOKEN_PROGRAM = /^(?!associated).*token.*program/;
+  /^(?:token_owner_account(?:_.+)?|(?:user|owner|payer|signer|funder|authority|wallet)_(?!.*vault)(?:.*_)?(?:tokens?(?:_(?:account|[abxy]))?|ata(?:_acc)?|ta|liquidity|collateral|source|destination|in|out))$/;
+const OUTGOING = /(?:^|_)(?:destination|out|output)(?:_|$)/;
+const INCOMING = /(?:^|_)(?:source|in|input)(?:_|$)/;
+const MINT = /(?:^|_)mint(?:_(?:[a-z0-9]|input|intermediate|output))?$/;
+const TOKEN_PROGRAM = /^(?!associated)(?!.*metadata).*token.*program/;
 const FILLER = new Set(['user', 'owner', 'payer', 'signer', 'funder', 'authority', 'wallet', 'token', 'tokens', 'account', 'ata', 'ta', 'mint', 'source', 'destination', 'in', 'out', 'reserve', 'program']);
 const nameWords = (name: string) => name.split('_').filter(word => !FILLER.has(word));
 
@@ -112,19 +120,25 @@ const entryFor = <T>(record: Record<string, T> | undefined, { path, account }: F
   return Object.hasOwn(record, path) ? record[path] : Object.hasOwn(record, account.name) ? record[account.name] : undefined;
 };
 
-function sibling(accounts: FlatAccount[], pattern: RegExp, words: string[]): FlatAccount | undefined {
-  const fits = accounts.filter(({ account: { name } }) => {
-    if (!pattern.test(name)) return false;
-    const own = nameWords(name);
+// The one account that shares the name's words and does not face the other way, looking first in the name's own group.
+function sibling(accounts: FlatAccount[], pattern: RegExp, { scope, account: { name } }: FlatAccount): FlatAccount | undefined {
+  const words = nameWords(name);
+  const opposite = OUTGOING.test(name) ? INCOMING : INCOMING.test(name) ? OUTGOING : null;
+  const fits = accounts.filter(({ account: other }) => {
+    if (!pattern.test(other.name) || opposite?.test(other.name)) return false;
+    const own = nameWords(other.name);
     return !words.length || !own.length || (own.length === words.length && own.every(word => words.includes(word)));
   });
-  return fits.length === 1 ? fits[0] : undefined;
+  const near = fits.filter(other => other.scope.join() === scope.join());
+  const [only, more] = near.length ? near : fits;
+  return more ? undefined : only;
 }
 
 /**
  * Finds every account it can, in this order: signer is the intermediary; address in the IDL; pda from seeds; the
- * intermediary's token account by mint; hints; otherwise the form's input. It reads nothing from chain, so a seed that
- * is a field inside account data (`pool.creator`) falls through to hints, and `relations` are not followed.
+ * intermediary's token account by mint; hints; otherwise the form's input, and only the `program` of an event CPI is
+ * known without it. It reads nothing from chain, so a seed that is a field inside account data (`pool.creator`) falls
+ * through to hints, and `relations` are not followed. An input that is not a key yet counts as not filled in.
  * An optional account that can be derived counts as present even if it does not exist yet; a null hint leaves it out.
  */
 export function resolveAccounts(idl: Idl, ixName: string, args: Record<string, unknown>, ctx: ResolveContext, hints: AccountHints = {}): ResolvedAccount[] {
@@ -136,14 +150,11 @@ export function resolveAccounts(idl: Idl, ixName: string, args: Record<string, u
 
   // A seed path is relative to its own group and may also start from any group around it.
   const lookup = (path: string, scope: string[]) => {
-    const parts = path.split('.');
     for (let depth = scope.length; depth >= 0; depth--) {
-      for (let end = parts.length; end > 0; end--) {
-        const account = byPath.get([...scope.slice(0, depth), ...parts.slice(0, end)].join('.'));
-        if (account) return { account, rest: parts.slice(end) };
-      }
+      const account = byPath.get([...scope.slice(0, depth), path].join('.'));
+      if (account) return account;
     }
-    return null;
+    return undefined;
   };
 
   const accountSeed = (account: FlatAccount | undefined): SeedValue | null => {
@@ -155,8 +166,7 @@ export function resolveAccounts(idl: Idl, ixName: string, args: Record<string, u
   const seedValue = (seed: Seed, scope: string[]): SeedValue | null => {
     if (seed.kind === 'const') return Buffer.from(seed.value).toString('hex');
     if (seed.kind === 'arg') return argSeed(idl, ix, args, seed.path);
-    const found = lookup(seed.path, scope);
-    return found && !found.rest.length ? accountSeed(found.account) : null;
+    return accountSeed(lookup(seed.path, scope));
   };
 
   const pda = (spec: Pda, scope: string[]): Derived | null => {
@@ -165,15 +175,29 @@ export function resolveAccounts(idl: Idl, ixName: string, args: Record<string, u
     return program === null || seeds.includes(null) ? null : derive(program, seeds as SeedValue[]);
   };
 
-  const ownTokenAccount = ({ name }: IdlAccount): Derived | null => {
-    if (!OWN_TOKEN_ACCOUNT.test(name)) return null;
-    const words = nameWords(name);
-    // The funded mint is what the intermediary holds, so it says nothing about where an output goes.
-    const mint = accountSeed(sibling(accounts, MINT, words)) ?? (OUTGOING.test(name) ? null : fundedMint);
+  // `owner_token_x` next to an `owner` who does not sign belongs to that owner, not to the intermediary.
+  const isOwnTokenAccount = ({ account: { name, signer, address, pda: seeds } }: FlatAccount) =>
+    OWN_TOKEN_ACCOUNT.test(name) && !signer && !address && !seeds && !accounts.some(({ account }) => account.name === name.split('_')[0] && !account.signer);
+
+  // The funded mint is what the intermediary holds, so it says nothing about where an output goes or which side of a
+  // pair a name picks (`_a`, `_base_`), and it can only be the mint of one account.
+  const wantsFundedMint = (flat: FlatAccount) =>
+    isOwnTokenAccount(flat) &&
+    !OUTGOING.test(flat.account.name) &&
+    nameWords(flat.account.name).every(word => word === 'liquidity' || word === 'collateral') &&
+    !accountSeed(sibling(accounts, MINT, flat));
+
+  const ownTokenAccount = (flat: FlatAccount): Derived | null => {
+    if (!isOwnTokenAccount(flat)) return null;
+    const funded = fundedMint ? accounts.filter(wantsFundedMint) : [];
+    const mint = accountSeed(sibling(accounts, MINT, flat)) ?? (funded.length === 1 && funded[0] === flat ? fundedMint : null);
     if (!mint) return null;
+    // `user_token_in` next to token_x_program and token_y_program: the mint it turned out to hold says which side it is.
+    const held = accounts.find(other => MINT.test(other.account.name) && accountSeed(other) === mint);
+    const tokenProgram = sibling(accounts, TOKEN_PROGRAM, flat) ?? (held && sibling(accounts, TOKEN_PROGRAM, held));
+    if (!tokenProgram && accounts.some(({ account }) => TOKEN_PROGRAM.test(account.name))) return null; // its ATA depends on which one
     // An unresolved token program means the classic one until the form says otherwise.
-    const tokenProgram = accountSeed(sibling(accounts, TOKEN_PROGRAM, words)) ?? keyHex(TOKEN_PROGRAM_ID.toBase58());
-    return derive(keyHex(ASSOCIATED_TOKEN_PROGRAM_ID.toBase58()), [keyHex(intermediary), tokenProgram, mint]);
+    return derive(keyHex(ASSOCIATED_TOKEN_PROGRAM_ID.toBase58()), [keyHex(intermediary), accountSeed(tokenProgram) ?? keyHex(TOKEN_PROGRAM_ID.toBase58()), mint]);
   };
 
   const find = (flat: FlatAccount): Found => {
@@ -182,11 +206,15 @@ export function resolveAccounts(idl: Idl, ixName: string, args: Record<string, u
     if (account.optional && hint === null) return { pubkey: null, source: 'recipe' };
     if (account.signer) return { pubkey: intermediary, source: 'auto' };
     if (account.address) return { pubkey: checkedKey(account.address, path), source: 'auto' };
-    const derived = (account.pda ? pda(account.pda, scope) : null) ?? ownTokenAccount(account);
+    // Seeds the IDL states and that are still open leave the account open: the name must not answer instead of them.
+    const derived = account.pda ? pda(account.pda, scope) : ownTokenAccount(flat);
     if (derived) return { pubkey: derived.address, source: 'auto', derived };
     if (hint) return { pubkey: checkedKey(hint, path), source: 'recipe' };
-    const input = entryFor(ctx.inputs, flat);
-    return { pubkey: input ? checkedKey(input, path) : null, source: 'input' };
+    const input = keyOrNull(entryFor(ctx.inputs, flat) ?? '');
+    if (input) return { pubkey: input, source: 'input' };
+    // Anchor's #[event_cpi] appends event_authority and the program itself, and the IDL often gives the latter no address.
+    if (account.name === 'program' && accounts.some(({ account: other }) => other.name === 'event_authority')) return { pubkey: idl.address, source: 'auto' };
+    return { pubkey: null, source: 'input' };
   };
 
   const memo = new Map<FlatAccount, Found>();
