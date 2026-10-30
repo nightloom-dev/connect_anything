@@ -120,6 +120,9 @@ test('the modern klend fixture matches the on-chain IDL instruction by instructi
 test('modern on-chain IDLs load, and listInstructions counts accounts inside groups', async () => {
   const dlmm = await onChainIdl('meteora_dlmm');
   assert.equal(dlmm.address, programIdOf('meteora_dlmm'));
+  // A fork can keep the original's address in its IDL, and instructions must still go to the program that was asked for.
+  const anywhere = { getAccountInfo: async () => ({ data: Buffer.from(fixture('pump_amm.idl-account.json').data, 'base64') }) } as unknown as Connection;
+  assert.equal((await loadIdl(KLEND, anywhere)).address, KLEND);
   const repay = listInstructions(KLEND_MODERN).find(ix => ix.name === 'repay_obligation_liquidity_v2');
   assert.deepEqual([repay?.args, repay?.accounts], [1, 13]);
 });
@@ -391,7 +394,7 @@ const seedText = (text: string) => ({ kind: 'const', value: [...Buffer.from(text
 
 // No klend IDL anywhere has seeds or fixed addresses: the on-chain one has none and conversion cannot add them. These
 // come from the public klend source (handler_repay_obligation_liquidity.rs, seeds.rs), and the comparison below with
-// real transactions is what proves them. Without them these accounts stay form inputs, as the next test shows.
+// real transactions is what proves them. Without them these accounts stay form inputs, as a test below shows.
 const KLEND_NOTES: Record<string, object> = {
   lending_market_authority: { pda: { seeds: [seedText('lma'), { kind: 'account', path: 'repay_accounts.lending_market' }] } },
   'repay_accounts.instruction_sysvar_account': { address: 'Sysvar1nstructions1111111111111111111111111' },
