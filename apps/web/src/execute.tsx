@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { IN_FLIGHT_STATUSES, guards, parseOriginAsset, signIntentsConnectPayload, type Execution, type ExecutionPreview, type SolanaRecipe, type StepsPreview } from '@aurora-is-near/intents-connect';
+import { BACKEND_PLACEHOLDERS, IN_FLIGHT_STATUSES, guards, parseOriginAsset, signIntentsConnectPayload, type Execution, type ExecutionPreview, type ExecutionStep, type SolanaRecipe, type StepsPreview } from '@aurora-is-near/intents-connect';
 import { useExecution, useIntentsConnect, type UseExecutionResult } from '@aurora-is-near/intents-connect/react';
 import { useIntentsConnectWallet } from '@aurora-is-near/intents-connect-wallet/connect/appkit';
 import type { Idl } from '@connect-anything/core';
 import { checkCompat, issueText } from './compat.ts';
-import { CHAINS, STAGES, STAGE_OF, bridgePlan, bySymbol, explain, fromAtomic, isQuoteMoved, refundBody, retryPlan, toAtomic, type Balance, type Token, type TokenList } from './connect.ts';
-import { STAND_IN, buildRecipe, matchesPublished, parseStored, toSolanaRecipe, type StoredRecipe } from './recipe.ts';
+import { CHAINS, STAGES, STAGE_OF, bridgePlan, bySymbol, existingOffer, explain, fromAtomic, isQuoteMoved, refundBody, retryPlan, toAtomic, type Balance, type Token, type TokenList } from './connect.ts';
+import { STAND_IN, buildRecipe, matchesPublished, parseStored, signsOnlyRecipe, toSolanaRecipe, type StoredRecipe } from './recipe.ts';
 import { AccountList, Failure, FetchError, Notice, short, useAct, useAsync, useJson } from './ui.tsx';
 
 const SOLSCAN = 'https://solscan.io';
 const TIME_NOTE = 'After the deposit, execution takes about 150 seconds plus the MPC signature.';
+const CANCEL_NOTE = 'Cancelling only deletes the execution. It does not call back a deposit already sent, and this page stops following that deposit: if one is on its way, wait instead. If it reaches your intermediary, Refund here sends it back.';
 
 const PHASE_TEXT: Partial<Record<UseExecutionResult['phase'], string>> = {
   'resolving-identity': 'Looking up your intermediary…',
@@ -120,8 +121,8 @@ function Summary({ stored, steps, intermediary, real, amountKnown, shared }: Sum
 
 function Progress({ exec, chain, resumed }: { exec: UseExecutionResult; chain: string; resumed: boolean }) {
   const { status, phase, execution, executionId, depositTxHash } = exec;
-  // after a reload the wallet is not asked for the deposit: the address is shown instead
-  const text = exec.error || (resumed && phase === 'awaiting-deposit') ? undefined : PHASE_TEXT[phase];
+  // a resume asks the wallet for the deposit only while the execution is CREATED: after that the address is shown instead
+  const text = exec.error || (resumed && phase === 'awaiting-deposit' && status !== 'CREATED') ? undefined : PHASE_TEXT[phase];
   const stage = status ? STAGE_OF[status] : -1;
   const originChain = (execution?.quote?.originAsset && parseOriginAsset(execution.quote.originAsset)?.chain) || chain;
   const evmTx = CHAINS.find(({ id }) => id === originChain)?.tx ?? CHAINS[0].tx;
@@ -312,6 +313,153 @@ function Recover({ exec, execution, unsigned, act, locked, recipe, list, interme
   );
 }
 
+type ExistingProps = {
+  id: string;
+  /** How this execution came up. */
+  head: string;
+  address: string;
+  intermediary?: string | null;
+  stored: StoredRecipe;
+  list?: TokenList;
+  /** Why this page asks the wallet for nothing now. */
+  gate: string;
+  locked: boolean;
+  act: ReturnType<typeof useAct>['act'];
+  resume: (id: string) => () => void;
+  drop: (id: string) => Promise<void>;
+  /** Only for the list of this browser: a 409 cannot be put aside. */
+  onHide?: () => void;
+};
+
+/**
+ * An execution this page did not just create. Anyone can create one for any wallet through the key proxy, so it is read and
+ * listed before the wallet is asked anything, and only the recipe on this page is signed or funded from here.
+ */
+function Existing({ id, head, address, intermediary, stored, list, gate, locked, act, resume, drop, onHide }: ExistingProps) {
+  const { api } = useIntentsConnect();
+  const read = async () => (await api.listExecutions(address, { id }))[0] ?? null;
+  const found = useAsync<Execution | null>(read, [address, id]);
+  const execution = found.data;
+  const same = useMemo(() => (execution && intermediary ? signsOnlyRecipe(stored, execution, intermediary) : undefined), [execution, stored, intermediary]);
+
+  const title = (
+    <p>
+      {head} <code>{id}</code>
+    </p>
+  );
+  const hide = onHide && <button onClick={onHide}>Hide</button>;
+  // a 409 stays on the screen until a new flow starts, and once the execution is over a reload is the way to one
+  const reload = !onHide && <button onClick={() => location.reload()}>Reload this page</button>;
+
+  if (!execution) {
+    return (
+      <div className="card">
+        {title}
+        {found.loading && <Notice>Reading it…</Notice>}
+        {found.error && <Failure error={new Error(`Could not read it, so nothing is offered for it yet: ${explain(found.error)}`)} retry={found.retry} />}
+        {execution === null && <p>Connect no longer has it.</p>}
+        {hide}
+        {execution === null && reload}
+      </div>
+    );
+  }
+
+  const { status, quote, details, transaction } = execution;
+  const steps: ExecutionStep[] = Array.isArray(execution.steps) ? execution.steps : [];
+  const other = same === false;
+  const { needsSignature, asksWallet, terminal, over, resumable, open, deletable } = existingOffer(execution, { same, gate, listed: !!onHide });
+
+  const remove = act(async () => {
+    const now = await read();
+    // it can have moved on since it was read, in another tab or because a deposit arrived
+    if (now?.status === status && now.details?.messageSigned === details?.messageSigned) await drop(id);
+    else found.retry();
+  });
+
+  const paid = quote?.swapType === 'EXACT_OUTPUT' ? quote.amountIn : quote?.amount;
+  const token = [...(list?.sources ?? []), ...(list?.tokens ?? [])].find(({ assetId }) => assetId === quote?.originAsset);
+  const chain = CHAINS.find(({ id: known }) => known === token?.blockchain);
+
+  return (
+    <div className="card">
+      {title}
+      <dl className="figures">
+        <dt>Status</dt>
+        <dd>
+          {status}, {needsSignature ? 'and it still needs your signature' : 'signed'}
+        </dd>
+        {quote?.depositAddress && (
+          <>
+            <dt>Deposit</dt>
+            <dd>
+              {token && paid ? `${fromAtomic(paid, token.decimals)} ${token.symbol}${chain ? ` on ${chain.name}` : ''}` : `${paid} atomic units of ${quote.originAsset}`} to <code>{quote.depositAddress}</code>
+            </dd>
+          </>
+        )}
+        {quote?.recipient && (
+          <>
+            <dt>Delivered to</dt>
+            <dd>
+              <code>{quote.recipient}</code>
+            </dd>
+          </>
+        )}
+        <dt>Deposit hash</dt>
+        <dd>{transaction?.evmTxHash ? <code>{transaction.evmTxHash}</code> : 'none seen yet'}</dd>
+      </dl>
+      <details className="summary" open={asksWallet || other}>
+        <summary>
+          What it runs: {steps.length} {steps.length === 1 ? 'instruction' : 'instructions'}
+        </summary>
+        <ol className="steps">
+          {steps.map((step, index) => (
+            <li key={index}>
+              {'programId' in step ? (
+                <>
+                  <code>{step.programId}</code>
+                  <div className="hint">
+                    Data: <code>{step.discriminator}</code>
+                  </div>
+                  {step.args?.length > 0 && <pre>{JSON.stringify(step.args, null, 2)}</pre>}
+                  <ul className="programs">
+                    {step.accounts?.map(({ pubkey }, at) => (
+                      <li key={at}>
+                        <code>{pubkey}</code> {(pubkey === BACKEND_PLACEHOLDERS.intermediary || pubkey === intermediary) && <em>your intermediary</em>}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <pre>{JSON.stringify(step, null, 2)}</pre>
+              )}
+            </li>
+          ))}
+        </ol>
+      </details>
+      {other && asksWallet && <Notice kind="error">This is not the recipe on this page, so this page will not sign or fund it. Anyone who knows your wallet address can create an execution for it, so if you did not start this one, delete it.</Notice>}
+      {other && !asksWallet && <p className="hint">This is not the recipe on this page.</p>}
+      {over && <p>It is no longer in flight, so a new run can start.</p>}
+      {!asksWallet && !over && !terminal && <p className="hint">It is already signed, so resuming only follows it here and asks your wallet for nothing.</p>}
+      {asksWallet && !deletable && <Notice kind="warn">{CANCEL_NOTE}</Notice>}
+      {resumable && !open && gate && <p className="hint">{gate}</p>}
+      <div className="row">
+        {resumable && (
+          <button disabled={locked || !open} onClick={resume(id)}>
+            Resume it
+          </button>
+        )}
+        {asksWallet && (
+          <button disabled={locked} onClick={remove}>
+            {deletable ? 'Delete it (a signature that moves no money)' : 'Cancel it'}
+          </button>
+        )}
+        {hide}
+        {over && reload}
+      </div>
+    </div>
+  );
+}
+
 type ExecuteProps = {
   /** Held by the parent, so that its state outlives this screen. */
   exec: UseExecutionResult;
@@ -345,6 +493,7 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
   const [moved, setMoved] = useState(false);
   const [resumed, setResumed] = useState(false);
   const [hidden, setHidden] = useState<string[]>([]);
+  const [deleted, setDeleted] = useState<string>();
   const [failed, setFailed] = useState<Execution>();
 
   const sources = useMemo(() => (list.data?.sources ?? []).filter(token => token.blockchain === chain).sort(bySymbol), [list.data, chain]);
@@ -409,30 +558,30 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
   const unsigned = exec.phase === 'failed' && !exec.recovery && !exec.hasSubmittedSignature && exec.status === 'CREATED' ? exec.executionId : undefined;
   const unfinished = exec.phase === 'failed' && !exec.recovery && !unsigned && !!exec.executionId && !!exec.status && IN_FLIGHT_STATUSES.includes(exec.status);
 
-  const missing = !wallet
-    ? 'Connect an EVM wallet to continue.'
-    : !isEvm
-      ? 'This is not an EVM wallet. Recipes are paid from Base, Arbitrum or Ethereum, so connect an EVM wallet.'
-      : lookup.loading
-        ? 'Looking up your intermediary…'
-        : lookup.error
-          ? ''
-          : intermediary === null
-            ? 'Solana is not enabled for this Connect key yet.'
-            : !list.data
-              ? 'Waiting for the token list.'
-              : !target
-                ? "Intents Connect does not deliver this recipe's token right now, so it cannot run."
-                : built.problem || issues.length
-                  ? 'This recipe cannot run, see above.'
-                  : shared && !understood
-                    ? 'Tick the box above first.'
-                    : !source
-                      ? 'Intents Connect takes no token from this chain right now.'
-                      : !atomic
-                        ? `Enter an amount of ${source.symbol}.`
-                        : '';
-  const blocked = closed ?? missing;
+  // What keeps this recipe from running at all, so nothing on this page asks the wallet to sign for it.
+  const refused =
+    closed ??
+    (!wallet
+      ? 'Connect an EVM wallet to continue.'
+      : !isEvm
+        ? 'This is not an EVM wallet. Recipes are paid from Base, Arbitrum or Ethereum, so connect an EVM wallet.'
+        : lookup.loading
+          ? 'Looking up your intermediary…'
+          : lookup.error
+            ? ''
+            : intermediary === null
+              ? 'Solana is not enabled for this Connect key yet.'
+              : !list.data
+                ? 'Waiting for the token list.'
+                : !target
+                  ? "Intents Connect does not deliver this recipe's token right now, so it cannot run."
+                  : built.problem || issues.length
+                    ? 'This recipe cannot run, see above.'
+                    : shared && !understood
+                      ? 'Tick the box above first.'
+                      : '');
+  const missing = lookup.error ? '' : !source ? 'Intents Connect takes no token from this chain right now.' : !atomic ? `Enter an amount of ${source.symbol}.` : '';
+  const blocked = refused || missing;
   const canQuote = !blocked && !lookup.error && !locked && !exec.recovery;
 
   const quote = async () => {
@@ -445,13 +594,20 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
     }
   };
   const askQuote = act(async () => {
+    setDeleted(undefined);
     setMoved(false);
     setPreview(null);
     setPreview(await quote());
   });
+  const drop = async (id: string) => {
+    await exec.cancel(id);
+    if (address) saveRecent(address, recent(address).filter(other => other !== id));
+  };
   const sign = act(async () => {
+    setDeleted(undefined);
+    setResumed(false);
     try {
-      if (unsigned) await exec.cancel(unsigned);
+      if (unsigned) await drop(unsigned);
       await exec.run(preview!.plan);
     } catch (failure) {
       if (!isQuoteMoved(failure)) throw failure;
@@ -462,17 +618,24 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
   });
   const resume = (id: string) =>
     act(async () => {
+      setDeleted(undefined);
       setResumed(true);
-      await exec.resume(id);
+      await exec.resume(id, {
+        // the SDK calls this just before a signature, so an execution that changed since it was listed stops here
+        validateExecution: execution => {
+          if (!intermediary || !signsOnlyRecipe(stored, execution, intermediary)) throw new Error('This execution is not the recipe on this page, so nothing was signed.');
+        },
+      });
     });
-  const cancel = (id: string) =>
-    act(async () => {
-      await exec.cancel(id);
-      if (address) saveRecent(address, recent(address).filter(other => other !== id));
-    });
+  const dropAndSay = async (id: string) => {
+    await drop(id);
+    setDeleted(id);
+  };
+  const cancel = (id: string) => act(() => dropAndSay(id));
 
   const deposit = exec.execution?.quote;
   const depositToken = list.data?.sources.find(token => token.assetId === deposit?.originAsset);
+  const existing = { address: address!, intermediary, stored, list: list.data, gate: refused, locked, act, resume, drop: dropAndSay };
 
   return (
     <div className="execute">
@@ -590,20 +753,10 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
           An attempt was created and never signed, and it holds this wallet's one in-flight slot. <button disabled={locked} onClick={cancel(unsigned)}>Delete it (a signature that moves no money)</button>
         </Notice>
       )}
-      {exec.recovery?.kind === 'resume-or-cancel' && (
-        <Notice kind="warn">
-          This wallet already has an execution in flight (<code>{exec.recovery.executionId}</code>), and Connect runs one at a time per wallet and chain.{' '}
-          <button disabled={locked} onClick={resume(exec.recovery.executionId)}>
-            Resume it
-          </button>{' '}
-          <button disabled={locked} onClick={cancel(exec.recovery.executionId)}>
-            Cancel it
-          </button>
-        </Notice>
-      )}
+      {address && exec.recovery?.kind === 'resume-or-cancel' && <Existing key={exec.recovery.executionId} id={exec.recovery.executionId} head="This wallet already has an execution in flight, and Connect runs one at a time per wallet and chain:" {...existing} />}
       {exec.recovery?.kind === 'retry-transfer' && (
         <Notice kind="warn">
-          The deposit transfer did not go through.{' '}
+          The deposit transfer did not go through. {CANCEL_NOTE}{' '}
           <button disabled={locked} onClick={act(() => exec.retryDeposit())}>
             Send the deposit again
           </button>{' '}
@@ -620,27 +773,31 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
           </button>
         </Notice>
       )}
-      {!exec.executionId && !locked && !exec.recovery && last && (
+      {address && !exec.executionId && !locked && !exec.recovery && last && <Existing key={last} id={last} head="You started an execution from this browser:" onHide={() => setHidden([...hidden, last])} {...existing} />}
+      {/* the card above already says what a 409 means, but not that a deletion from it failed */}
+      {error && (exec.recovery?.kind !== 'resume-or-cancel' || error !== explain(exec.error)) && <Notice kind="error">{error}</Notice>}
+      {deleted && exec.phase !== 'cancelled' && (
         <Notice>
-          You started an execution from this browser (<code>{short(last)}</code>).{' '}
-          <button onClick={resume(last)}>Resume</button> <button onClick={() => setHidden([...hidden, last])}>Hide</button>
+          Execution <code>{deleted}</code> was deleted, so a new run can start.
         </Notice>
       )}
-      {error && exec.recovery?.kind !== 'resume-or-cancel' && <Notice kind="error">{error}</Notice>}
 
       {(exec.status || exec.isBusy || exec.phase === 'cancelled') && <Progress exec={exec} chain={chain} resumed={resumed} />}
-      {resumed && deposit?.depositAddress && !exec.depositTxHash && (exec.status === 'DEPOSIT_PENDING' || exec.status === 'EXPIRED') && (
+      {resumed && deposit?.depositAddress && !exec.depositTxHash && !exec.execution?.transaction?.evmTxHash && (exec.status === 'DEPOSIT_PENDING' || exec.status === 'EXPIRED') && (
         <Notice>
-          Waiting for a deposit of {depositToken ? `${fromAtomic(deposit.amount, depositToken.decimals)} ${depositToken.symbol}` : `${deposit.amount} atomic units`} to <code>{deposit.depositAddress}</code>. If you already sent it, wait: sending it again would pay twice. If you have not, send it from any wallet and this page will follow it.{' '}
+          Waiting for a deposit of {depositToken ? `${fromAtomic(deposit.amount, depositToken.decimals)} ${depositToken.symbol}` : `${deposit.amount} atomic units`} to <code>{deposit.depositAddress}</code>. If you already sent it, wait: sending it again would pay twice. If you have not, send it from any wallet and this page will follow it. {CANCEL_NOTE}{' '}
           <button disabled={exec.isCancelling} onClick={cancel(exec.executionId!)}>
             Cancel, I will not send it
           </button>
         </Notice>
       )}
       {exec.phase === 'expired' && !resumed && (
-        <button disabled={exec.isCancelling} onClick={cancel(exec.executionId!)}>
-          Cancel the execution
-        </button>
+        <Notice kind="warn">
+          {CANCEL_NOTE}{' '}
+          <button disabled={exec.isCancelling} onClick={cancel(exec.executionId!)}>
+            Cancel the execution
+          </button>
+        </Notice>
       )}
       {exec.status === 'DEPOSIT_FAILED' && <Notice kind="error">The deposit failed, for example on an invalid amount, so nothing ran on Solana. What was transferred is refunded.</Notice>}
       {list.data && (failed || atRest) && <Recover key={failed?.id} exec={exec} execution={failed} unsigned={unsigned} act={act} locked={locked || !!exec.recovery} recipe={recipe} list={list.data} intermediary={intermediary} source={source} />}

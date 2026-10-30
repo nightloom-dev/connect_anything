@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { FetchLike, SolanaRecipe, SolanaStep } from '@aurora-is-near/intents-connect';
+import type { Execution, FetchLike, SolanaRecipe, SolanaStep } from '@aurora-is-near/intents-connect';
 import { usdToAtomic } from '@connect-anything/kamino-rescue';
-import { STAGE_OF, bridgePlan, explain, fromAtomic, isQuoteMoved, refundBody, retry503, retryPlan, toAtomic, type Token } from './connect.ts';
+import { STAGE_OF, bridgePlan, existingOffer, explain, fromAtomic, isQuoteMoved, refundBody, retry503, retryPlan, toAtomic, type Token } from './connect.ts';
 import { BASE_USDC, SOLANA_USDC, supplyPlan } from './kamino.ts';
 
 const answering = (...statuses: number[]) => {
@@ -127,4 +127,47 @@ test('the rescue amount in dollars reaches the amount box as USDC and comes back
   assert.equal(toAtomic(fromAtomic(atomic, 6), 6), atomic);
   assert.equal(fromAtomic(usdToAtomic(0.000001, { amount: '1000000', usd: 1 }), 6), '0.000001');
   assert.equal(toAtomic(fromAtomic(usdToAtomic(1234.5, { amount: '5000000000', usd: 5000 }), 6), 6), '1234500000');
+});
+
+const unsigned = { messageSigned: false, payload: {} } as Execution['details'];
+const signed = { messageSigned: true, payload: {} } as Execution['details'];
+const offer = (status: Execution['status'], details: Execution['details'], same: boolean | undefined, gate = '', listed = false) => existingOffer({ status, details }, { same, gate, listed });
+
+test('an unsigned execution of anything else offers only its deletion, and that one is free of warnings', () => {
+  const planted = offer('CREATED', unsigned, false);
+  assert.equal(planted.resumable, false);
+  assert.equal(planted.asksWallet, true, 'whatever asks the wallet can be deleted');
+  assert.equal(planted.deletable, true);
+  assert.equal(offer('CREATED', unsigned, false, '', true).resumable, false, 'nor from the list of this browser');
+});
+
+test('the wallet is asked only for the recipe on this page, once nothing keeps it from running', () => {
+  assert.deepEqual([offer('CREATED', unsigned, true).resumable, offer('CREATED', unsigned, true).open], [true, true]);
+  assert.equal(offer('CREATED', unsigned, true, 'Tick the box above first.').open, false);
+  assert.equal(offer('CREATED', unsigned, undefined).open, false, 'not before it can be compared');
+  // messageSigned is optional on the wire, and without it the SDK signs
+  assert.equal(offer('CREATED', { payload: {} } as Execution['details'], false).resumable, false);
+  // a signed CREATED one is signed no more, but a resume still asks for its deposit
+  assert.equal(offer('CREATED', signed, false).resumable, false);
+  assert.equal(offer('CREATED', signed, false).deletable, false, 'it may hold money, so it comes with the warning');
+  // a deposit can be seen before the signature
+  assert.equal(offer('DEPOSIT_PROCESSING', unsigned, false).resumable, false);
+  assert.equal(offer('DEPOSIT_PROCESSING', unsigned, false).deletable, false);
+});
+
+test('a signed execution past CREATED is only followed, and nothing offers to delete it in one click', () => {
+  for (const status of ['DEPOSIT_PENDING', 'DEPOSIT_PROCESSING', 'OPERATION_PENDING', 'OPERATION_PROCESSING'] as const) {
+    const live = offer(status, signed, false, 'Tick the box above first.');
+    assert.deepEqual([live.asksWallet, live.deletable, live.resumable, live.open], [false, false, true, true], status);
+  }
+  const expired = offer('EXPIRED', signed, false, 'Tick the box above first.', true);
+  assert.deepEqual([expired.resumable, expired.open], [true, true], 'a late deposit can still revive it');
+});
+
+test('a finished execution leads to Retry, so it waits for the tick box, and a 409 that has ended offers a new run', () => {
+  assert.equal(offer('OPERATION_FAILED', signed, true, 'Tick the box above first.', true).open, false);
+  assert.equal(offer('OPERATION_FAILED', signed, true, '', true).open, true);
+  assert.equal(offer('SUCCESS', signed, true).over, true);
+  assert.equal(offer('SUCCESS', signed, true).resumable, false);
+  assert.equal(offer('OPERATION_FAILED', signed, true, '', true).over, false, 'the list keeps it, for what it left behind');
 });

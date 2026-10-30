@@ -1,4 +1,4 @@
-import { EVM_CHAIN_IDS, ExecutionCancelledError, isUserRejection, type CreateExecutionBody, type ExecutionPlan, type ExecutionStatus, type FetchLike, type SolanaRecipe, type StepsPlan } from '@aurora-is-near/intents-connect';
+import { EVM_CHAIN_IDS, ExecutionCancelledError, IN_FLIGHT_STATUSES, TERMINAL_STATUSES, isUserRejection, type CreateExecutionBody, type Execution, type ExecutionPlan, type ExecutionStatus, type FetchLike, type SolanaRecipe, type StepsPlan } from '@aurora-is-near/intents-connect';
 
 export type Token = { assetId: string; symbol: string; blockchain: string; contractAddress?: string; decimals: number };
 export type TokenList = { tokens: Token[]; sources: Token[] };
@@ -137,6 +137,37 @@ export const STAGE_OF: Record<ExecutionStatus, number> = {
   DEPOSIT_FAILED: 4,
   OPERATION_FAILED: 4,
 };
+
+type Standing = {
+  /** Whether a signature on it signs only the recipe on this page. Undefined until that can be compared. */
+  same?: boolean;
+  /** Why this page asks the wallet for nothing now, empty when it can. */
+  gate: string;
+  /** Found in the list of this browser, where it can be put aside. A 409 cannot. */
+  listed: boolean;
+};
+
+/**
+ * What to offer for an execution this page did not just create. Anyone can create one for any wallet, and a resume asks the
+ * wallet to sign what is unsigned and to fund what is still CREATED, so only the recipe on this page gets that far.
+ * Anything later a resume only follows, and following a live execution needs nobody's agreement. A finished one leads to
+ * Retry, which does. Only an unsigned CREATED execution can have no money in it, so only that one is deleted without a warning.
+ */
+export function existingOffer({ status, details }: Pick<Execution, 'status' | 'details'>, { same, gate, listed }: Standing) {
+  const needsSignature = details?.messageSigned !== true && !!details?.payload;
+  const asksWallet = needsSignature || status === 'CREATED';
+  const terminal = TERMINAL_STATUSES.includes(status);
+  const over = !listed && !IN_FLIGHT_STATUSES.includes(status);
+  return {
+    needsSignature,
+    asksWallet,
+    terminal,
+    over,
+    resumable: !over && !(asksWallet && same === false),
+    open: asksWallet ? same === true && !gate : !terminal || !gate,
+    deletable: needsSignature && status === 'CREATED',
+  };
+}
 
 const code = (error: unknown) => (error as { code?: unknown } | null | undefined)?.code;
 
