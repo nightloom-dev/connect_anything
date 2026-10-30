@@ -736,6 +736,15 @@ test('toSimRequest follows the /simulate contract with any key as the intermedia
   assert.deepEqual(Object.keys(JSON.parse(JSON.stringify(toSimRequest(built, { intermediary: ANY_KEY, fund })))).sort(), ['fund', 'instructions', 'intermediary']);
 });
 
+// Inside the package, so that the code resolves its imports the way a consumer's would.
+async function loadRecipe(code: string, t: { after(fn: () => void): void }) {
+  const dir = mkdtempSync(fileURLToPath(new URL('.generated-', import.meta.url)));
+  t.after(() => rmSync(dir, { recursive: true }));
+  const file = join(dir, 'recipe.ts');
+  writeFileSync(file, code);
+  return (await import(pathToFileURL(file).href)).recipe;
+}
+
 test('toRecipeCode exports a recipe that gives the same steps for another intermediary and amount', async t => {
   const generatedWith = Keypair.generate().publicKey.toBase58();
   const { refreshes, repay } = kaminoSteps(generatedWith);
@@ -743,12 +752,7 @@ test('toRecipeCode exports a recipe that gives the same steps for another interm
   const meta = { id: 'kamino-rescue', intent: 'kamino_repay', title: 'Repay "a" Kamino debt', destination, intermediary: generatedWith };
   const code = toRecipeCode([...refreshes, { ...repay('5'), amountArg: 'liquidity_amount' }], meta);
 
-  // Inside the package, so that the code resolves its imports the way a consumer's would.
-  const dir = mkdtempSync(fileURLToPath(new URL('.generated-', import.meta.url)));
-  t.after(() => rmSync(dir, { recursive: true }));
-  const file = join(dir, 'recipe.ts');
-  writeFileSync(file, code);
-  const { recipe } = await import(pathToFileURL(file).href);
+  const recipe = await loadRecipe(code, t);
   assert.deepEqual([recipe.id, recipe.intent, recipe.title, recipe.type, recipe.flow], ['kamino-rescue', 'kamino_repay', 'Repay "a" Kamino debt', 'solana', 'bridge-in']);
   assert.deepEqual(recipe.destination, destination);
 
@@ -767,6 +771,7 @@ test('toRecipeCode exports a recipe that gives the same steps for another interm
   const mint = new PublicKey(steps[3].accounts[4].pubkey);
   assert.equal(steps[3].accounts[6].pubkey, getAssociatedTokenAddressSync(mint, new PublicKey(user), true).toBase58());
   assert.ok(!code.includes(generatedWith), 'nothing of the key used for generation may stay in the code');
+  assert.ok(!code.includes(keyBytes(generatedWith).toString('hex')), 'not as bytes either');
 
   assert.throws(() => recipe.buildSteps({ intermediary: user, userAddress: '0x0', amount: '18446744073709551616' }), /does not fit 8 bytes/);
   assert.throws(() => recipe.buildSteps({ intermediary: user, userAddress: '0x0', amount: '' }), /does not fit/);
@@ -836,6 +841,17 @@ test('jupiter route from a real transaction: source and destination each take th
   assert.equal(realSource, ata(me, funded, T22));
   const corrected = accounts.map(row => (row.name === 'user_source_token_account' ? { ...row, pubkey: realSource } : row));
   assertSameInstruction(buildInstruction(idl, 'route', args, [...corrected, ...real.accounts.slice(corrected.length)]), real, [names.indexOf('user_transfer_authority')]); // it pays the fee
+});
+
+test('a row whose pubkey was replaced is what the recipe uses, not what it was derived from', async t => {
+  const me = Keypair.generate().publicKey.toBase58();
+  const user = Keypair.generate().publicKey.toBase58();
+  const replacement = Keypair.generate().publicKey.toBase58();
+  const idl = handIdl([{ name: 'user', signer: true }, { name: 'user_token_account' }, { name: 'mint' }]);
+  const accounts = resolveAccounts(idl, 'ix', {}, { intermediary: me }, { mint: USDC }).map(row => (row.name === 'user_token_account' ? { ...row, pubkey: replacement } : row));
+  const code = toRecipeCode([{ idl, ixName: 'ix', args: {}, accounts }], { id: 'a', intent: 'b', title: 'c', destination: { chain: 'sol', assetId: 'x' }, intermediary: me });
+  const { steps } = (await loadRecipe(code, t)).buildSteps({ intermediary: user, userAddress: '0x0', amount: '1' });
+  assert.equal(steps[0].accounts[1].pubkey, replacement);
 });
 
 test('the funded mint goes to the one account that spends it and picks no side', async () => {
@@ -1088,6 +1104,103 @@ test('a program id replaces the old one wherever the IDL says it, and only when 
   assert.deepEqual(accounts.map(a => a.pubkey), [KLEND, '11111111111111111111111111111111', pda(keyBytes(KLEND)), pda(Buffer.from('a'))]);
   assert.equal(buildInstruction(fork, 'ix', {}, accounts).programId.toBase58(), KLEND);
   assert.equal((await parseIdl({ ...idl, address: 'not-a-key' }, { programId: KLEND })).address, KLEND);
+});
+
+test('the recipe follows the intermediary into instruction data, directly and through what derives from it', async t => {
+  const pump = await onChainIdl('pump_amm');
+  const author = Keypair.generate().publicKey.toBase58();
+  const user = Keypair.generate().publicKey.toBase58();
+  const meta = { id: 'a', intent: 'b', title: 'c', destination: { chain: 'sol' as const, assetId: 'x' }, intermediary: author };
+  const run = async (idl: Idl, ixName: string, argsFor: (key: string) => Record<string, unknown>, hints: AccountHints) => {
+    const accounts = resolveAccounts(idl, ixName, argsFor(author), { intermediary: author }, hints);
+    const code = toRecipeCode([{ idl, ixName, args: argsFor(author), accounts }], meta);
+    assert.ok(!code.includes(keyBytes(author).toString('hex')), 'the generation key must not stay in the code as bytes');
+    const actual = (await loadRecipe(code, t)).buildSteps({ intermediary: user, userAddress: '0x0', amount: '1' });
+    const direct = buildInstruction(idl, ixName, argsFor(user), resolveAccounts(idl, ixName, argsFor(user), { intermediary: user }, hints));
+    assert.deepEqual(actual, prepareSolanaSteps([direct], { intermediary: user }));
+    return actual.steps[0].discriminator as string;
+  };
+
+  const create = (key: string) => ({ index: 0, base_amount_in: '1', quote_amount_in: '2', coin_creator: key, is_mayhem_mode: false, is_cashback_coin: { 0: false } });
+  const classic = TOKEN_PROGRAM_ID.toBase58();
+  const data = await run(pump, 'create_pool', create, { global_config: KLEND, base_mint: KLEND, quote_mint: USDC, base_token_program: classic, quote_token_program: classic });
+  assert.ok(data.includes(keyBytes(user).toString('hex')));
+
+  // The address of the intermediary's PDA as an argument, around the intermediary itself, with bytes on both sides.
+  const ledgerOf = (key: string) => PublicKey.findProgramAddressSync([keyBytes(key)], new PublicKey(KLEND))[0].toBase58();
+  const withdraw = handIdl([{ name: 'user', signer: true }, { name: 'ledger', pda: { seeds: [{ kind: 'account', path: 'user' }] } }], [
+    { name: 'before', type: 'u8' },
+    { name: 'recipient', type: 'pubkey' },
+    { name: 'middle', type: 'u16' },
+    { name: 'ledger_copy', type: 'pubkey' },
+    { name: 'recipient_again', type: 'pubkey' },
+    { name: 'after', type: 'u8' },
+  ]);
+  await run(withdraw, 'ix', key => ({ before: 1, recipient: key, middle: 515, ledger_copy: ledgerOf(key), recipient_again: key, after: 4 }), {});
+
+  // What one step derives can be an argument of another that does not list the account.
+  const open = handIdl([{ name: 'user', signer: true }, { name: 'ledger', pda: { seeds: [{ kind: 'account', path: 'user' }] } }]);
+  const pay = handIdl([{ name: 'user', signer: true }], [{ name: 'target', type: 'pubkey' }]);
+  const steps = [
+    { idl: open, ixName: 'ix', args: {}, accounts: resolveAccounts(open, 'ix', {}, { intermediary: author }) },
+    { idl: pay, ixName: 'ix', args: { target: ledgerOf(author) }, accounts: resolveAccounts(pay, 'ix', {}, { intermediary: author }) },
+  ];
+  const across = (await loadRecipe(toRecipeCode(steps, meta), t)).buildSteps({ intermediary: user, userAddress: '0x0', amount: '1' });
+  assert.equal(across.steps[1].discriminator, `${DISCRIMINATOR}${keyBytes(ledgerOf(user)).toString('hex')}`);
+});
+
+test('the recipe writes the amount at its real offset among other arguments', async t => {
+  const idl = await onChainIdl('pump_amm');
+  const real = recordedInstructions('pump_amm-sell').find(ix => ix.programId === programIdOf('pump_amm'))!;
+  const args = { base_amount_in: real.data.readBigUInt64LE(8).toString(), min_quote_amount_out: real.data.readBigUInt64LE(16).toString() };
+  const owner = real.accounts[1].pubkey;
+  const accounts = real.accounts.map((a, i) => ({ ...a, name: `account_${i}` }));
+  const meta = { id: 'a', intent: 'b', title: 'c', destination: { chain: 'sol' as const, assetId: 'x' }, intermediary: owner };
+  for (const amountArg of ['base_amount_in', 'min_quote_amount_out'] as const) {
+    const code = toRecipeCode([{ idl, ixName: 'sell', args: { ...args, [amountArg]: '5' }, accounts, amountArg }], meta);
+    const { steps } = (await loadRecipe(code, t)).buildSteps({ intermediary: owner, userAddress: '0x0', amount: args[amountArg] });
+    assert.equal(steps[0].discriminator, real.data.toString('hex'), amountArg);
+  }
+});
+
+test('the recipe carries lookup tables and flow, and asks only for what it uses', async t => {
+  const table = Keypair.generate().publicKey.toBase58();
+  const { refreshes } = kaminoSteps(ANY_KEY);
+  const destination = { chain: 'sol' as const, assetId: 'x' };
+  const code = toRecipeCode(refreshes, { id: 'a', intent: 'b', title: 'c', destination, intermediary: ANY_KEY, flow: 'steps-only', lookupTables: [table] });
+  const recipe = await loadRecipe(code, t);
+  assert.equal(recipe.flow, 'steps-only');
+  const prepared = recipe.buildSteps({ intermediary: ANY_KEY, userAddress: '0x0', amount: '1' });
+  assert.deepEqual(prepared.addressLookupTables, [table]);
+  assert.match(code, /buildSteps: \({ intermediary }\) =>/);
+});
+
+test('toRecipeCode refuses a recipe that could only fail later', () => {
+  const author = Keypair.generate().publicKey.toBase58();
+  const destination = { chain: 'sol' as const, assetId: 'x' };
+  const meta = { id: 'a', intent: 'b', title: 'c', destination, intermediary: author };
+  assert.throws(() => toRecipeCode([], meta), /at least one step/);
+
+  const { repay } = kaminoSteps(author);
+  const step = repay('5');
+  assert.throws(() => toRecipeCode([step], { ...meta, intermediary: ANY_KEY }), /repay_accounts\.owner signs but is not the intermediary/);
+  const stranger = { pubkey: ANY_KEY, isSigner: true, isWritable: false };
+  assert.throws(() => toRecipeCode([{ ...step, accounts: [...step.accounts, stranger] }], meta), /remaining_13 signs but is not the intermediary/);
+
+  // The address it seeds could not follow an amount that is only known when the recipe runs.
+  const idl = handIdl([{ name: 'ticket', pda: { seeds: [{ kind: 'arg', path: 'amount' }] } }], [{ name: 'amount', type: 'u64' }]);
+  const accounts = resolveAccounts(idl, 'ix', { amount: '5' }, { intermediary: author });
+  assert.throws(() => toRecipeCode([{ idl, ixName: 'ix', args: { amount: '5' }, accounts, amountArg: 'amount' }], meta), /amountArg "amount" also seeds an account/);
+});
+
+test('test/recipe.sample.ts is the generated code, so that tsc --noEmit type-checks what consumers will get', () => {
+  const { owner } = repayCase('klend-repay-plain');
+  const { refreshes, repay } = kaminoSteps(owner);
+  const destination = { chain: 'sol' as const, assetId: 'nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near', tokenAddress: USDC };
+  const code = toRecipeCode([...refreshes, { ...repay('5'), amountArg: 'liquidity_amount' }], { id: 'sample', intent: 'sample', title: 'Sample', destination, intermediary: owner });
+  const file = new URL('recipe.sample.ts', import.meta.url);
+  if (process.env.UPDATE_SAMPLE) writeFileSync(file, code);
+  assert.equal(readFileSync(file, 'utf8'), code, 'run with UPDATE_SAMPLE=1 and check that npm run typecheck still passes');
 });
 
 test('npm test also runs the tests next to the sources', () => {

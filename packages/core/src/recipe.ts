@@ -2,7 +2,7 @@ import type { SolanaRecipe } from '@aurora-is-near/intents-connect';
 import type { Idl } from '@coral-xyz/anchor';
 import { PublicKey } from '@solana/web3.js';
 import type { Derived } from './accounts.ts';
-import { argFields, buildInstruction, type AccountInput } from './idl.ts';
+import { argFields, buildInstruction, findInstruction, flatten, type AccountInput } from './idl.ts';
 
 export type RecipeStep = {
   idl: Idl;
@@ -36,26 +36,48 @@ const literal = (value: unknown) => JSON.stringify(value);
 // An IDL is untrusted text and these names end up in code people will run.
 const comment = (name: string) => `// ${name.replace(/[^\w.]/g, '_')}`;
 
-function dataCode({ idl, ixName, args, accounts, amountArg }: RecipeStep): string {
+// prepareSolanaSteps swaps the intermediary in accounts only, so the code has to write it, and what derives from it,
+// into the data itself. `swaps` maps those keys, as hex, to the code that yields them for the real intermediary.
+function dataCode({ idl, ixName, args, accounts, amountArg }: RecipeStep, swaps: Map<string, string>): string {
   const encode = (values: Record<string, unknown>) => buildInstruction(idl, ixName, values, accounts).data;
-  if (amountArg === undefined) return `hex(${literal(encode(args).toString('hex'))})`;
+  const spans: { start: number; end: number; code: string }[] = [];
+  let data: Buffer;
+  if (amountArg === undefined) {
+    data = encode(args);
+  } else {
+    const field = argFields(idl, ixName).find(f => f.name === amountArg);
+    if (field?.kind !== 'int' || field.min !== '0') throw new Error(`${ixName}: amountArg "${amountArg}" is not an unsigned integer argument`);
+    const seeds = flatten(findInstruction(idl, ixName).accounts).flatMap(({ account: { pda } }) => (pda ? [...pda.seeds, pda.program] : []));
+    if (seeds.some(seed => seed?.kind === 'arg' && seed.path === amountArg)) throw new Error(`${ixName}: amountArg "${amountArg}" also seeds an account, whose address could not follow the amount`);
+    data = encode({ ...args, [amountArg]: '0' });
+    const full = encode({ ...args, [amountArg]: field.max });
+    const start = data.findIndex((byte, index) => byte !== full[index]);
+    const width = Number(field.type.slice(1)) / 8;
+    spans.push({ start, end: start + width, code: `le(amount, ${width})` });
+  }
+  for (const [hex, code] of swaps) {
+    const key = Buffer.from(hex, 'hex');
+    for (let at = data.indexOf(key); at !== -1; at = data.indexOf(key, at + key.length)) spans.push({ start: at, end: at + key.length, code });
+  }
 
-  const field = argFields(idl, ixName).find(f => f.name === amountArg);
-  if (field?.kind !== 'int' || field.min !== '0') throw new Error(`${ixName}: amountArg "${amountArg}" is not an unsigned integer argument`);
-  const zero = encode({ ...args, [amountArg]: '0' });
-  const full = encode({ ...args, [amountArg]: field.max });
-  const start = zero.findIndex((byte, index) => byte !== full[index]);
-  const width = Number(field.type.slice(1)) / 8;
   const part = (bytes: Buffer) => `hex(${literal(bytes.toString('hex'))})`;
-  return `Buffer.concat([${part(zero.subarray(0, start))}, le(amount, ${width}), ${part(zero.subarray(start + width))}])`;
+  if (!spans.length) return part(data);
+  const parts: string[] = [];
+  let done = 0;
+  for (const { start, end, code } of spans.sort((a, b) => a.start - b.start)) {
+    parts.push(part(data.subarray(done, start)), code);
+    done = end;
+  }
+  return `Buffer.concat([${[...parts, part(data.subarray(done))].join(', ')}])`;
 }
 
 /**
  * The steps as a TypeScript module exporting a SolanaRecipe. Frozen steps would not do: the amount is only exact when
  * buildSteps runs (threeRound), and every PDA or ATA derived from the intermediary differs per user. Those are written
- * as code; everything else is a literal, and the result needs only the Aurora SDK and web3.js.
+ * as code; everything else is a literal, and the result needs only the Aurora SDK, web3.js and a global Buffer.
  */
 export function toRecipeCode(steps: readonly RecipeStep[], meta: RecipeMeta): string {
+  if (!steps.length) throw new Error('A recipe needs at least one step');
   const intermediary = new PublicKey(meta.intermediary).toBase58();
   const intermediaryHex = new PublicKey(intermediary).toBuffer().toString('hex');
 
@@ -67,17 +89,26 @@ export function toRecipeCode(steps: readonly RecipeStep[], meta: RecipeMeta): st
     return `pda(${literal(derived.program)}, [${seeds.join(', ')}])`;
   };
 
+  // A row whose pubkey was replaced is what got simulated, so `derived` no longer speaks for it.
+  const followsIntermediary = ({ pubkey, derived }: RecipeStep['accounts'][number]) =>
+    derived && derived.address === pubkey?.toString() && JSON.stringify(derived).includes(intermediaryHex) ? derived : undefined;
+
+  const swaps = new Map([[intermediaryHex, 'key(intermediary)']]);
+  for (const row of steps.flatMap(step => step.accounts)) {
+    const derived = followsIntermediary(row);
+    if (derived) swaps.set(new PublicKey(derived.address).toBuffer().toString('hex'), `key(${derivedCode(derived)})`);
+  }
+
   const instructions = steps.map(step => {
-    const data = dataCode(step); // first, because encoding is what refuses incomplete accounts by name
-    const keys = step.accounts.map(({ name, pubkey, isSigner, isWritable, derived }, index) => {
-      const address = new PublicKey(pubkey!).toBase58();
-      const code =
-        address === intermediary
-          ? 'intermediary'
-          : derived && JSON.stringify(derived).includes(intermediaryHex)
-            ? derivedCode(derived)
-            : literal(address);
-      return `            account(${code}, ${isSigner}, ${isWritable}), ${comment(name ?? `remaining_${index}`)}`;
+    const data = dataCode(step, swaps); // first, because encoding is what refuses incomplete accounts by name
+    const keys = step.accounts.map((row, index) => {
+      const { isSigner, isWritable } = row;
+      const address = new PublicKey(row.pubkey!).toBase58();
+      const name = row.name ?? `remaining_${index}`;
+      if (isSigner && address !== intermediary) throw new Error(`${step.ixName}: ${name} signs but is not the intermediary, the only signer Connect allows`);
+      const derived = followsIntermediary(row);
+      const code = address === intermediary ? 'intermediary' : derived ? derivedCode(derived) : literal(address);
+      return `            account(${code}, ${isSigner}, ${isWritable}), ${comment(name)}`;
     });
     return [
       `        ${comment(step.ixName)}`,
@@ -99,7 +130,7 @@ export function toRecipeCode(steps: readonly RecipeStep[], meta: RecipeMeta): st
   type: 'solana',
   flow: ${literal(meta.flow ?? 'bridge-in')},
   destination: ${literal(meta.destination)},
-  buildSteps: ({ intermediary, amount }) =>
+  buildSteps: ({ intermediary${steps.some(step => step.amountArg !== undefined) ? ', amount' : ''} }) =>
     prepareSolanaSteps(
       [
 ${instructions.join('\n')}
