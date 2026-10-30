@@ -662,8 +662,8 @@ test('the resolver keeps the priority order, in any account order and inside gro
   assert.deepEqual([get('signer_first').pubkey, get('signer_first').source], [ANY_KEY, 'auto']);
   assert.deepEqual([get('address_second').pubkey, get('address_second').source], [other, 'auto']);
   assert.deepEqual([get('user_token_account').pubkey, get('user_token_account').source], [programPda('b'), 'auto']);
-  // The ATA rule outranks the hint, and the funded mint stands in when the instruction names no mint.
-  assert.deepEqual([get('user_source_token').pubkey, get('user_source_token').source], [getAssociatedTokenAddressSync(new PublicKey(mint), new PublicKey(ANY_KEY), true).toBase58(), 'auto']);
+  // A hint corrects the guess from the name.
+  assert.deepEqual([get('user_source_token').pubkey, get('user_source_token').source], [mint, 'recipe']);
   assert.deepEqual([get('plain_hinted').pubkey, get('plain_hinted').source], [other, 'recipe']);
   assert.deepEqual([get('plain_asked').pubkey, get('plain_asked').source], [other, 'input']);
   assert.deepEqual([get('plain_open').pubkey, get('plain_open').source], [null, 'input']);

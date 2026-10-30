@@ -101,10 +101,10 @@ function argSeed(idl: Idl, ix: IdlInstruction, args: Record<string, unknown>, pa
   }
 }
 
-// ponytail: an IDL does not say which accounts hold tokens, so the intermediary's token account is recognized by its
+// Known limit: an IDL does not say which accounts hold tokens, so the intermediary's token account is recognized by its
 // name and its mint and token program by the words the names share. Names that leave more than one answer get none and
-// fall through to hints. A wrong answer shows as auto and fails simulation, and because this step outranks hints it is
-// corrected by replacing the pubkey on the returned row. Replace with a real marker if IDLs ever carry one.
+// stay open. A wrong answer shows as auto and fails simulation, and a hint or input corrects it. Replace with a real
+// marker if IDLs ever carry one.
 const OWN_TOKEN_ACCOUNT =
   /^(?:token_owner_account(?:_.+)?|(?:user|owner|payer|signer|funder|authority|wallet)_(?!.*vault)(?:.*_)?(?:tokens?(?:_(?:account|[abxy]))?|ata(?:_acc)?|ta|liquidity|collateral|source|destination|in|out))$/;
 const OUTGOING = /(?:^|_)(?:destination|out|output)(?:_|$)/;
@@ -135,10 +135,10 @@ function sibling(accounts: FlatAccount[], pattern: RegExp, { scope, account: { n
 }
 
 /**
- * Finds every account it can, in this order: signer is the intermediary; address in the IDL; pda from seeds; the
- * intermediary's token account by mint; hints; otherwise the form's input, and only the `program` of an event CPI is
- * known without it. It reads nothing from chain, so a seed that is a field inside account data (`pool.creator`) falls
- * through to hints, and `relations` are not followed. An input that is not a key yet counts as not filled in.
+ * Finds every account it can, in this order: signer is the intermediary; address in the IDL; pda from seeds; hints;
+ * the form's input; the intermediary's token account by name and mint; and the `program` of an event CPI. It reads
+ * nothing from chain, so a seed that is a field inside account data (`pool.creator`) falls through to hints, and
+ * `relations` are not followed. An input that is not a key yet counts as not filled in.
  * An optional account that can be derived counts as present even if it does not exist yet; a null hint leaves it out.
  */
 export function resolveAccounts(idl: Idl, ixName: string, args: Record<string, unknown>, ctx: ResolveContext, hints: AccountHints = {}): ResolvedAccount[] {
@@ -206,12 +206,14 @@ export function resolveAccounts(idl: Idl, ixName: string, args: Record<string, u
     if (account.optional && hint === null) return { pubkey: null, source: 'recipe' };
     if (account.signer) return { pubkey: intermediary, source: 'auto' };
     if (account.address) return { pubkey: checkedKey(account.address, path), source: 'auto' };
-    // Seeds the IDL states and that are still open leave the account open: the name must not answer instead of them.
-    const derived = account.pda ? pda(account.pda, scope) : ownTokenAccount(flat);
-    if (derived) return { pubkey: derived.address, source: 'auto', derived };
+    const stated = account.pda && pda(account.pda, scope);
+    if (stated) return { pubkey: stated.address, source: 'auto', derived: stated };
     if (hint) return { pubkey: checkedKey(hint, path), source: 'recipe' };
     const input = keyOrNull(entryFor(ctx.inputs, flat) ?? '');
     if (input) return { pubkey: input, source: 'input' };
+    // Last of what can be known: a name is a guess, so whatever was stated above corrects it.
+    const guessed = ownTokenAccount(flat);
+    if (guessed) return { pubkey: guessed.address, source: 'auto', derived: guessed };
     // Anchor's #[event_cpi] appends event_authority and the program itself, and the IDL often gives the latter no address.
     if (account.name === 'program' && accounts.some(({ account: other }) => other.name === 'event_authority')) return { pubkey: idl.address, source: 'auto' };
     return { pubkey: null, source: 'input' };

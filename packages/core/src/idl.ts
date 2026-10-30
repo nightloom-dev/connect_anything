@@ -148,7 +148,7 @@ const definedFields = (idl: Idl, fields: IdlDefinedFields, seen: string[], budge
       : { ...fieldType(idl, field, seen, budget), name: String(index) },
   );
 
-// ponytail: no generic types and no COption, none of the 8 modern mainnet IDLs surveyed uses them in arguments;
+// Known limit: no generic types and no COption, none of the 8 modern mainnet IDLs surveyed uses them in arguments;
 // BorshCoder has no COption layout at all. Both fail with a clear error, add generics when a program needs them.
 export function fieldType(idl: Idl, type: IdlType, seen: string[] = [], budget = { left: MAX_TYPE_NODES }): FieldType {
   if (--budget.left < 0) throw new Error(`IDL type expands past ${MAX_TYPE_NODES} fields`);
@@ -300,7 +300,7 @@ function encodeArgs(idl: Idl, ix: IdlInstruction, values: unknown): Buffer {
     // front, so one unsupported type anywhere in a program would break forms that never touch it.
     return new BorshInstructionCoder({ ...idl, instructions: [ix], types }).encode(ix.name, values);
   } catch (error) {
-    // ponytail: the coder allocates 1000 bytes, and a transaction could carry about 1014 of arguments. Encode through
+    // Known limit: the coder allocates 1000 bytes, and a transaction could carry about 1014 of arguments. Encode through
     // IdlCoder.fieldLayout in a bigger buffer if a program ever needs those last bytes.
     if (error instanceof RangeError) throw new Error(`${ix.name}: arguments exceed the 1000 bytes the Anchor coder allocates`);
     throw error;
