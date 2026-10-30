@@ -106,6 +106,12 @@ const TOKEN_PROGRAM = /^(?!associated).*token.*program/;
 const FILLER = new Set(['user', 'owner', 'payer', 'signer', 'funder', 'authority', 'wallet', 'token', 'tokens', 'account', 'ata', 'ta', 'mint', 'source', 'destination', 'in', 'out', 'reserve', 'program']);
 const nameWords = (name: string) => name.split('_').filter(word => !FILLER.has(word));
 
+// By full path or by plain name. hasOwn, because an IDL can name an account anything, `constructor` included.
+const entryFor = <T>(record: Record<string, T> | undefined, { path, account }: FlatAccount): T | undefined => {
+  if (!record) return undefined;
+  return Object.hasOwn(record, path) ? record[path] : Object.hasOwn(record, account.name) ? record[account.name] : undefined;
+};
+
 function sibling(accounts: FlatAccount[], pattern: RegExp, words: string[]): FlatAccount | undefined {
   const fits = accounts.filter(({ account: { name } }) => {
     if (!pattern.test(name)) return false;
@@ -170,15 +176,16 @@ export function resolveAccounts(idl: Idl, ixName: string, args: Record<string, u
     return derive(keyHex(ASSOCIATED_TOKEN_PROGRAM_ID.toBase58()), [keyHex(intermediary), tokenProgram, mint]);
   };
 
-  const find = ({ path, scope, account }: FlatAccount): Found => {
-    const hint = path in hints ? hints[path] : hints[account.name];
+  const find = (flat: FlatAccount): Found => {
+    const { path, scope, account } = flat;
+    const hint = entryFor(hints, flat);
     if (account.optional && hint === null) return { pubkey: null, source: 'recipe' };
     if (account.signer) return { pubkey: intermediary, source: 'auto' };
     if (account.address) return { pubkey: checkedKey(account.address, path), source: 'auto' };
     const derived = (account.pda ? pda(account.pda, scope) : null) ?? ownTokenAccount(account);
     if (derived) return { pubkey: derived.address, source: 'auto', derived };
     if (hint) return { pubkey: checkedKey(hint, path), source: 'recipe' };
-    const input = ctx.inputs?.[path] ?? ctx.inputs?.[account.name];
+    const input = entryFor(ctx.inputs, flat);
     return { pubkey: input ? checkedKey(input, path) : null, source: 'input' };
   };
 

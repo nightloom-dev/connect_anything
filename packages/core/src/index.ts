@@ -13,3 +13,4 @@ export {
   type ParseOptions,
 } from './idl.ts';
 export { resolveAccounts, type AccountHints, type AccountSource, type Derived, type ResolveContext, type ResolvedAccount } from './accounts.ts';
+export { toSimRequest, type SimRequest, type SimResult } from './sim.ts';

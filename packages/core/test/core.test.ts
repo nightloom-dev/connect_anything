@@ -17,6 +17,7 @@ import {
   loadIdl,
   parseIdl,
   resolveAccounts,
+  toSimRequest,
   type AccountHints,
   type FieldType,
   type Idl,
@@ -644,4 +645,47 @@ test('the resolver keeps the priority order, in any account order and inside gro
 
   assert.throws(() => resolveAccounts(idl, 'order', {}, { intermediary: '{INTERMEDIARY}' }), /ctx\.intermediary: not a public key/);
   assert.throws(() => resolveAccounts(idl, 'order', {}, { intermediary: ANY_KEY }, { plain_hinted: 'nope' }), /plain_hinted: not a public key/);
+});
+
+const USDC = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+
+// The whole Kamino sequence for any intermediary: what is specific to the position comes from the real transaction.
+function kaminoSteps(intermediary: string) {
+  const [reserveA, reserveB, obligation, repay] = recordedInstructions('klend-repay-plain').filter(ix => ix.programId === KLEND);
+  const refreshReserve = (real: typeof reserveA) => {
+    const hints = hintsFrom(KLEND_MODERN, 'refresh_reserve', real, ['reserve', 'lending_market', 'scope_prices']);
+    return { idl: KLEND_MODERN, ixName: 'refresh_reserve', args: {}, accounts: resolveAccounts(KLEND_MODERN, 'refresh_reserve', {}, { intermediary }, hints) };
+  };
+  const refreshHints = hintsFrom(KLEND_MODERN, 'refresh_obligation', obligation, ['lending_market', 'obligation']);
+  const refreshAccounts = resolveAccounts(KLEND_MODERN, 'refresh_obligation', {}, { intermediary }, refreshHints);
+  const { hints } = repayCase('klend-repay-plain');
+  const repayAccounts = (amount: string) =>
+    resolveAccounts(KLEND_REPAY, REPAY, { liquidity_amount: amount }, { intermediary, inputs: { obligation: repay.accounts[1].pubkey } }, { ...hints, reserve_farm_state: null });
+  return {
+    refreshes: [
+      refreshReserve(reserveA),
+      refreshReserve(reserveB),
+      { idl: KLEND_MODERN, ixName: 'refresh_obligation', args: {}, accounts: [...refreshAccounts, ...obligation.accounts.slice(refreshAccounts.length)] },
+    ],
+    repay: (amount: string) => ({ idl: KLEND_REPAY, ixName: REPAY, args: { liquidity_amount: amount }, accounts: repayAccounts(amount) }),
+  };
+}
+
+test('toSimRequest follows the /simulate contract with any key as the intermediary', () => {
+  const { refreshes, repay } = kaminoSteps(ANY_KEY);
+  const built = [...refreshes, repay('1000000')].map(s => buildInstruction(s.idl, s.ixName, s.args, s.accounts));
+  const fund = { mint: USDC, amount: '1000000' };
+  const request = toSimRequest(built, { intermediary: ANY_KEY, fund, lookupTables: [KLEND], idls: { [KLEND]: KLEND_MODERN } });
+
+  assert.deepEqual(Object.keys(request).sort(), ['fund', 'idls', 'instructions', 'intermediary', 'lookupTables']);
+  assert.deepEqual(request.fund, fund);
+  assert.equal(request.instructions.length, 4);
+  const last = request.instructions[3];
+  assert.deepEqual(Object.keys(last).sort(), ['accounts', 'data', 'programId']);
+  assert.equal(last.programId, KLEND);
+  assert.equal(Buffer.from(last.data, 'base64').toString('hex'), '74aed54cb435d29040420f0000000000');
+  assert.deepEqual(last.accounts[0], { pubkey: ANY_KEY, isSigner: true, isWritable: false });
+  assert.ok(!JSON.stringify(request).includes('{INTERMEDIARY}'));
+  // Optional fields disappear on the wire when they are not given.
+  assert.deepEqual(Object.keys(JSON.parse(JSON.stringify(toSimRequest(built, { intermediary: ANY_KEY, fund })))).sort(), ['fund', 'instructions', 'intermediary']);
 });
