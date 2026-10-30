@@ -3,6 +3,7 @@ export {
   LegacyIdlError,
   argFields,
   buildInstruction,
+  flatten,
   listInstructions,
   loadIdl,
   parseIdl,

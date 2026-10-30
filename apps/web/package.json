@@ -9,7 +9,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "node --test 'server/**/*.test.ts'"
+    "test": "node --test '{server,src}/**/*.test.ts'"
   },
   "dependencies": {
     "@aurora-is-near/intents-connect": "7.28.0",
