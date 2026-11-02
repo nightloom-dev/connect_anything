@@ -32,3 +32,5 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 [dev-dependencies]
 # to read the zlib-compressed on-chain IDL account in packages/core/test/fixtures
 miniz_oxide = "0.8"
+# to call the router in tests, the version axum already uses
+tower = { version = "0.5", features = ["util"] }

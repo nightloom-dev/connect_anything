@@ -73,6 +73,7 @@ pub struct SimError {
     /// Index into the request's `instructions`. Absent when the failure is not in one of them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub instruction_index: Option<usize>,
+    /// The program that failed, whose error `code` and `name` are: the step's own, or one the step called.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub program_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -141,7 +141,7 @@ fn instruction_error(index: usize, error: &InstructionError, logs: &[String], cx
     if origin == SYSTEM && code == Some(1) {
         message.push_str(". If the intermediary pays for a new account here, it has no SOL: Connect delivers only the token");
     }
-    SimError { instruction_index: Some(step), program_id: Some(instruction.program_id.to_string()), code, name, message }
+    SimError { instruction_index: Some(step), program_id: Some(origin.to_string()), code, name, message }
 }
 
 /// The code, the name if anything names it, and a text of both.
@@ -365,6 +365,8 @@ mod tests {
         ]);
         let error = explain(&TransactionError::InstructionError(3, InstructionError::Custom(1)), &lines, &context(&steps, &idls));
         assert_eq!(error.name.as_deref(), Some("InsufficientFunds"));
+        // the program whose error code 1 is: the Token program, which the step called, and not the step's own klend
+        assert_eq!(error.program_id.as_deref(), Some("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"));
         assert_eq!(error.message, "Step 1 of 1 failed in the Token program: InsufficientFunds: Insufficient funds");
     }
 

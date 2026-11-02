@@ -22,7 +22,7 @@ Solana's 4.3 line included.
 On Debian or Ubuntu:
 
 ```bash
-sudo apt-get install -y build-essential perl git curl
+sudo apt-get install -y build-essential perl git curl jq
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 . "$HOME/.cargo/env"
 git clone https://github.com/nightloom-dev/connect_anything.git
@@ -32,9 +32,10 @@ set -a; . crates/sim/.env; set +a
 cargo run --release -p sim                      # the first build takes a few minutes
 ```
 
-In another terminal:
+In another terminal, from the same folder:
 
 ```bash
+set -a; . crates/sim/.env; set +a              # for SIM_TOKEN, without which /simulate answers 401
 curl -s localhost:8790/health                   # {"ok":true}
 curl -sS localhost:8790/simulate -H 'content-type: application/json' -H "x-sim-token: $SIM_TOKEN" \
   --data-binary @fixtures/klend-repay.sim.json | jq '{verdict, computeUnits, txBytes, warnings, error}'
@@ -58,7 +59,7 @@ The ТЗ also names `SURFPOOL_URL`. It is not used: see below.
 
 The simulator is one binary with no state, and it needs outbound HTTPS to the RPC. Each simulation is a fork in
 memory. The process sits at about 200 MB, and it runs as many forks at once as the machine has cores, two at least.
-The others wait their turn. Building takes 4 GB of RAM (or swap) and about 6 GB of disk, and running it takes far
+The limits below keep a busy or hostile caller from taking more than that. Building takes 4 GB of RAM (or swap) and about 6 GB of disk, and running it takes far
 less. A server that is too small to build can load an image built elsewhere:
 `docker save connect-anything-sim | ssh vps docker load`.
 
@@ -110,9 +111,11 @@ The unit runs it as a throwaway user, with the file system read-only, and restar
 ## What a simulation does
 
 1. **Checks the request.** A malformed one gets a 400 with `{message}`, which the web shows as is.
-2. **Refuses what Connect refuses** with a `fail` verdict: a ComputeBudget step, a durable nonce step, or a signer
-   other than the intermediary.
-3. **Reads mainnet at one slot**, with a single `getMultipleAccounts` call for up to 100 accounts. It reads every
+2. **Refuses what Connect refuses** with a `fail` verdict: a ComputeBudget step, a durable nonce step, a step without
+   accounts, or a signer other than the intermediary. Steps with more than 128 accounts between them get the same,
+   since no transaction can lock them.
+3. **Reads mainnet at one slot**, with `getMultipleAccounts`, 100 accounts per call. A recipe's accounts fit in one
+   call, so they come from one slot. It reads every
    account of the steps, the mint, the intermediary's token accounts and the lookup tables, together with the sysvars
    Clock, Rent, EpochSchedule, SlotHashes, EpochRewards and LastRestartSlot. It also reads the binary of each
    upgradeable program, which is kept until the program is redeployed. Mainnet's feature gates are read once an hour.
@@ -130,7 +133,37 @@ The unit runs it as a throwaway user, with the file system read-only, and restar
    intermediary.
 6. **Answers.** `computeUnits` and `txBytes` cover that whole transaction. Anything over 200,000 CU or 1232 bytes adds
    a warning, and the warning on bytes says whether the steps alone would fit. The verdict is `fail` when there is an
-   error, `warn` when there are warnings only, and `ok` otherwise. An unreadable mainnet is a 503.
+   error, `warn` when there are warnings only, and `ok` otherwise.
+
+A step whose program does not exist on mainnet, is not a program, or is closed fails before the fork, named by its
+index. When there is no verdict, the answer is a `{message}` with one of these statuses:
+
+| Status | When |
+| ------ | ---- |
+| 400 | The request is malformed, or larger than the limits below allow |
+| 401 | `SIM_TOKEN` is set and `x-sim-token` is missing or wrong |
+| 413 | The body is over 4 MB, answered in plain text. The web refuses such a body itself |
+| 422 | The transaction reaches more upgradeable programs than one fork loads |
+| 503 | Mainnet could not be read, or not within 50 s, or the simulator is busy. Worth another try |
+| 500 | The simulator itself failed |
+
+### Limits
+
+Each one caps what a single request can cost, well above what a recipe needs.
+
+| What | Limit | Past it |
+| ---- | ----- | ------- |
+| Request body | 4 MB, as the web's own | 413 |
+| Steps | 50 | 400 |
+| Accounts in a step | 255, the runtime's limit | 400 |
+| Data of a step | 1232 bytes, a whole transaction | 400 |
+| Lookup tables | 16 | 400 |
+| Accounts across the steps | 128, what a transaction can lock | `fail` |
+| Upgradeable programs in the transaction, the token programs included | 16, each a binary of up to 10 MB to read and load | 422 |
+| Time for a simulation | 50 s, before the web gives up at 60 s | 503 |
+| Simulations at once | one per core, two at least | wait |
+| Waiting for a turn | 4 per running slot, each for at most 20 s | 503, busy |
+| Program binaries kept | 256 MB, the least recently used dropped first | read again |
 
 An error is placed and named as precisely as the request allows, for example
 `Step 4 of 4 (repay_obligation_liquidity_v2) failed: ConstraintHasOne: A has one constraint was violated (account obligation)`.
@@ -175,6 +208,11 @@ The offline tests check the following:
 - errors are named;
 - bytes are counted as on the wire;
 - a lookup table is used only if it is a live one: a wallet, a deactivated table or a missing account is refused;
-- malformed requests are refused.
+- malformed requests are refused, and so are requests that no transaction can hold;
+- what Connect refuses is a `fail`, a step without accounts included;
+- a step runs on a fork made without mainnet, from the programs LiteSVM carries, with every instruction Connect adds;
+- an account of the intermediary that holds only SOL is opened all the same, before the steps or in the transaction;
+- a step whose program is missing, not a program, or closed is named by its index;
+- both routes want `x-sim-token`, and a full queue answers busy at once.
 
 One fixture passes a lookup table, so the fork test also runs a v0 message.

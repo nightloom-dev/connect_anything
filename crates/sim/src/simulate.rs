@@ -21,8 +21,10 @@ use solana_message::{legacy, v0, AccountMeta, AddressLookupTableAccount, Hash, I
 use solana_signature::Signature;
 use solana_transaction::versioned::VersionedTransaction;
 
+use tokio::sync::OwnedSemaphorePermit;
+
 use crate::errors::{self, ATA_PROGRAM, SYSTEM, TOKEN, TOKEN_2022};
-use crate::fork::{self, Cache, Snapshot};
+use crate::fork::{self, Cache, Snapshot, Unread};
 use crate::rpc::Rpc;
 use crate::types::{SimError, SimRequest, SimResult, Verdict};
 
@@ -30,6 +32,11 @@ pub const CU_LIMIT: u64 = 200_000;
 pub const TX_LIMIT: usize = 1232;
 const MAX_STEPS: usize = 50;
 const MAX_LOOKUP_TABLES: usize = 16;
+/// The runtime's limit, MAX_ACCOUNTS_PER_INSTRUCTION.
+const MAX_STEP_ACCOUNTS: usize = 255;
+/// The most accounts a transaction can lock on mainnet, MAX_TX_ACCOUNT_LOCKS. A recipe with more cannot run, and
+/// refusing it before reading mainnet keeps what one request can cost bounded.
+const MAX_ACCOUNTS: usize = 128;
 /// The run itself may take everything a transaction can, so that a recipe over Connect's budget still shows its cost.
 const MEASURE_CU_LIMIT: u32 = 1_400_000;
 /// The relayer's fee in atomic units of the delivered token. Its size does not change the cost, one unit is enough.
@@ -67,7 +74,13 @@ pub fn parse(request: &SimRequest) -> Result<Parsed, String> {
     let mut steps = Vec::with_capacity(request.instructions.len());
     for (i, ix) in request.instructions.iter().enumerate() {
         let program_id = key(&format!("instructions[{i}].programId"), &ix.program_id)?;
+        if ix.accounts.len() > MAX_STEP_ACCOUNTS {
+            return Err(format!("instructions[{i}].accounts has {} accounts, and an instruction takes at most {MAX_STEP_ACCOUNTS}", ix.accounts.len()));
+        }
         let data = base64::engine::general_purpose::STANDARD.decode(&ix.data).map_err(|_| format!("instructions[{i}].data is not base64"))?;
+        if data.len() > TX_LIMIT {
+            return Err(format!("instructions[{i}].data is {} bytes, more than a whole transaction holds ({TX_LIMIT})", data.len()));
+        }
         let mut accounts = Vec::with_capacity(ix.accounts.len());
         for (j, meta) in ix.accounts.iter().enumerate() {
             let pubkey = key(&format!("instructions[{i}].accounts[{j}].pubkey"), &meta.pubkey)?;
@@ -83,10 +96,11 @@ pub fn parse(request: &SimRequest) -> Result<Parsed, String> {
     Ok(Parsed { intermediary, mint, amount, steps, lookup_tables })
 }
 
-/// What Connect refuses before signing, by the rules in its docs.
+/// What Connect refuses before signing, by the rules in its docs, and what no transaction can hold. Decided before
+/// mainnet is read.
 fn refused(parsed: &Parsed) -> Option<SimError> {
     let n = parsed.steps.len();
-    parsed.steps.iter().enumerate().find_map(|(i, step)| {
+    let step_problem = parsed.steps.iter().enumerate().find_map(|(i, step)| {
         let refuse =
             |message: String| Some(SimError { instruction_index: Some(i), program_id: Some(step.program_id.to_string()), message, ..Default::default() });
         if step.program_id == COMPUTE_BUDGET {
@@ -98,13 +112,31 @@ fn refused(parsed: &Parsed) -> Option<SimError> {
         if step.program_id == SYSTEM && step.data.starts_with(&[4, 0, 0, 0]) {
             return refuse(format!("Step {} of {n} advances a durable nonce: Connect adds its own and refuses a recipe that has one", i + 1));
         }
+        if step.accounts.is_empty() {
+            return refuse(format!("Step {} of {n} has no accounts: Connect refuses a step without one", i + 1));
+        }
         let other = step.accounts.iter().find(|meta| meta.is_signer && meta.pubkey != parsed.intermediary)?;
         refuse(format!("Step {} of {n} needs {} to sign, but Connect signs only as the intermediary", i + 1, other.pubkey))
+    });
+    if step_problem.is_some() {
+        return step_problem;
+    }
+    let accounts: HashSet<&Address> =
+        parsed.steps.iter().flat_map(|step| std::iter::once(&step.program_id).chain(step.accounts.iter().map(|meta| &meta.pubkey))).collect();
+    (accounts.len() > MAX_ACCOUNTS).then(|| SimError {
+        message: format!("The steps use {} accounts, and a transaction can lock at most {MAX_ACCOUNTS}", accounts.len()),
+        ..Default::default()
     })
 }
 
 pub fn ata(owner: &Address, mint: &Address, token_program: &Address) -> Address {
     Address::find_program_address(&[owner.as_ref(), token_program.as_ref(), mint.as_ref()], &ATA_PROGRAM).0
+}
+
+/// A token account of that program, as opposed to an address that only holds SOL: anyone can send SOL to the address of
+/// the intermediary's account before it is opened, and the ATA program opens it there all the same.
+fn is_token_account(account: &Account, token_program: &Address) -> bool {
+    account.owner == *token_program && account.data.len() >= 165
 }
 
 fn is_mint(account: &Account) -> bool {
@@ -121,7 +153,19 @@ fn stand_in(name: &str) -> Address {
     Address::new_from_array(Sha256::digest(format!("connect-anything/sim/{name}")).into())
 }
 
-pub async fn simulate(rpc: &Rpc, cache: &Cache, parsed: Parsed, idls: BTreeMap<String, Value>) -> Result<SimResult, String> {
+/// Why a simulation gives no verdict.
+#[derive(Debug)]
+pub enum Failure {
+    /// Mainnet could not be read: 503, worth another try.
+    Mainnet(String),
+    /// A recipe larger than the simulator checks: 422.
+    Unsupported(String),
+    /// The simulator itself failed: 500.
+    Internal(String),
+}
+
+/// `slot` is held until the run ends, also when the caller stops waiting for it, so no more forks run than slots.
+pub async fn simulate(rpc: &Rpc, cache: &Cache, parsed: Parsed, idls: BTreeMap<String, Value>, slot: OwnedSemaphorePermit) -> Result<SimResult, Failure> {
     if let Some(error) = refused(&parsed) {
         return Ok(SimResult { error: Some(error), ..SimResult::failed("") });
     }
@@ -134,8 +178,22 @@ pub async fn simulate(rpc: &Rpc, cache: &Cache, parsed: Parsed, idls: BTreeMap<S
         keys.extend(step.accounts.iter().map(|meta| meta.pubkey));
     }
     keys.extend(&parsed.lookup_tables);
-    let snapshot = fork::snapshot(rpc, cache, &keys).await?;
-    tokio::task::spawn_blocking(move || run(&parsed, &snapshot, &idls)).await.map_err(|error| format!("the simulation stopped unexpectedly: {error}"))
+    let snapshot = match fork::snapshot(rpc, cache, &keys).await {
+        Ok(snapshot) => snapshot,
+        Err(Unread::Rpc(error)) => return Err(Failure::Mainnet(error)),
+        Err(Unread::Programs(n)) => {
+            return Err(Failure::Unsupported(format!(
+                "The transaction reaches {n} upgradeable programs, the token programs Connect uses included, and the simulator loads at most {}",
+                fork::MAX_PROGRAMS
+            )))
+        }
+    };
+    tokio::task::spawn_blocking(move || {
+        let _slot = slot;
+        run(&parsed, &snapshot, &idls)
+    })
+    .await
+    .map_err(|error| Failure::Internal(format!("The simulation failed inside the simulator: {error}")))
 }
 
 fn run(parsed: &Parsed, snapshot: &Snapshot, idls: &BTreeMap<String, Value>) -> SimResult {
@@ -143,6 +201,19 @@ fn run(parsed: &Parsed, snapshot: &Snapshot, idls: &BTreeMap<String, Value>) -> 
     let Some(mint_account) = snapshot.accounts.get(&mint).filter(|account| is_mint(account)) else {
         return SimResult::failed(format!("fund.mint {mint} is not a token mint on mainnet"));
     };
+    let n = parsed.steps.len();
+    for (i, step) in parsed.steps.iter().enumerate() {
+        let program = &step.program_id;
+        let problem = match snapshot.accounts.get(program) {
+            None => "does not exist on mainnet",
+            Some(account) if !account.executable => "is not a program",
+            Some(account) if fork::programdata_address(account).is_some_and(|data| !snapshot.accounts.contains_key(&data)) => "is a closed program",
+            Some(_) => continue,
+        };
+        let message = format!("Step {} of {n} calls {program}, which {problem}", i + 1);
+        let error = SimError { instruction_index: Some(i), program_id: Some(program.to_string()), message, ..Default::default() };
+        return SimResult { error: Some(error), ..SimResult::failed("") };
+    }
     let token_program = mint_account.owner;
     let decimals = mint_account.data[44];
     let Some(delivered) = parsed.amount.checked_add(RELAYER_FEE) else {
@@ -255,12 +326,12 @@ fn assemble(
     let mut opened = HashSet::new();
     for step in &parsed.steps {
         for meta in &step.accounts {
-            let Some(account) = snapshot.accounts.get(&meta.pubkey).filter(|account| is_mint(account)) else { continue };
-            let account_of = ata(&parsed.intermediary, &meta.pubkey, &account.owner);
+            let Some(mint) = snapshot.accounts.get(&meta.pubkey).filter(|account| is_mint(account)) else { continue };
+            let account_of = ata(&parsed.intermediary, &meta.pubkey, &mint.owner);
             let written = step.accounts.iter().any(|other| other.pubkey == account_of && other.is_writable);
-            let exists = svm.get_account(&account_of).is_some_and(|account| account.lamports > 0);
+            let exists = svm.get_account(&account_of).is_some_and(|account| is_token_account(&account, &mint.owner));
             if written && !exists && opened.insert(account_of) {
-                instructions.push(create_account_of(fee_payer, &account_of, &parsed.intermediary, &meta.pubkey, &account.owner));
+                instructions.push(create_account_of(fee_payer, &account_of, &parsed.intermediary, &meta.pubkey, &mint.owner));
                 before.push("opening of an account of the intermediary");
             }
         }
@@ -308,7 +379,7 @@ fn create_account_of(payer: &Address, account: &Address, owner: &Address, mint: 
 /// Opens the associated token account the way the ATA program does, so a Token-2022 mint gets the extensions it needs.
 fn open_account(svm: &mut LiteSVM, payer: &Address, owner: &Address, mint: &Address, token_program: &Address) -> Result<Address, String> {
     let address = ata(owner, mint, token_program);
-    if svm.get_account(&address).is_some_and(|account| account.lamports > 0) {
+    if svm.get_account(&address).is_some_and(|account| is_token_account(&account, token_program)) {
         return Ok(address);
     }
     let instruction = create_account_of(payer, &address, owner, mint, token_program);
@@ -322,7 +393,8 @@ fn open_account(svm: &mut LiteSVM, payer: &Address, owner: &Address, mint: &Addr
 /// Adds to a token account's balance, the u64 at byte 64 in both token programs.
 fn credit(svm: &mut LiteSVM, address: &Address, mint: &Address, amount: u64) -> Result<(), String> {
     let mut account = svm.get_account(address).ok_or("the account was not opened")?;
-    let balance = u64::from_le_bytes(account.data[64..72].try_into().unwrap());
+    let balance = account.data.get(64..72).ok_or("it is not a token account")?;
+    let balance = u64::from_le_bytes(balance.try_into().unwrap());
     let balance = balance.checked_add(amount).ok_or("the balance would overflow")?;
     account.data[64..72].copy_from_slice(&balance.to_le_bytes());
     if mint == &NATIVE_MINT {
@@ -391,10 +463,12 @@ mod tests {
     use crate::types::{Fund, SimAccountMeta, SimInstruction};
 
     const USDC: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+    const INTERMEDIARY: &str = "3giHp8wAqP8khAKkhLDJqGWJvUpmwTPp8zwgh12WpVz7";
+    const MEMO: &str = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
 
     fn request(instructions: Vec<SimInstruction>) -> SimRequest {
         SimRequest {
-            intermediary: "3giHp8wAqP8khAKkhLDJqGWJvUpmwTPp8zwgh12WpVz7".into(),
+            intermediary: INTERMEDIARY.into(),
             fund: Fund { mint: USDC.into(), amount: "1000000".into() },
             instructions,
             lookup_tables: None,
@@ -444,8 +518,108 @@ mod tests {
         let error = refused(&signer).unwrap();
         assert_eq!(error.instruction_index, Some(0));
         assert!(error.message.contains("Connect signs only as the intermediary"));
-        let fine = parse(&request(vec![step(USDC, &[("3giHp8wAqP8khAKkhLDJqGWJvUpmwTPp8zwgh12WpVz7", true, false)], "")])).unwrap();
+        let fine = parse(&request(vec![step(USDC, &[(INTERMEDIARY, true, false)], "")])).unwrap();
         assert!(refused(&fine).is_none());
+        let empty = parse(&request(vec![step(MEMO, &[(INTERMEDIARY, true, false)], ""), step(MEMO, &[], "aGk=")])).unwrap();
+        let error = refused(&empty).unwrap();
+        assert_eq!((error.instruction_index, error.message.as_str()), (Some(1), "Step 2 of 2 has no accounts: Connect refuses a step without one"));
+    }
+
+    /// Distinct keys, none of them the intermediary.
+    fn keys(n: u32) -> Vec<String> {
+        (0..n).map(|i| Address::new_from_array([&i.to_le_bytes()[..], &[7; 28]].concat().try_into().unwrap()).to_string()).collect()
+    }
+
+    #[test]
+    fn refuses_what_no_transaction_holds() {
+        let keys = keys(256);
+        let metas: Vec<(&str, bool, bool)> = keys.iter().map(|key| (key.as_str(), false, false)).collect();
+        let wide = request(vec![step(MEMO, &metas, "")]);
+        assert_eq!(parse(&wide).err().unwrap(), "instructions[0].accounts has 256 accounts, and an instruction takes at most 255");
+        let data = base64::engine::general_purpose::STANDARD.encode([0u8; 1233]);
+        let long = request(vec![step(MEMO, &[(INTERMEDIARY, true, false)], &data)]);
+        assert_eq!(parse(&long).err().unwrap(), "instructions[0].data is 1233 bytes, more than a whole transaction holds (1232)");
+
+        // an instruction may take 200 accounts, a transaction cannot lock them; refused before mainnet is read
+        let many = parse(&request(vec![step(MEMO, &metas[..200], "")])).unwrap();
+        let error = refused(&many).unwrap();
+        assert_eq!((error.instruction_index, error.message.as_str()), (None, "The steps use 201 accounts, and a transaction can lock at most 128"));
+        let most = parse(&request(vec![step(MEMO, &metas[..127], "")])).unwrap();
+        assert!(refused(&most).is_none(), "127 accounts and the program are 128");
+    }
+
+    fn mint_account(decimals: u8) -> Account {
+        let mut data = vec![0u8; 82];
+        data[44] = decimals;
+        data[45] = 1; // initialized
+        Account { lamports: 1_461_600, data, owner: TOKEN, executable: false, rent_epoch: 0 }
+    }
+
+    /// Runs the steps on a fork made without mainnet: the programs LiteSVM carries, a mint of 6 decimals in USDC's place,
+    /// and the accounts the case adds.
+    fn run_offline(steps: Vec<SimInstruction>, extra: Vec<(Address, Account)>) -> SimResult {
+        let features = LiteSVM::mainnet_feature_set();
+        let programs = LiteSVM::default().with_feature_set(features.clone()).with_builtins().with_sysvars().with_default_programs();
+        let mut accounts = std::collections::HashMap::new();
+        for program in [TOKEN, ATA_PROGRAM, MEMO.parse().unwrap()] {
+            let account = programs.get_account(&program).expect("one of LiteSVM's programs");
+            if let Some(data) = fork::programdata_address(&account) {
+                accounts.insert(data, programs.get_account(&data).expect("its programdata"));
+            }
+            accounts.insert(program, account);
+        }
+        accounts.insert(USDC.parse().unwrap(), mint_account(6));
+        accounts.extend(extra);
+        let parsed = parse(&request(steps)).unwrap();
+        assert!(refused(&parsed).is_none());
+        run(&parsed, &Snapshot { slot: 1, features, accounts }, &BTreeMap::new())
+    }
+
+    #[test]
+    fn runs_a_step_without_mainnet() {
+        let result = run_offline(vec![step(MEMO, &[(INTERMEDIARY, true, false)], "aGVsbG8=")], vec![]);
+        assert_eq!(result.verdict, Verdict::Ok, "{:?}\n{}", result.error, result.logs.join("\n"));
+        assert!(result.logs.iter().any(|line| line == "Program log: hello"), "{}", result.logs.join("\n"));
+        // the nonce, two compute budget instructions, the memo and the fee; two signatures
+        assert!(result.compute_units > 0 && result.tx_bytes > 300 && result.tx_bytes < TX_LIMIT, "{} bytes", result.tx_bytes);
+    }
+
+    #[test]
+    fn opens_accounts_that_only_hold_sol() {
+        // anyone can send SOL to the address of an account of the intermediary before it is opened: the ATA program
+        // opens it there all the same, the delivered token's before the steps and another token's that a step writes
+        let intermediary: Address = INTERMEDIARY.parse().unwrap();
+        let other = Address::new_from_array([42; 32]);
+        let delivered_at = ata(&intermediary, &USDC.parse().unwrap(), &TOKEN);
+        let other_at = ata(&intermediary, &other, &TOKEN).to_string();
+        let sol_only = Account { lamports: 890_880, data: vec![], owner: SYSTEM, executable: false, rent_epoch: 0 };
+        // TransferChecked of nothing from the other account to itself, which needs it opened
+        let nothing = base64::engine::general_purpose::STANDARD.encode([&[12u8][..], &0u64.to_le_bytes(), &[6]].concat());
+        let token = TOKEN.to_string();
+        let other_mint = other.to_string();
+        let steps =
+            vec![step(&token, &[(&other_at, false, true), (&other_mint, false, false), (&other_at, false, true), (INTERMEDIARY, true, false)], &nothing)];
+        let extra = vec![(delivered_at, sol_only.clone()), (other_at.parse().unwrap(), sol_only), (other, mint_account(6))];
+        let result = run_offline(steps, extra);
+        assert_eq!(result.verdict, Verdict::Ok, "{:?}\n{}", result.error, result.logs.join("\n"));
+    }
+
+    #[test]
+    fn names_a_step_whose_program_cannot_run() {
+        let missing = Address::new_from_array([9; 32]);
+        let closed = Address::new_from_array([10; 32]);
+        // an upgradeable program whose programdata is gone
+        let closed_account =
+            Account { lamports: 1_141_440, data: [&[2u8, 0, 0, 0][..], &[11; 32]].concat(), owner: fork::UPGRADEABLE_LOADER, executable: true, rent_epoch: 0 };
+        for (program, problem) in [(missing, "does not exist on mainnet"), (USDC.parse().unwrap(), "is not a program"), (closed, "is a closed program")] {
+            let program = program.to_string();
+            let steps = vec![step(MEMO, &[(INTERMEDIARY, true, false)], "aGk="), step(&program, &[(INTERMEDIARY, false, true)], "")];
+            let result = run_offline(steps, vec![(closed, closed_account.clone())]);
+            let error = result.error.unwrap_or_else(|| panic!("{program} ran"));
+            assert_eq!(result.verdict, Verdict::Fail);
+            assert_eq!((error.instruction_index, error.program_id.as_deref()), (Some(1), Some(program.as_str())));
+            assert_eq!(error.message, format!("Step 2 of 2 calls {program}, which {problem}"));
+        }
     }
 
     #[test]
@@ -516,8 +690,10 @@ mod tests {
     async fn fixtures_pass_on_a_fork() {
         let rpc = Rpc::new(std::env::var("SOLANA_RPC_URL").expect("SOLANA_RPC_URL"));
         let cache = Cache::default();
+        let slots = std::sync::Arc::new(tokio::sync::Semaphore::new(1));
         for (name, request, recorded) in fixtures() {
-            let result = simulate(&rpc, &cache, parse(&request).unwrap(), request.idls.clone().unwrap_or_default()).await.unwrap();
+            let slot = slots.clone().acquire_owned().await.unwrap();
+            let result = simulate(&rpc, &cache, parse(&request).unwrap(), request.idls.clone().unwrap_or_default(), slot).await.unwrap();
             let named = |result: &SimResult| result.error.as_ref().map(|error| (error.instruction_index, error.code, error.name.clone()));
             assert_eq!((result.verdict, named(&result)), (recorded.verdict, named(&recorded)), "{name}: {:?}", result.error);
             assert_eq!(result.tx_bytes, recorded.tx_bytes, "{name}");
