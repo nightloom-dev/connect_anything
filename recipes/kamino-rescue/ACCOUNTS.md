@@ -108,6 +108,19 @@ same slot is cheaper to refresh again.
 `refresh_reserves_batch` in place of the separate `refresh_reserve`s was measured too. It saves about 5k CU and 10
 bytes on two reserves and nothing on six, so it is not worth it.
 
+### Bytes are not the limit, compute units are
+
+Every position that fits in 200k CU is far under 1232 bytes, so a lookup table changes nothing that matters for a
+repay. If one is wanted anyway, `284iwGtA9X9aLy3KsyV8uT2pXLARhYbiSi5SiM2g47M2` was found in recent klend transactions on
+mainnet. It holds 256 addresses, 10 of the 14 accounts of `klend-repay` among them. Its owner is not known, so it is not
+known to be Kamino's, and it can be extended or closed at any time. Passed in `lookupTables`, it makes the message v0
+with the same compute units:
+
+| Fixture                     | Bytes without a table | Bytes with this one |
+| --------------------------- | --------------------: | ------------------: |
+| `klend-repay`               |                   934 | 722 (`klend-repay-lookup-table`) |
+| `klend-repay-six-reserves`  |                  1134 | 798                 |
+
 ### For `estimateCu`
 
 `estimateCu` is now `n × 24k + 32k + (debt farm ? 67k : 37k)`. That gives 213k for the six-reserve position, which

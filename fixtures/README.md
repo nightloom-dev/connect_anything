@@ -33,6 +33,11 @@ then broken by hand to show a failure. Accounts and measurements are in `recipes
 | `klend-repay-six-reserves`    | A position with six reserves: over Connect's 200k                  | warn    | 250,028 |  1134 |
 | `klend-repay-wrong-market`    | `klend-repay` with the JLP market in the repay: the demo failure   | fail    |  70,330 |   966 |
 | `klend-repay-no-refresh`      | The repay of `klend-repay` alone, without the refreshes            | fail    |  21,635 |   821 |
+| `klend-repay-lookup-table`    | `klend-repay` with a lookup table from mainnet: a v0 message       | ok      | 115,475 |   722 |
+
+The lookup table, `284iwGtA9X9aLy3KsyV8uT2pXLARhYbiSi5SiM2g47M2`, comes from recent klend transactions on mainnet,
+and its owner is not known. If it is closed, the fixture fails with `Lookup table … does not exist on mainnet`, and
+another table has to take its place. See `recipes/kamino-rescue/ACCOUNTS.md`.
 
 ## Three more programs
 
