@@ -38,6 +38,8 @@ const RELAYER_FEE: u64 = 1;
 const COMPUTE_BUDGET: Address = Address::from_str_const("ComputeBudget111111111111111111111111111111");
 const RECENT_BLOCKHASHES: Address = Address::from_str_const("SysvarRecentB1ockHashes11111111111111111111");
 const NATIVE_MINT: Address = Address::from_str_const("So11111111111111111111111111111111111111112");
+const LOOKUP_TABLE_PROGRAM: Address = Address::from_str_const("AddressLookupTab1e1111111111111111111111111");
+/// A u32 state (1 is a table), the deactivation slot, the last extension, the authority and padding.
 const LOOKUP_TABLE_META: usize = 56;
 
 /// A request that is well formed, in the types the run needs.
@@ -346,9 +348,12 @@ fn lookup_tables(parsed: &Parsed, snapshot: &Snapshot) -> Result<Vec<AddressLook
         .iter()
         .map(|key| {
             let account = snapshot.accounts.get(key).ok_or_else(|| format!("Lookup table {key} does not exist on mainnet"))?;
-            let addresses = account.data.get(LOOKUP_TABLE_META..).unwrap_or_default();
-            if !addresses.len().is_multiple_of(32) {
+            let (meta, addresses) = account.data.split_at_checked(LOOKUP_TABLE_META).unwrap_or_default();
+            if account.owner != LOOKUP_TABLE_PROGRAM || meta.get(..4) != Some(&1u32.to_le_bytes()) || !addresses.len().is_multiple_of(32) {
                 return Err(format!("Account {key} is not a lookup table"));
+            }
+            if meta[4..12] != u64::MAX.to_le_bytes() {
+                return Err(format!("Lookup table {key} is deactivated: it stops resolving within minutes, before Connect would run the transaction"));
             }
             let addresses = addresses.chunks(32).map(|chunk| Address::new_from_array(chunk.try_into().unwrap())).collect();
             Ok(AddressLookupTableAccount { key: *key, addresses })
@@ -441,6 +446,37 @@ mod tests {
         assert!(error.message.contains("Connect signs only as the intermediary"));
         let fine = parse(&request(vec![step(USDC, &[("3giHp8wAqP8khAKkhLDJqGWJvUpmwTPp8zwgh12WpVz7", true, false)], "")])).unwrap();
         assert!(refused(&fine).is_none());
+    }
+
+    #[test]
+    fn reads_only_live_lookup_tables() {
+        let table = |owner: Address, state: u32, deactivation: u64| {
+            let mut data = [state.to_le_bytes().as_slice(), &deactivation.to_le_bytes()].concat();
+            data.resize(LOOKUP_TABLE_META, 0);
+            data.extend([[7u8; 32], [8u8; 32], [9u8; 32]].concat());
+            Account { lamports: 1, data, owner, executable: false, rent_epoch: 0 }
+        };
+        let [live, wallet, deactivated, uninitialized, token, missing] = [1u8, 2, 3, 4, 5, 6].map(|i| Address::new_from_array([i; 32]));
+        let accounts = std::collections::HashMap::from([
+            (live, table(LOOKUP_TABLE_PROGRAM, 1, u64::MAX)),
+            // like 11111111111111111111111111111112 on mainnet: a wallet holding SOL, which once passed as an empty table
+            (wallet, Account { lamports: 26_882_257_897, data: vec![], owner: SYSTEM, executable: false, rent_epoch: 0 }),
+            (deactivated, table(LOOKUP_TABLE_PROGRAM, 1, 464_000_000)),
+            (uninitialized, table(LOOKUP_TABLE_PROGRAM, 0, u64::MAX)),
+            (token, table(TOKEN, 1, u64::MAX)),
+        ]);
+        let snapshot = Snapshot { slot: 464_460_000, features: agave_feature_set::FeatureSet::default(), accounts };
+        let read = |key: Address| {
+            let mut parsed = parse(&request(vec![step(USDC, &[], "")])).unwrap();
+            parsed.lookup_tables = vec![key];
+            lookup_tables(&parsed, &snapshot)
+        };
+        assert_eq!(read(live).unwrap()[0].addresses, [7u8, 8, 9].map(|i| Address::new_from_array([i; 32])));
+        for key in [wallet, uninitialized, token] {
+            assert_eq!(read(key).unwrap_err(), format!("Account {key} is not a lookup table"));
+        }
+        assert!(read(deactivated).unwrap_err().contains("is deactivated"));
+        assert_eq!(read(missing).unwrap_err(), format!("Lookup table {missing} does not exist on mainnet"));
     }
 
     /// Every fixtures/<name>.sim.json with the answer recorded for it in <name>.result.json.

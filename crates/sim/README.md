@@ -13,11 +13,18 @@ truth for it. No transaction is ever sent: the only RPC method called is `getMul
 
 ## Run it from zero
 
-You need git, a Rust toolchain from [rustup](https://rustup.rs), and an RPC URL for mainnet. The public endpoint
-works but rate-limits, so a Helius URL is better. `rust-toolchain.toml` makes rustup fetch Rust 1.98.1 on the first
-build. That is the version litesvm 0.18.1 needs. `Cargo.lock` pins every crate, Solana's 4.3 line included.
+You need git, a C toolchain with make and perl, Rust from [rustup](https://rustup.rs), and an RPC URL for mainnet.
+The public endpoint works but rate-limits, so a Helius URL is better. The C toolchain links the binary, and it builds
+OpenSSL from source for litesvm's secp256r1 precompile, which takes make and perl. `rust-toolchain.toml` makes rustup
+fetch Rust 1.98.1 on the first build. That is the version litesvm 0.18.1 needs. `Cargo.lock` pins every crate,
+Solana's 4.3 line included.
+
+On Debian or Ubuntu:
 
 ```bash
+sudo apt-get install -y build-essential perl git curl
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+. "$HOME/.cargo/env"
 git clone https://github.com/nightloom-dev/connect_anything.git
 cd connect_anything
 cp crates/sim/.env.example crates/sim/.env      # fill in SOLANA_RPC_URL and SIM_TOKEN
@@ -85,6 +92,8 @@ sim.example.com {
 The web then uses `SIM_URL=https://sim.example.com`.
 
 ### systemd, without Docker
+
+The build needs the packages and the Rust from "Run it from zero".
 
 ```bash
 cargo build --release --locked -p sim
@@ -165,4 +174,7 @@ The offline tests check the following:
 - the on-chain klend IDL converts into `recipes/kamino-rescue/klend.idl.json`;
 - errors are named;
 - bytes are counted as on the wire;
+- a lookup table is used only if it is a live one: a wallet, a deactivated table or a missing account is refused;
 - malformed requests are refused.
+
+One fixture passes a lookup table, so the fork test also runs a v0 message.
