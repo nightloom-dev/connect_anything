@@ -118,12 +118,18 @@ async fn main() {
     let address: SocketAddr = format!("{host}:{port}").parse().expect("SIM_HOST and SIM_PORT make an address");
     let listener = tokio::net::TcpListener::bind(address).await.unwrap_or_else(|error| panic!("cannot listen on {address}: {error}"));
     tracing::info!("simulator listening on http://{address}");
-    axum::serve(listener, router)
-        .with_graceful_shutdown(async {
-            let _ = tokio::signal::ctrl_c().await;
-        })
-        .await
-        .expect("the server");
+    axum::serve(listener, router).with_graceful_shutdown(stopped()).await.expect("the server");
+}
+
+/// Docker and systemd stop a service with SIGTERM, a terminal with SIGINT. As PID 1 in a container, a signal without a
+/// handler is ignored, and `docker stop` would wait ten seconds and kill it.
+async fn stopped() {
+    let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).expect("a SIGTERM handler");
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {}
+        _ = terminate.recv() => {}
+    }
+    tracing::info!("stopping: answering what is running, taking nothing new");
 }
 
 #[cfg(test)]

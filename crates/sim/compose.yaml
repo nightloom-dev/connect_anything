@@ -1,0 +1,29 @@
+# The simulator on a server, next to the web:
+#   cp crates/sim/.env.example crates/sim/.env   # then fill it in
+#   docker compose -f crates/sim/compose.yaml up -d --build
+# See crates/sim/README.md.
+name: connect-anything-sim
+services:
+  sim:
+    build:
+      context: ../..
+      dockerfile: crates/sim/Dockerfile
+    image: connect-anything-sim
+    env_file: .env
+    environment:
+      # where it listens inside the container; the published port below decides who reaches it
+      SIM_HOST: 0.0.0.0
+      SIM_PORT: "8790"
+    ports:
+      # this machine only: the web on the same server reaches it at http://127.0.0.1:8790, nothing outside does
+      - "127.0.0.1:8790:8790"
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 2g
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"

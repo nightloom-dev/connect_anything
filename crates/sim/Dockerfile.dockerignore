@@ -1,0 +1,8 @@
+# Docker reads this file for crates/sim/Dockerfile only: the build needs the Cargo workspace and nothing else.
+*
+!Cargo.toml
+!Cargo.lock
+!crates/
+crates/*/target
+# the settings with the RPC key stay out of the build
+crates/*/.env

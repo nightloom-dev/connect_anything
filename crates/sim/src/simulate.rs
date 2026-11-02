@@ -215,7 +215,7 @@ fn run(parsed: &Parsed, snapshot: &Snapshot, idls: &BTreeMap<String, Value>) -> 
         (None, false) => Verdict::Warn,
         (None, true) => Verdict::Ok,
     };
-    tracing::info!(slot = snapshot.slot, compute_units, tx_bytes, ?verdict, "simulated {} steps", parsed.steps.len());
+    tracing::info!(slot = snapshot.slot, steps = parsed.steps.len(), compute_units, tx_bytes, ?verdict, "simulated");
     SimResult { verdict, compute_units, tx_bytes, logs: meta.logs, warnings, error }
 }
 
