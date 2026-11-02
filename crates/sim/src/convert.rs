@@ -39,6 +39,25 @@ mod tests {
         assert_eq!(modern["errors"][0]["name"], "Overflow");
     }
 
+    /// The legacy IDL klend has on chain becomes the modern copy the Kamino recipe was built on.
+    #[test]
+    fn converts_the_klend_idl_on_chain() {
+        use base64::Engine;
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let read = |path: &str| serde_json::from_slice::<Value>(&std::fs::read(root.join(path)).unwrap()).unwrap();
+        // an IDL account: 8 bytes of discriminator, the authority, a u32 length and the zlib-compressed JSON
+        let account = read("packages/core/test/fixtures/klend.idl-account.json");
+        let data = base64::engine::general_purpose::STANDARD.decode(account["data"].as_str().unwrap()).unwrap();
+        let length = u32::from_le_bytes(data[40..44].try_into().unwrap()) as usize;
+        let mut legacy: Value = serde_json::from_slice(&miniz_oxide::inflate::decompress_to_vec_zlib(&data[44..44 + length]).unwrap()).unwrap();
+        assert!(legacy.get("address").is_none(), "klend's IDL on chain is legacy");
+        // as packages/core sends it: with the program id that the legacy format leaves out
+        legacy["metadata"] = json!({ "address": account["programId"] });
+
+        let modern = convert(legacy.to_string().as_bytes()).unwrap();
+        assert_eq!(modern, read("recipes/kamino-rescue/klend.idl.json"));
+    }
+
     #[test]
     fn refuses_a_legacy_idl_without_its_program() {
         let legacy = json!({ "version": "0.1.0", "name": "x", "instructions": [] });
