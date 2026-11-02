@@ -1,0 +1,27 @@
+{
+  "verdict": "fail",
+  "computeUnits": 21635,
+  "txBytes": 821,
+  "logs": [
+    "Program 11111111111111111111111111111111 invoke [1]",
+    "Program 11111111111111111111111111111111 success",
+    "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+    "Program ComputeBudget111111111111111111111111111111 success",
+    "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+    "Program ComputeBudget111111111111111111111111111111 success",
+    "Program KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD invoke [1]",
+    "Program log: Instruction: RepayObligationLiquidityV2",
+    "Program log: Repay reserve is stale and must be refreshed in the current slot",
+    "Program log: AnchorError thrown in programs/klend/src/lending_market/lending_operations.rs:3882. Error Code: ReserveStale. Error Number: 6009. Error Message: Reserve state needs to be refreshed.",
+    "Program KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD consumed 21185 of 1399550 compute units",
+    "Program KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD failed: custom program error: 0x1779"
+  ],
+  "warnings": [],
+  "error": {
+    "instructionIndex": 0,
+    "programId": "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
+    "code": 6009,
+    "name": "ReserveStale",
+    "message": "Step 1 of 1 (repay_obligation_liquidity_v2) failed: ReserveStale: Reserve state needs to be refreshed"
+  }
+}
