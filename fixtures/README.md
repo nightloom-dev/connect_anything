@@ -106,3 +106,20 @@ Connect then reports `OPERATION_FAILED`, and the web offers Refund. On the scree
 the simplest failure to explain: the repay points at a market that the position is not in.
 `klend-repay-no-refresh` is the other option. It is a single step that is easy to enter by hand, and it fails with
 `ReserveStale` (6009).
+
+`klend-repay-wrong-market.recipe.json` is the same failure as a whole recipe, in the form the web stores, ready for the
+demo. The web's `rescueRecipe` built it for wallet `2APx2UH73Vnwua5sUpSfrEmGkxE4v33Y5y4GKACTHATf` and obligation
+`2WAWpMP739iZuLPAwGqx9mwPCAbDurYMPHuaDj28qnMt`, with the JLP market in the repay's `repay_accounts.lending_market`,
+and `parseStored` accepts it. To put it on the web (port 5180 with `npm run dev`):
+
+```bash
+curl -sS localhost:5180/api/recipes -H 'content-type: application/json' \
+  --data-binary @fixtures/klend-repay-wrong-market.recipe.json          # {"id":"..."}
+```
+
+Then open `/r/<id>` and run it. Nothing on the way stops it. The run page does not simulate: only the builder does.
+Connect does not simulate a bridge-in before it signs, since the money arrives after the signature (its Kamino guide,
+"Bridge-in risk"). So the run reaches Solana, fails there, and ends in `OPERATION_FAILED` and the Refund. What the
+simulator says beforehand is `fail`, about 89k CU and 966 bytes. To show it, send `klend-repay-wrong-market.sim.json`
+to the web's `/api/simulate`. The obligation is a live position of someone else's. If it is closed, `rescueRecipe`
+can build the same recipe for another position, with only the market in the repay changed.
