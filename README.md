@@ -47,7 +47,7 @@ Read from `apps/web/.env` or from the environment.
 | --------- | ----------------------------------------------------- |
 | `/`       | Screens 1 to 4: program, form, simulation, run        |
 | `/r/:id`  | Run a recipe someone shared                           |
-| `/kamino` | Repay a Kamino debt                                   |
+| `/kamino` | Repay a Kamino debt, `?wallet=&obligation=` fills it in |
 
 ### Server routes
 
@@ -69,12 +69,28 @@ Read from `apps/web/.env` or from the environment.
 The same server runs with `npm run build && npm run preview -w apps/web -- --host`, on port 4173. `vite preview` answers
 403 to a host it does not know, so the domain has to be in `preview.allowedHosts` in `apps/web/vite.config.ts`.
 
+### Telegram watcher
+
+`apps/watch` watches the LTV of Kamino positions and sends a link to `/kamino` that repays from Base. It reads positions
+through `GET /api/kamino/:wallet` of the web app, so it needs only a bot token from @BotFather:
+
+```bash
+cd apps/watch
+echo 'TELEGRAM_BOT_TOKEN=...' > .env   # APP_URL defaults to http://localhost:5180, WATCH_EVERY_S to 60
+npm start
+```
+
+In the chat with the bot, `/watch <wallet>` rings 10 points under the position's liquidation LTV, `/watch <wallet> 65`
+at 65%. A repay lands about 3 minutes after the tap, so the line sits well before the edge. A position rings once, and
+again only after it falls 3 points under its line. Watches live in `apps/watch/data/watches.json`.
+
 ## Tests
 
 ```bash
 npm test -w packages/core
 npm test -w apps/web
 npm test -w recipes/kamino-rescue
+npm test -w apps/watch
 ```
 
 The Kamino tests replay one read of a real wallet from mainnet, in `apps/web/server/fixtures`, and compare the rescue

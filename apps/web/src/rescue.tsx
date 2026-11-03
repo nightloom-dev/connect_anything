@@ -156,9 +156,11 @@ function Position({ obligation, url, onBusy }: { obligation: Obligation; url: st
 }
 
 export function Rescue() {
-  const [typed, setTyped] = useState('');
-  const [wallet, setWallet] = useState('');
-  const [chosen, setChosen] = useState('');
+  // the watcher's alert links here with both, so one tap opens the position it rang about
+  const linked = new URLSearchParams(location.search);
+  const [typed, setTyped] = useState(linked.get('wallet') ?? '');
+  const [wallet, setWallet] = useState(linked.get('wallet') ?? '');
+  const [chosen, setChosen] = useState(linked.get('obligation') ?? '');
   const [busy, setBusy] = useState(false);
   const url = wallet ? `/api/kamino/${encodeURIComponent(wallet)}` : null;
   const found = useJson<Positions>(url);

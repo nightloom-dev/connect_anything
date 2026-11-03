@@ -3,3 +3,4 @@ dist/
 .env
 apps/web/data/
 target/
+apps/watch/data/
