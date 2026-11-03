@@ -111,11 +111,12 @@ refuses it.
 
 Still open:
 
-- From role R: the simulator (screen 3 says it is offline and still exports), the legacy IDL converter (on-chain klend
-  asks for a file) and `checkCompat`, whose seam `apps/web/src/compat.ts` finds nothing until then, so screen 2 says
-  "Not checked yet".
-- Run, Retry and Refund have run only against an in-memory backend, not with real money on mainnet, and neither has
-  the repay at `/kamino`.
+- The simulator and the legacy IDL converter of role R run as a separate service, `crates/sim`. Without `SIM_URL`
+  screen 3 says the simulator is offline and still exports, and a legacy IDL such as klend's on chain asks for a file.
+- Run has gone once on mainnet with real money, at `/kamino` on 03.11: 0.786044 USDC paid from Base, 0.514635 USDC
+  of debt repaid, SUCCESS about 2.5 minutes after the signature. The bridge kept 34% of a payment that small, and the run
+  screen now shows what arrives on Solana before the signature. Retry and Refund have run only against an in-memory
+  backend.
 - Connect's rule on the delivered token is documented for steps-only and was seen on its dry steps route. The create with
   a bridge quote has not been tried against it. Nor is it known what Connect does with a deposit that arrives after a
   delete, so the page says only that a delete does not call one back.

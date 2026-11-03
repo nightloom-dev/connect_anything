@@ -4,7 +4,7 @@ import { useExecution, useIntentsConnect, type UseExecutionResult } from '@auror
 import { useIntentsConnectWallet } from '@aurora-is-near/intents-connect-wallet/connect/appkit';
 import type { Idl } from '@connect-anything/core';
 import { checkCompat, issueText } from './compat.ts';
-import { CHAINS, STAGES, STAGE_OF, bridgePlan, bySymbol, existingOffer, explain, fromAtomic, isQuoteMoved, legs, refundBody, retryPlan, stoppedFollowing, toAtomic, type Balance, type Token, type TokenList } from './connect.ts';
+import { CHAINS, STAGES, STAGE_OF, bridgeKeeps, bridgePlan, bySymbol, existingOffer, explain, fromAtomic, isQuoteMoved, legs, refundBody, retryPlan, stoppedFollowing, toAtomic, type Balance, type Token, type TokenList } from './connect.ts';
 import { STAND_IN, buildRecipe, destinationIssue, matchesPublished, parseStored, runsRecipe, signsOnlyRecipe, takesAmount, toSolanaRecipe, type StoredRecipe } from './recipe.ts';
 import { AccountList, Failure, FetchError, Notice, short, useAct, useAsync, useJson } from './ui.tsx';
 
@@ -519,6 +519,8 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
   const source = sources.find(token => token.assetId === pick) ?? sources.find(token => token.symbol === 'USDC') ?? sources[0];
   // the link's author writes both ids, and only together do they name a token Connect delivers
   const target = list.data?.tokens.find(token => token.assetId === recipe.destination.assetId && token.contractAddress === recipe.destination.tokenAddress);
+  // a share across two tokens would be a price, not a loss
+  const kept = preview && source && target && source.symbol === target.symbol ? bridgeKeeps(preview.execution.quote.amount, source.decimals, preview.execution.quote.minAmountOut, target.decimals) : null;
   // a figure in the token the recipe receives says nothing about an amount of another
   const amount = typed ?? (source && source.symbol === target?.symbol ? suggested ?? '' : '');
   const atomic = source ? toAtomic(amount, source.decimals) : null;
@@ -752,6 +754,11 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
             <dt>You pay</dt>
             <dd>
               {fromAtomic(preview.execution.quote.amount, source.decimals)} {source.symbol} on {CHAINS.find(({ id }) => id === source.blockchain)?.name}, plus the gas of the deposit
+            </dd>
+            <dt>Arrives on Solana</dt>
+            <dd>
+              at least {fromAtomic(preview.execution.quote.minAmountOut, target.decimals)} {target.symbol}, after the bridge's fee and slippage
+              {kept !== null && `: the bridge keeps ${Math.round(kept * 100)}% of what you pay`}
             </dd>
             <dt>Network fee</dt>
             <dd>

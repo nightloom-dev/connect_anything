@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createIntentsConnectApi, type Execution, type FetchLike, type SolanaRecipe, type SolanaStep } from '@aurora-is-near/intents-connect';
 import { usdToAtomic } from '@connect-anything/kamino-rescue';
-import { STAGE_OF, bridgePlan, existingOffer, explain, fromAtomic, isQuoteMoved, legs, refundBody, retry503, retryPlan, stoppedFollowing, toAtomic, type Token } from './connect.ts';
+import { STAGE_OF, bridgeKeeps, bridgePlan, existingOffer, explain, fromAtomic, isQuoteMoved, legs, refundBody, retry503, retryPlan, stoppedFollowing, toAtomic, type Token } from './connect.ts';
 import { BASE_USDC, SOLANA_USDC, supplyPlan } from './kamino.ts';
 
 const answering = (...statuses: number[]) => {
@@ -207,4 +207,10 @@ test('a finished execution leads to Retry, so it waits for the tick box, and a 4
   assert.equal(offer('SUCCESS', signed, true).over, true);
   assert.equal(offer('SUCCESS', signed, true).resumable, false);
   assert.equal(offer('OPERATION_FAILED', signed, true, '', true).over, false, 'the list keeps it, for what it left behind');
+});
+
+test('the bridge keeps the share of a payment that does not arrive, and nothing of a payment of nothing', () => {
+  assert.equal(Math.round(bridgeKeeps('786044', 6, '515569', 6) * 100), 34);
+  assert.equal(bridgeKeeps('1000000', 6, '1000001', 6), 0);
+  assert.equal(bridgeKeeps('0', 6, '0', 6), 0);
 });

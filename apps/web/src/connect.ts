@@ -124,6 +124,12 @@ export function toAtomic(amount: string, decimals: number): string | null {
   return atomic > 0n ? atomic.toString() : null;
 }
 
+/** The share of a payment the bridge does not deliver: on the first run from Base, 0.79 USDC paid and 0.52 arrived. */
+export function bridgeKeeps(paid: string, paidDecimals: number, arrives: string, arrivesDecimals: number): number {
+  const sent = Number(fromAtomic(paid, paidDecimals));
+  return sent > 0 ? Math.max(0, 1 - Number(fromAtomic(arrives, arrivesDecimals)) / sent) : 0;
+}
+
 export function fromAtomic(atomic: string, decimals: number): string {
   const digits = atomic.padStart(decimals + 1, '0');
   const point = digits.length - decimals;
