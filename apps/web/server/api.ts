@@ -33,7 +33,7 @@ const MAX_LOOKUP_TABLES = 16;
 const RPC_TIMEOUT = 30_000;
 const UPSTREAM_TIMEOUT = 60_000;
 const SOURCE_CHAINS = ['base', 'arb', 'eth'];
-const LEGACY_IDL = "This IDL is in the legacy pre-0.30 format. Converting it is the job of role R's service, which is not connected here. Upload a 0.30+ IDL file instead.";
+const LEGACY_IDL = 'This IDL is in the legacy pre-0.30 format, and only the simulator service converts it. It is not connected here (SIM_URL), so upload a 0.30+ IDL file instead.';
 
 class HttpError extends Error {
   readonly status: number;

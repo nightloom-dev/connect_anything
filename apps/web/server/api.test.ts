@@ -125,11 +125,11 @@ test('GET /api/idl answers with the IDL and its instructions', async () => {
   assert.ok(body.instructions.some((ix: { name: string }) => ix.name === 'buy'));
 });
 
-test('GET /api/idl says a legacy IDL needs role R and offers the upload', async () => {
+test('GET /api/idl without the simulator says a legacy IDL needs it and offers the upload', async () => {
   const { status, body } = await call(await onChain('klend'), `/api/idl/${KLEND}`);
   assert.equal(status, 422);
   assert.match(body.error, /legacy/);
-  assert.match(body.error, /role R/);
+  assert.match(body.error, /SIM_URL/);
   assert.deepEqual([body.legacy, body.upload], [true, true]);
 });
 

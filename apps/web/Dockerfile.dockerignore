@@ -1,0 +1,8 @@
+# Docker reads this file for apps/web/Dockerfile only. The keys stay out of the image, and so does the Rust of the simulator.
+**/.env
+**/node_modules
+**/dist
+apps/*/data
+crates
+target
+.git

@@ -1,0 +1,47 @@
+# The whole app on one server: the web, the simulator of role R, and Caddy in front, with a certificate for DOMAIN.
+#   cp apps/web/.env.example apps/web/.env && cp crates/sim/.env.example crates/sim/.env   # then fill both in
+#   DOMAIN=connect.example.com docker compose up -d --build
+# The domain's A record points at the server, and ports 80 and 443 are open. The Telegram watcher joins with
+# --profile watch, once TELEGRAM_BOT_TOKEN is in apps/watch/.env.
+include:
+  - crates/sim/compose.yaml
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    image: connect-anything-web
+    env_file: apps/web/.env
+    environment:
+      SIM_URL: http://sim:8790
+      # the domain, and the name the watcher reaches the web by
+      ALLOWED_HOSTS: ${DOMAIN:?set DOMAIN to the domain of the server},web
+    volumes:
+      - recipes:/app/apps/web/data
+    restart: unless-stopped
+  caddy:
+    image: caddy:2.10.2
+    command: caddy reverse-proxy --from ${DOMAIN} --to web:4173
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - certificates:/data
+    restart: unless-stopped
+  watch:
+    profiles: [watch]
+    image: connect-anything-web
+    command: node apps/watch/watch.ts
+    env_file:
+      - path: apps/watch/.env
+        required: false
+    environment:
+      APP_URL: http://web:4173
+      PUBLIC_URL: https://${DOMAIN}
+    volumes:
+      - watches:/app/apps/watch/data
+    restart: unless-stopped
+volumes:
+  recipes:
+  certificates:
+  watches:

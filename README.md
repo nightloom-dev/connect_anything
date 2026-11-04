@@ -55,7 +55,7 @@ Read from `apps/web/.env` or from the environment.
 
 | Route                                       | What it does                                                                                                   |
 | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `GET /api/idl/:programId`                   | The IDL of a program and its instructions. A legacy IDL needs the converter of role R and asks for a file until then |
+| `GET /api/idl/:programId`                   | The IDL of a program and its instructions. A legacy IDL goes through the simulator's converter, and asks for a file without `SIM_URL` |
 | `POST /api/idl/parse`                       | The same for an uploaded file, `?programId=` points it at a fork                                               |
 | `POST /api/simulate`                        | Forwards to the simulator of role R, 503 while it is not set or not answering                                  |
 | `POST /api/recipes`, `GET /api/recipes/:id` | Keeps a recipe as a JSON file in `apps/web/data/recipes`, gives it back by id                                  |
@@ -66,8 +66,20 @@ Read from `apps/web/.env` or from the environment.
 
 ### Deployed
 
-The same server runs with `npm run build && npm run preview -w apps/web -- --host`, on port 4173. `vite preview` answers
-403 to a host it does not know, so the domain has to be in `preview.allowedHosts` in `apps/web/vite.config.ts`.
+One command puts the whole app on a server with Docker: the web, the simulator from `crates/sim`, and Caddy in front,
+which gets the certificate for the domain by itself. The domain's A record points at the server, ports 80 and 443 are open.
+
+```bash
+cp apps/web/.env.example apps/web/.env && cp crates/sim/.env.example crates/sim/.env   # then fill both in
+DOMAIN=connect.example.com docker compose up -d --build
+```
+
+The web reaches the simulator inside compose, so `SIM_URL` in `apps/web/.env` does not matter there, and `SIM_TOKEN`
+has to be the same in both files. Shared recipes are kept in a Docker volume. The Telegram watcher joins with
+`--profile watch` once `TELEGRAM_BOT_TOKEN` is in `apps/watch/.env`, and its alerts link to `https://$DOMAIN`.
+
+Without Docker it is `npm run build && ALLOWED_HOSTS=<domain> npm run preview -w apps/web -- --host`, on port 4173:
+`vite preview` answers 403 to a host that is not in `ALLOWED_HOSTS`.
 
 ### Telegram watcher
 

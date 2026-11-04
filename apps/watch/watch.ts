@@ -7,6 +7,8 @@ const token = process.env.TELEGRAM_BOT_TOKEN;
 if (!token) throw new Error('Set TELEGRAM_BOT_TOKEN in apps/watch/.env or the environment.');
 // Positions are read through the web app, so the watcher needs no RPC or Kamino SDK of its own.
 const app = (process.env.APP_URL ?? 'http://localhost:5180').replace(/\/$/, '');
+// in compose the watcher reaches the web by its service name, which no one outside can open
+const site = (process.env.PUBLIC_URL ?? app).replace(/\/$/, '');
 const file = process.env.WATCH_FILE ?? new URL('data/watches.json', import.meta.url).pathname;
 const every = Number(process.env.WATCH_EVERY_S ?? 60) * 1000;
 
@@ -50,7 +52,7 @@ async function check(watch: Watch) {
   for (const position of await positions(watch.wallet)) {
     const verdict = decide(watch, position);
     if (verdict === 'alert') {
-      await say(watch.chat, alertText(position, lineOf(watch, position), app, watch.wallet));
+      await say(watch.chat, alertText(position, lineOf(watch, position), site, watch.wallet));
       watch.alerted.push(position.address);
     }
     if (verdict === 'rearm') watch.alerted = watch.alerted.filter(address => address !== position.address);
