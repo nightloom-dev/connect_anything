@@ -126,7 +126,7 @@ recipe with two real repay transactions, in `packages/core/test/fixtures`. Publi
   intermediary, and Refund takes it back. A debt in anything but USDC says it is not supported yet. The recipe lives in
   `recipes/kamino-rescue`.
 
-The limits of Connect are in `tz/ts.agent.md`. `threeRound` only. `QUOTE_MOVED` recalculates and shows the figures again
+The limits of Connect: `threeRound` only. `QUOTE_MOVED` recalculates and shows the figures again
 before any signature. A 409 blocks a second run, reads the execution holding the slot and lists it. Anyone with an API key
 can create an execution for any wallet, so the wallet signs or funds one only if its steps are the recipe on the page, and
 only an unsigned one can be deleted without a warning. A 503 on a create is retried 3 times, 2.5 s apart. A 503 on
