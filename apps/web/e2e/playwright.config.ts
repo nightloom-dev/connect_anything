@@ -9,6 +9,8 @@ export default defineConfig({
   testDir: '.',
   testMatch: '**/*.spec.ts',
   outputDir: '.results',
+  // opens every page once on the fresh dev server, so that the first tests do not pay for its cold start
+  globalSetup: './warmup.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: 0,
