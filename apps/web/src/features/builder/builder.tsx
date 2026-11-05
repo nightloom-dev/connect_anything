@@ -1,182 +1,158 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
 import { useExecution } from '@aurora-is-near/intents-connect/react';
-import { argFields, buildInstruction, flatten, listInstructions, type Field, type FieldType, type Idl, type SimResult } from '@connect-anything/core';
+import { argFields, buildInstruction, flatten, listInstructions, type Idl, type SimResult } from '@connect-anything/core';
+import { ArrowRight, Info, ListPlus, Play, Plus, SquareMousePointer } from 'lucide-react';
 import { checkCompat, issueText } from '../../compat.ts';
 import { bySymbol, fromAtomic, toAtomic, type Token, type TokenList } from '../../connect.ts';
 import { Execute } from '../run/execute.tsx';
-import { STAND_IN, defaultValue, destinationIssue, isByte, recipeCode, resolveStep, simulationRequest, toSolanaRecipe, variantValue, type Row, type StoredRecipe, type StoredStep } from '../../recipe.ts';
-import { AccountList, Boundary, Copy, Failure, FetchError, Notice, fetchJson, short, useAct, useAsync, useJson } from '../../ui.tsx';
+import { STAND_IN, defaultValue, destinationIssue, followsIntermediary, recipeCode, resolveStep, simulationRequest, toSolanaRecipe, type Row, type StoredRecipe, type StoredStep } from '../../recipe.ts';
+import { Boundary, Failure, FetchError, fetchJson, useAct, useAsync, useJson } from '../../ui.tsx';
+import { Alert, Button, Card, EmptyState, Input, Spinner, Stepper, Switch, cn, isSolanaAddress, solanaAddressProblem, toast, type StepItem } from '../../ui/index.ts';
+import { AccountsPanel, type AccountGroup, type AccountView } from './AccountsPanel.tsx';
+import { EXAMPLES, exampleOf, loadExample } from './examples.ts';
+import { ExportTabs } from './ExportPanel.tsx';
+import { Labeled, type KeyPicks } from './FieldInput.tsx';
+import { InstructionPicker, ProgramBar, type InstructionOption } from './InstructionPicker.tsx';
+import { KNOWN, suggestionsFor, type QuickPick } from './known.ts';
+import { Examples, HowItWorks, ProgramForm, RecentPrograms } from './ProgramStep.tsx';
+import { Readiness, type ReadinessItem } from './Readiness.tsx';
+import { RecipeTray, type TrayStep } from './RecipeTray.tsx';
+import { RemainingAccounts, remainingAnchor } from './RemainingAccounts.tsx';
+import { SimulationPending, SimulationReport, SimulatorOffline } from './SimulateStep.tsx';
+import { StepHeader } from './StepHeader.tsx';
+import { dropImport, forgetRecent, readImport, readRecent, readSession, rememberProgram, saveSession, setStepInUrl, stepInUrl, type Saved } from './storage.ts';
 
-const CU_LIMIT = 200_000;
-const BYTES_LIMIT = 1232;
+/** How the form names the intermediary: it is not known until someone runs the recipe. */
+const WHO = 'the intermediary of whoever runs this';
 
-function ProgramScreen({ onLoad }: { onLoad: (idl: Idl) => void }) {
+const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+type HeadingRef = Ref<HTMLHeadingElement>;
+
+function ProgramScreen({ onLoad, heading }: { onLoad: (idl: Idl) => void; heading: HeadingRef }) {
   const [programId, setProgramId] = useState('');
+  const [idError, setIdError] = useState<string>();
+  const [example, setExample] = useState<string>();
+  const [recent, setRecent] = useState(readRecent);
   const { working, error, act } = useAct();
   const id = programId.trim();
   const load = (request: () => Promise<{ idl: Idl }>) => act(async () => onLoad((await request()).idl));
-  const fromChain = load(() => fetchJson(`/api/idl/${encodeURIComponent(id)}`));
+  // only what was read from chain is worth a chip: an example is one click away anyway, and a file is not on chain
+  const fromChain = (address: string) =>
+    load(async () => {
+      const answer = await fetchJson<{ idl: Idl }>(`/api/idl/${encodeURIComponent(address)}`);
+      rememberProgram(answer.idl);
+      return answer;
+    });
   const fromFile = (file: File) =>
     load(async () => fetchJson(`/api/idl/parse${id ? `?programId=${encodeURIComponent(id)}` : ''}`, { method: 'POST', body: await file.text() }))();
 
+  // a program ID that is no address never reaches the server
+  const refuse = () => {
+    const problem = id ? solanaAddressProblem(id) : null;
+    if (problem) {
+      setIdError(problem);
+      document.getElementById('program-id')?.focus();
+    }
+    return !!problem;
+  };
+
   return (
-    <section>
-      <h2>1. Program</h2>
-      <p>Enter the program ID of an Anchor program on Solana, or upload its IDL file (Anchor 0.30 or newer). With both, the file is read as that program's.</p>
-      <form
-        className="row"
-        onSubmit={event => {
-          event.preventDefault();
-          fromChain();
-        }}
-      >
-        <input aria-label="Program ID" placeholder="Program ID" spellCheck={false} value={programId} onChange={event => setProgramId(event.target.value)} />
-        <button className="primary" disabled={working || !id}>
-          Load
-        </button>
-      </form>
-      <label className="file">
-        IDL file{' '}
-        <input
-          type="file"
-          accept=".json,application/json"
-          disabled={working}
-          onChange={event => {
-            const file = event.target.files?.[0];
-            event.target.value = ''; // so that the same file can be picked again after fixing it
-            if (file) fromFile(file);
-          }}
-        />
-      </label>
-      {working && <Notice>Reading the IDL…</Notice>}
-      {error && <Notice kind="error">{error}</Notice>}
+    <section aria-labelledby="builder-step" className="flex flex-col gap-6">
+      <StepHeader ref={heading} number={1} title="Program" description="Load an Anchor program by its ID, or from its IDL file. Each instruction it has becomes a form." />
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-12 md:items-start">
+        <div className="flex min-w-0 flex-col gap-6 md:col-span-7">
+          <ProgramForm
+            programId={programId}
+            onProgramId={value => {
+              setProgramId(value);
+              setIdError(undefined);
+            }}
+            idError={idError}
+            onSubmit={() => {
+              if (!refuse()) fromChain(id)();
+            }}
+            onFile={file => {
+              if (!refuse()) fromFile(file);
+            }}
+            working={working}
+            exampleWorking={!!example}
+            error={error}
+          />
+          <Examples
+            examples={EXAMPLES}
+            loading={example}
+            disabled={working}
+            onPick={program => {
+              setExample(program);
+              load(async () => ({ idl: await loadExample(exampleOf(program)!) }))().finally(() => setExample(undefined));
+            }}
+          />
+          <RecentPrograms
+            recent={recent}
+            disabled={working}
+            onPick={address => {
+              setProgramId(address);
+              setIdError(undefined);
+              fromChain(address)();
+            }}
+            onClear={() => {
+              forgetRecent();
+              setRecent([]);
+            }}
+          />
+        </div>
+        <div className="min-w-0 md:col-span-5">
+          <HowItWorks />
+        </div>
+      </div>
     </section>
   );
 }
 
-const typeLabel = (type: FieldType): string => {
-  switch (type.kind) {
-    case 'int':
-    case 'float':
-      return type.type;
-    case 'pubkey':
-      return 'public key';
-    case 'bytes':
-      return 'hex bytes';
-    case 'option':
-      return `optional ${typeLabel(type.of)}`;
-    case 'vec':
-      return isByte(type.of) ? 'hex bytes' : `list of ${typeLabel(type.of)}`;
-    case 'array':
-      return isByte(type.of) ? `${type.len} hex bytes` : `${type.len} × ${typeLabel(type.of)}`;
-    case 'struct':
-    case 'enum':
-      return type.type ?? type.kind;
-    default:
-      return type.kind;
-  }
-};
-
-type InputProps = { type: FieldType; label: string; value: any; onChange: (value: unknown) => void; disabled?: boolean };
-
-function FieldInput({ type, label, value, onChange, disabled }: InputProps) {
-  const text = (placeholder: string, inputMode?: 'numeric' | 'decimal') => (
-    <input aria-label={label} placeholder={placeholder} inputMode={inputMode} spellCheck={false} disabled={disabled} value={value} onChange={event => onChange(event.target.value)} />
-  );
-  switch (type.kind) {
-    case 'int':
-      return text(type.type, 'numeric');
-    case 'float':
-      return text(type.type, 'decimal');
-    case 'string':
-      return text('text');
-    case 'bytes':
-      return text('hex');
-    case 'bool':
-      return <input aria-label={label} type="checkbox" disabled={disabled} checked={value} onChange={event => onChange(event.target.checked)} />;
-    case 'pubkey':
-      return (
-        <div className="row">
-          {text('address')}
-          <button onClick={() => onChange(STAND_IN)} disabled={disabled}>
-            Intermediary
-          </button>
-        </div>
-      );
-    case 'option':
-      return (
-        <div>
-          <label className="inline">
-            <input type="checkbox" aria-label={`${label} is set`} disabled={disabled} checked={value !== null} onChange={event => onChange(event.target.checked ? defaultValue(type.of) : null)} /> Set a value
-          </label>
-          {value !== null && <FieldInput type={type.of} label={label} value={value} onChange={onChange} disabled={disabled} />}
-        </div>
-      );
-    case 'vec':
-    case 'array': {
-      if (isByte(type.of)) return text(type.kind === 'array' ? `${type.len} bytes as hex` : 'hex');
-      const items = value as unknown[];
-      return (
-        <div className="nested">
-          {items.map((item, index) => (
-            <div className="item" key={index}>
-              <FieldInput type={type.of} label={`${label} ${index + 1}`} value={item} disabled={disabled} onChange={next => onChange(items.map((old, at) => (at === index ? next : old)))} />
-              {type.kind === 'vec' && (
-                <button disabled={disabled} onClick={() => onChange(items.filter((_, at) => at !== index))}>
-                  Remove
-                </button>
-              )}
-            </div>
-          ))}
-          {type.kind === 'vec' && (
-            <button disabled={disabled} onClick={() => onChange([...items, defaultValue(type.of)])}>
-              Add item
-            </button>
-          )}
-        </div>
-      );
-    }
-    case 'struct':
-      return (
-        <div className="nested">
-          {type.fields.map(field => (
-            <Labeled key={field.name} field={field} label={`${label}.${field.name}`} value={value[field.name]} disabled={disabled} onChange={next => onChange({ ...value, [field.name]: next })} />
-          ))}
-        </div>
-      );
-    case 'enum': {
-      const name: string = typeof value === 'string' ? value : Object.keys(value)[0];
-      const fields = type.variants.find(variant => variant.name === name)?.fields ?? [];
-      return (
-        <div className="nested">
-          <select aria-label={label} disabled={disabled} value={name} onChange={event => onChange(variantValue(type.variants.find(variant => variant.name === event.target.value)!))}>
-            {type.variants.map(variant => (
-              <option key={variant.name}>{variant.name}</option>
-            ))}
-          </select>
-          {fields.map(field => (
-            <Labeled key={field.name} field={field} label={`${label}.${field.name}`} value={value[name][field.name]} disabled={disabled} onChange={next => onChange({ [name]: { ...value[name], [field.name]: next } })} />
-          ))}
-        </div>
-      );
-    }
-  }
-}
-
-function Labeled({ field, label, children, ...input }: Omit<InputProps, 'type'> & { field: Field; children?: ReactNode }) {
+/** A section of the instruction form: a title, a count on the right, a line under it. */
+function FormSection({ title, aside, description, children }: { title: string; aside?: ReactNode; description?: ReactNode; children: ReactNode }) {
   return (
-    <div className="field">
+    <div className="flex min-w-0 flex-col gap-4">
       <div>
-        <strong>{field.name}</strong> <span className="hint">{typeLabel(field)}</span>
+        <div className="flex items-baseline justify-between gap-3">
+          <h4 className="text-base font-semibold text-text">{title}</h4>
+          {aside !== undefined && <span className="text-xs text-muted nums">{aside}</span>}
+        </div>
+        {description && <p className="mt-1 text-sm text-muted">{description}</p>}
       </div>
-      {field.docs && <div className="hint">{field.docs.join(' ')}</div>}
-      <FieldInput type={field} label={label} {...input} />
       {children}
     </div>
   );
 }
 
-function InstructionForm({ idl, ixName, mint, onAdd }: { idl: Idl; ixName: string; mint: string; onAdd: (step: StoredStep) => void }) {
+const ARG_PROBLEM = /^(.+?): (.*)$/s;
+
+/** An optional account left out: the program's own key stands in, as the IDL allows, and nothing signs or writes it. */
+const leftOut = (row: Row, program: string) => row.optional && row.pubkey === program && !row.isSigner && !row.isWritable;
+
+/** What to show for an account's address: whose it is when it is the intermediary's, or the key. */
+const showsOf = (row: Row, program: string): AccountView['shows'] =>
+  !row.pubkey ? 'missing' : leftOut(row, program) ? 'left-out' : row.pubkey === STAND_IN ? 'self' : followsIntermediary(row, STAND_IN) ? 'follows' : 'address';
+
+/** An instruction's docs, three lines of them until asked: some IDLs put a manual there. */
+function Docs({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const long = text.length > 240;
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <p className={cn('text-sm leading-relaxed text-muted', long && !open && 'line-clamp-3')}>{text}</p>
+      {long && (
+        <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="rounded-sm text-xs font-medium text-accent-hover transition-colors duration-120 hover:text-text">
+          {open ? 'Show less' : 'Show all'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** One instruction's arguments and accounts, and the way into the recipe once they are complete. */
+export function InstructionForm({ idl, ixName, mint, symbol, onAdd }: { idl: Idl; ixName: string; mint: string; symbol: string; onAdd: (step: StoredStep) => void }) {
   const fields = useMemo(() => argFields(idl, ixName), [idl, ixName]);
   const [args, setArgs] = useState<Record<string, unknown>>(() => Object.fromEntries(fields.map(field => [field.name, defaultValue(field)])));
   const [amountArg, setAmountArg] = useState<string>();
@@ -204,76 +180,137 @@ function InstructionForm({ idl, ixName, mint, onAdd }: { idl: Idl; ixName: strin
   };
   const canTakeAmount = fields.filter(field => field.kind === 'int' && field.min === '0');
 
+  // What follows only lays the form out; none of it goes into the step.
+  // Each account sits where it was before anything was typed, so that a row does not jump between groups while it is filled in.
+  const untyped = resolveStep(idl, { ...step, inputs: {} }, { intermediary: STAND_IN, mint, amount: '1' }).accounts;
+  const mintPick: QuickPick = { label: `${symbol} mint`, address: mint };
+  const views: AccountView[] = accounts.slice(0, specs.size).map((row, index) => {
+    const first = untyped[index] ?? row;
+    const scope = row.name.split('.');
+    const short = scope.pop()!;
+    const group: AccountGroup = leftOut(first, idl.address) ? 'optional' : !first.pubkey || first.source === 'input' ? 'input' : first.source;
+    return {
+      name: row.name,
+      scope,
+      short,
+      group,
+      shows: showsOf(row, idl.address),
+      pubkey: row.pubkey,
+      isSigner: row.isSigner,
+      isWritable: row.isWritable,
+      optional: row.optional,
+      editable: editable(row),
+      value: inputs[row.name] ?? '',
+      placeholder: row.pubkey && row.pubkey !== idl.address ? 'Another address' : row.optional ? 'Blank leaves it out' : 'Address',
+      docs: specs.get(row.name)?.docs?.join(' '),
+      suggestions: suggestionsFor(row.name, mintPick),
+    };
+  });
+  const picks: KeyPicks = { intermediary: STAND_IN, known: KNOWN, suggest: name => suggestionsFor(name, mintPick) };
+
+  // The checklist: every account without an address, every remaining account that is not one, and what the coder says
+  // of the arguments once each account has some address.
+  const items: ReadinessItem[] = [];
+  if (issues.length) items.push({ key: 'compat', label: '', problem: 'Connect cannot run this instruction, as said above.', anchor: 'compat' });
+  let probe = '';
+  try {
+    buildInstruction(idl, ixName, built, accounts.map(row => (row.pubkey && isSolanaAddress(row.pubkey) ? row : { ...row, pubkey: STAND_IN })));
+  } catch (error) {
+    probe = (error as Error).message;
+  }
+  const argument = probe.startsWith(`${ixName}.`) ? ARG_PROBLEM.exec(probe.slice(ixName.length + 1)) : null;
+  if (argument) {
+    const [, path, why] = argument;
+    items.push({ key: `arg ${path}`, label: path, problem: why === 'missing' || /: $/.test(why) ? 'needs a value' : why, anchor: `arg-${path.split(/[.[]/)[0]}` });
+  } else if (probe) items.push({ key: 'probe', label: '', problem: probe });
+  for (const row of accounts.slice(0, specs.size)) if (!row.pubkey) items.push({ key: `account ${row.name}`, label: row.name, problem: 'needs an address', anchor: `account-${row.name}` });
+  remaining.forEach(({ pubkey }, index) => {
+    if (!isSolanaAddress(pubkey)) items.push({ key: `remaining ${index}`, label: `Remaining account ${index + 1}`, problem: pubkey ? 'is not an address' : 'needs an address', anchor: remainingAnchor(index) });
+  });
+  const ready = issues.length === 0 && !notReady;
+  if (!ready && items.length === 0) items.push({ key: 'not-ready', label: '', problem: notReady });
+
   return (
-    <div className="form">
-      <h3>{ixName}</h3>
-      {instruction.docs && <p className="hint">{instruction.docs.join(' ')}</p>}
+    <Card as="section" aria-labelledby="instruction-name" padding="lg" className="flex flex-col gap-8 max-sm:[--card-p:1rem]">
+      <header className="flex flex-col gap-1.5">
+        <h3 id="instruction-name" className="font-mono text-lg font-semibold break-all text-text">
+          {ixName}
+        </h3>
+        {instruction.docs && <Docs text={instruction.docs.join(' ')} />}
+      </header>
 
-      <h4>Arguments</h4>
-      {fields.length === 0 && <p className="hint">This instruction takes no arguments.</p>}
-      {fields.map(field => (
-        <Labeled key={field.name} field={field} label={field.name} value={args[field.name]} disabled={amountArg === field.name} onChange={next => setArgs({ ...args, [field.name]: next })}>
-          {canTakeAmount.includes(field) && (
-            <label className="inline">
-              <input type="checkbox" checked={amountArg === field.name} onChange={event => setAmountArg(event.target.checked ? field.name : undefined)} /> Takes the amount delivered, known when the recipe runs
-            </label>
-          )}
-        </Labeled>
-      ))}
-      {canTakeAmount.length > 0 && !amountArg && <p className="hint">No argument takes the amount delivered, so this step spends a fixed amount and any rest stays with the intermediary.</p>}
-
-      <h4>Accounts</h4>
-      <AccountList
-        accounts={accounts.slice(0, specs.size)}
-        program={idl.address}
-        intermediary={STAND_IN}
-        edit={row =>
-          editable(row) && (
-            <div className="row">
-              <input
-                aria-label={`Address of ${row.name}`}
-                spellCheck={false}
-                placeholder={row.pubkey && row.pubkey !== idl.address ? 'Another address' : row.optional ? 'Blank leaves it out' : 'Address'}
-                value={inputs[row.name] ?? ''}
-                onChange={event => setInputs({ ...inputs, [row.name]: event.target.value.trim() })}
+      <FormSection title="Arguments" aside={fields.length || undefined}>
+        {fields.length === 0 && <p className="text-sm text-muted">This instruction takes no arguments.</p>}
+        {fields.map(field => (
+          <Labeled
+            key={field.name}
+            id={`arg-${field.name}`}
+            field={field}
+            label={field.name}
+            value={amountArg === field.name ? '' : args[field.name]}
+            placeholder={amountArg === field.name ? 'The amount delivered, known at the run' : undefined}
+            disabled={amountArg === field.name}
+            picks={picks}
+            onChange={next => setArgs({ ...args, [field.name]: next })}
+          >
+            {canTakeAmount.includes(field) && (
+              <Switch
+                label="Uses the amount delivered"
+                description={
+                  amountArg === field.name
+                    ? 'Filled in when the recipe runs, with what Connect delivers.'
+                    : !amountArg && field === canTakeAmount[0]
+                      ? 'Off, this step spends a fixed amount, and any rest stays with the intermediary.'
+                      : undefined
+                }
+                checked={amountArg === field.name}
+                onChange={checked => setAmountArg(checked ? field.name : undefined)}
+                className="mt-1"
               />
-              <button onClick={() => setInputs({ ...inputs, [row.name]: STAND_IN })}>Intermediary</button>
-            </div>
-          )
-        }
-      />
-      <h4>Remaining accounts</h4>
-      {remaining.map(({ pubkey, isWritable }, index) => (
-        <div className="row" key={index}>
-          <input aria-label={`Remaining account ${index + 1}`} spellCheck={false} placeholder="Address" value={pubkey} onChange={event => setRemaining(remaining.map((row, at) => (at === index ? { ...row, pubkey: event.target.value.trim() } : row)))} />
-          <label className="inline">
-            <input type="checkbox" checked={isWritable} onChange={event => setRemaining(remaining.map((row, at) => (at === index ? { ...row, isWritable: event.target.checked } : row)))} /> Writable
-          </label>
-          <button onClick={() => setRemaining(remaining.filter((_, at) => at !== index))}>Remove</button>
-        </div>
-      ))}
-      <button onClick={() => setRemaining([...remaining, { pubkey: '', isWritable: false }])}>Add remaining account</button>
+            )}
+          </Labeled>
+        ))}
+      </FormSection>
 
-      <h4>Compatibility with Connect</h4>
-      {issues.length === 0 ? (
-        <Notice>Not checked yet. This page only checks that the recipe touches the token it receives, so Connect may still refuse this instruction at the run.</Notice>
-      ) : (
-        <Notice kind="error">
-          {issues.map(issue => (
-            <div key={issueText(issue)}>{issueText(issue)}</div>
-          ))}
-        </Notice>
-      )}
-      {notReady && <p className="hint">Not ready: {notReady}</p>}
-      <button className="primary" disabled={issues.length > 0 || !!notReady} onClick={() => onAdd(step)}>
-        Add to recipe
-      </button>
-    </div>
+      <FormSection title="Accounts" aside={specs.size}>
+        <AccountsPanel accounts={views} who={WHO} intermediary={STAND_IN} known={KNOWN} onInput={(name, value) => setInputs({ ...inputs, [name]: value.trim() })} />
+      </FormSection>
+
+      <FormSection title="Remaining accounts" description="Extra accounts after those the IDL names, for programs that read more.">
+        <RemainingAccounts
+          rows={remaining}
+          onPubkey={(index, pubkey) => setRemaining(remaining.map((row, at) => (at === index ? { ...row, pubkey: pubkey.trim() } : row)))}
+          onWritable={(index, isWritable) => setRemaining(remaining.map((row, at) => (at === index ? { ...row, isWritable } : row)))}
+          onRemove={index => setRemaining(remaining.filter((_, at) => at !== index))}
+          onAdd={() => setRemaining([...remaining, { pubkey: '', isWritable: false }])}
+        />
+      </FormSection>
+
+      <div className="flex flex-col gap-5 border-t border-border pt-6">
+        {issues.length === 0 ? (
+          <p className="flex gap-2 text-xs leading-5 text-muted">
+            <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+            <span>Not checked yet. This page only checks that the recipe touches the token it receives, so Connect may still refuse this instruction at the run.</span>
+          </p>
+        ) : (
+          <Alert id="compat" kind="danger" title="Connect cannot run this instruction">
+            {issues.map(issue => (
+              <div key={issueText(issue)}>{issueText(issue)}</div>
+            ))}
+          </Alert>
+        )}
+        <Readiness items={items} ready={ready} />
+        <Button variant="primary" size="lg" icon={<Plus />} disabled={issues.length > 0 || !!notReady} onClick={() => onAdd(step)} className="sm:self-start">
+          Add to recipe
+        </Button>
+      </div>
+    </Card>
   );
 }
 
 type InstructionScreenProps = {
   idl?: Idl;
+  idls: Record<string, Idl>;
   list: ReturnType<typeof useJson<TokenList>>;
   targets: Token[];
   token?: Token;
@@ -284,9 +321,10 @@ type InstructionScreenProps = {
   destination?: string;
   onBack: () => void;
   onNext: () => void;
+  heading: HeadingRef;
 };
 
-function InstructionScreen({ idl, list, targets, token, onTarget, steps, onSteps, destination, onBack, onNext }: InstructionScreenProps) {
+function InstructionScreen({ idl, idls, list, targets, token, onTarget, steps, onSteps, destination, onBack, onNext, heading }: InstructionScreenProps) {
   const [chosen, setChosen] = useState<string>();
   const instructions = useMemo(() => (idl ? listInstructions(idl) : []), [idl]);
   const ixName = instructions.some(({ name }) => name === chosen) ? chosen : undefined; // another program may have been loaded since
@@ -296,114 +334,98 @@ function InstructionScreen({ idl, list, targets, token, onTarget, steps, onSteps
     onSteps(next);
   };
 
-  return (
-    <section>
-      <h2>2. Instruction</h2>
-      {!idl ? (
-        <Notice>
-          No program yet. <button onClick={onBack}>Load a program</button>
-        </Notice>
-      ) : (
-        <p>
-          <strong>{idl.metadata?.name ?? 'Program'}</strong> <code>{idl.address}</code> <button onClick={onBack}>Load another program</button>
-        </p>
-      )}
-
-      <h3>Token the recipe receives</h3>
-      {list.loading && <Notice>Loading the tokens Intents Connect can deliver…</Notice>}
-      {list.error && <Failure error={list.error} retry={list.retry} />}
-      {list.data && targets.length === 0 && <Notice kind="error">Intents Connect lists no Solana token to deliver right now, so no recipe can be built.</Notice>}
-      {token && (
-        <select aria-label="Token the recipe receives" value={token.assetId} onChange={event => onTarget(event.target.value)}>
-          {targets.map(target => (
-            <option key={target.assetId} value={target.assetId}>
-              {target.symbol} ({short(target.contractAddress!)})
-            </option>
-          ))}
-        </select>
-      )}
-
-      {idl && (
-        <>
-          <h3>Instructions</h3>
-          {instructions.length === 0 ? (
-            <Notice>This IDL has no instructions.</Notice>
-          ) : (
-            <ul className="instructions">
-              {instructions.map(({ name, docs, args, accounts }) => (
-                <li key={name}>
-                  <button className={name === ixName ? 'chosen' : ''} aria-pressed={name === ixName} onClick={() => setChosen(name)}>
-                    <strong>{name}</strong> <span className="hint">{args} arguments, {accounts} accounts</span>
-                    {docs?.[0] && <span className="hint block">{docs[0]}</span>}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          {ixName && !token && <Notice>Pick the token the recipe receives first: the accounts depend on it.</Notice>}
-          {ixName && token && (
-            <Boundary key={`${idl.address} ${ixName}`}>
-              <InstructionForm idl={idl} ixName={ixName} mint={token.contractAddress!} onAdd={step => onSteps([...steps, step])} />
-            </Boundary>
-          )}
-        </>
-      )}
-
-      <h3>Recipe</h3>
-      {steps.length === 0 ? (
-        <Notice>Nothing yet. Instructions run in the order added, so add whatever must run first (a refresh, say) before the main one.</Notice>
-      ) : (
-        <ol className="steps">
-          {steps.map((step, index) => (
-            <li key={index}>
-              <strong>{step.ixName}</strong> <span className="hint">{short(step.program)}</span>{' '}
-              {index > 0 && <button onClick={() => move(index)}>Up</button>} <button onClick={() => onSteps(steps.filter((_, at) => at !== index))}>Remove</button>
-            </li>
-          ))}
-        </ol>
-      )}
-      {destination && <Notice kind="error">{destination}</Notice>}
-      <button className="primary" disabled={steps.length === 0 || !token || !!destination} onClick={onNext}>
-        Next: simulate
-      </button>
-    </section>
+  // What each step's accounts resolve to with the token as it is, for the tray to show on demand: the resolution the run uses.
+  const trayed = useMemo<TrayStep[]>(
+    () =>
+      steps.map(step => {
+        const of = idls[step.program];
+        const shown: TrayStep = { ixName: step.ixName, program: step.program, programName: of?.metadata?.name ?? 'Program', amountArg: step.amountArg };
+        if (!of || !token) return shown;
+        try {
+          const { accounts } = resolveStep(of, step, { intermediary: STAND_IN, mint: token.contractAddress!, amount: '1' });
+          return { ...shown, accounts: accounts.map(row => ({ name: row.name, pubkey: row.pubkey, source: row.source, shows: showsOf(row, of.address) })) };
+        } catch (error) {
+          return { ...shown, problem: (error as Error).message };
+        }
+      }),
+    [steps, idls, token],
   );
-}
 
-function SimulationReport({ result }: { result: SimResult }) {
-  const { verdict, computeUnits, txBytes, warnings, error, logs } = result;
+  // what Connect would refuse, for every instruction at once, so the list can say it before one is picked
+  const options = useMemo<InstructionOption[]>(
+    () =>
+      instructions.map(({ name, docs, args, accounts }) => {
+        let issues: string[] = [];
+        try {
+          issues = idl ? checkCompat(idl, name).map(issueText) : [];
+        } catch {
+          // the form says what is wrong once it is picked
+        }
+        return { name, docs: docs?.[0], args, accounts, issues };
+      }),
+    [idl, instructions],
+  );
+
   return (
-    <>
-      <Notice kind={verdict === 'ok' ? 'ok' : verdict === 'warn' ? 'warn' : 'error'}>
-        {verdict === 'ok' && 'The recipe passed simulation.'}
-        {verdict === 'warn' && 'The recipe passed simulation with warnings.'}
-        {verdict === 'fail' && 'The recipe failed in simulation, and would most likely fail for real.'}
-      </Notice>
-      <dl className="figures">
-        <dt>CU</dt>
-        <dd className={computeUnits > CU_LIMIT ? 'over' : ''}>{computeUnits.toLocaleString('en-US')} / 200k</dd>
-        <dt>Bytes</dt>
-        <dd className={txBytes > BYTES_LIMIT ? 'over' : ''}>{txBytes} / {BYTES_LIMIT}</dd>
-      </dl>
-      {warnings.length > 0 && (
-        <ul>
-          {warnings.map(warning => (
-            <li key={warning}>{warning}</li>
-          ))}
-        </ul>
-      )}
-      {error && (
-        <Notice kind="error">
-          {error.name ?? `Error${error.code === undefined ? '' : ` ${error.code}`}`}: {error.message}
-          {error.instructionIndex !== undefined && ` (instruction index ${error.instructionIndex})`}
-          {error.programId && <> in <code>{error.programId}</code></>}
-        </Notice>
-      )}
-      <details open={verdict !== 'ok'}>
-        <summary>Logs ({logs.length})</summary>
-        {logs.length ? <pre>{logs.join('\n')}</pre> : <p className="hint">The simulator gave no logs.</p>}
-      </details>
-    </>
+    <section aria-labelledby="builder-step" className="flex flex-col gap-6">
+      <StepHeader ref={heading} number={2} title="Instruction" description="Pick an instruction and fill in what the IDL cannot find. Add as many as you need: they run in the order added." />
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-12 md:items-start">
+        <div className="flex min-w-0 flex-col gap-5 md:col-span-7">
+          {!idl ? (
+            <Alert
+              actions={
+                <Button size="sm" onClick={onBack}>
+                  Load a program
+                </Button>
+              }
+            >
+              No program yet.
+            </Alert>
+          ) : (
+            <>
+              <ProgramBar name={idl.metadata?.name ?? 'Program'} address={idl.address} onBack={onBack} />
+              {instructions.length === 0 ? <Alert>This IDL has no instructions.</Alert> : <InstructionPicker options={options} value={ixName} onChange={setChosen} />}
+              {ixName && !token && <Alert>Pick the token the recipe receives first: the accounts depend on it.</Alert>}
+              {ixName && token && (
+                <Boundary key={`${idl.address} ${ixName}`}>
+                  <InstructionForm
+                    idl={idl}
+                    ixName={ixName}
+                    mint={token.contractAddress!}
+                    symbol={token.symbol}
+                    onAdd={step => {
+                      onSteps([...steps, step]);
+                      toast.success(`Added ${step.ixName} to the recipe`, { description: `Step ${steps.length + 1}. Add another, or simulate.` });
+                    }}
+                  />
+                </Boundary>
+              )}
+              {!ixName && instructions.length > 0 && (
+                <EmptyState compact icon={<SquareMousePointer />} title="Pick an instruction above">
+                  Its arguments and accounts show here, with the accounts the IDL can find already filled in.
+                </EmptyState>
+              )}
+            </>
+          )}
+        </div>
+        <div className="min-w-0 md:sticky md:top-24 md:col-span-5">
+          <RecipeTray
+            tokens={{ loading: list.loading, error: list.error, retry: list.retry, empty: !!list.data && targets.length === 0 }}
+            failure={list.error && <Failure error={list.error} retry={list.retry} />}
+            targets={targets}
+            token={token}
+            onTarget={onTarget}
+            steps={trayed}
+            onUp={index => move(index)}
+            onDown={index => move(index + 1)}
+            onRemove={index => onSteps(steps.filter((_, at) => at !== index))}
+            destination={destination}
+            nextDisabled={steps.length === 0 || !token || !!destination}
+            onNext={onNext}
+          />
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -421,37 +443,30 @@ function Export({ stored }: { stored: StoredRecipe }) {
   const create = act(async () => {
     const { id } = await fetchJson<{ id: string }>('/api/recipes', { method: 'POST', body: JSON.stringify(stored) });
     setLink({ of: stored, url: `${location.origin}/r/${id}` });
+    toast.success('Link created', { description: 'Whoever opens it can run this recipe with their own wallet.' });
   });
 
   return (
-    <>
-      <h3>Export</h3>
-      <h4>Link</h4>
-      <p className="hint">Opens this recipe on another browser. Whoever opens it runs it with their own wallet and sees that you made it.</p>
-      {url ? (
-        <div className="row">
-          <a href={url}>{url}</a> <Copy text={url} />
-        </div>
-      ) : (
-        <button disabled={working} onClick={create}>
-          {working ? 'Creating the link…' : 'Create a link'}
-        </button>
-      )}
-      {error && <Notice kind="error">{error}</Notice>}
-      <h4>TypeScript</h4>
-      {code.problem && <Notice kind="error">The recipe cannot be exported as code: {code.problem}</Notice>}
-      {code.text && (
-        <>
-          <p className="hint">A module exporting a SolanaRecipe for the Aurora SDK.</p>
-          <Copy text={code.text} />
-          <pre className="code">{code.text}</pre>
-        </>
-      )}
-    </>
+    <Card as="section" aria-labelledby="export-title" padding="lg" className="flex flex-col gap-4 max-sm:[--card-p:1rem]">
+      <h3 id="export-title" className="text-base font-semibold text-text">
+        Export
+      </h3>
+      <ExportTabs url={url} working={working} error={error} onCreate={create} code={code} />
+    </Card>
   );
 }
 
-function SimulateScreen({ stored, token, onBack, onRun }: { stored?: StoredRecipe; token?: Token; onBack: () => void; onRun: () => void }) {
+type SimulateScreenProps = {
+  stored?: StoredRecipe;
+  token?: Token;
+  /** In place of the screen while the recipe waits on the token list, after a reload. */
+  pending?: ReactNode;
+  onBack: () => void;
+  onRun: () => void;
+  heading: HeadingRef;
+};
+
+function SimulateScreen({ stored, token, pending, onBack, onRun, heading }: SimulateScreenProps) {
   const decimals = token?.decimals ?? 0;
   const [typed, setTyped] = useState('1');
   const [tested, setTested] = useState(typed);
@@ -463,55 +478,114 @@ function SimulateScreen({ stored, token, onBack, onRun }: { stored?: StoredRecip
   const offline = sim.error instanceof FetchError && sim.error.status === 503;
 
   return (
-    <section>
-      <h2>3. Simulation and export</h2>
-      {!stored || !token ? (
-        <Notice>
-          The recipe is empty. <button onClick={onBack}>Add an instruction</button>
-        </Notice>
+    <section aria-labelledby="builder-step" className="flex flex-col gap-6">
+      <StepHeader ref={heading} number={3} title="Simulation and export" description="A run on a fork of mainnet, as an intermediary that holds just the amount delivered. Then share it as a link, or as code." />
+      {pending ?? (!stored || !token ? (
+        <EmptyState
+          icon={<ListPlus />}
+          title="The recipe is empty."
+          action={
+            <Button variant="primary" onClick={onBack}>
+              Add an instruction
+            </Button>
+          }
+        >
+          Add an instruction, and it is simulated here.
+        </EmptyState>
       ) : (
-        <>
-          <form
-            className="row"
-            onSubmit={event => {
-              event.preventDefault();
-              if (typed === tested) sim.retry();
-              setTested(typed);
-            }}
-          >
-            <label className="inline">
-              Amount delivered to test with <input aria-label="Test amount" inputMode="decimal" value={typed} onChange={event => setTyped(event.target.value)} /> {token.symbol}
-            </label>
-            <button disabled={sim.loading}>Simulate</button>
-          </form>
-          {!atomic && <Notice kind="error">"{tested}" is not an amount of {token.symbol}, which has {decimals} decimals.</Notice>}
-          {sim.loading && <Notice>Simulating against a mainnet fork…</Notice>}
-          {offline && <Notice kind="warn">The simulator is offline, so this recipe has not been checked. You can still export and run it. ({sim.error!.message})</Notice>}
-          {sim.error && !offline && <Failure error={sim.error} retry={sim.retry} />}
-          {sim.data && <SimulationReport result={sim.data} />}
-          {sim.data && atomic && <p className="hint">Tested with {fromAtomic(atomic, decimals)} {token.symbol} delivered, as an intermediary that holds just that.</p>}
-          <Export stored={stored} />
-          <p>
-            <button className="primary" onClick={onRun}>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-12 md:items-start">
+          <Card as="section" aria-label="Simulation" padding="lg" className="flex min-w-0 flex-col gap-6 md:col-span-7 max-sm:[--card-p:1rem]">
+            <form
+              className="flex flex-col gap-1.5"
+              onSubmit={event => {
+                event.preventDefault();
+                if (typed === tested) sim.retry();
+                setTested(typed);
+              }}
+            >
+              <label htmlFor="test-amount" className="text-sm font-medium text-text">
+                Test amount
+              </label>
+              <div className="flex gap-3">
+                <div className="min-w-0 flex-1 sm:max-w-60">
+                  <Input
+                    id="test-amount"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    aria-describedby="test-amount-hint"
+                    value={typed}
+                    onChange={event => setTyped(event.target.value)}
+                    trailing={<span className="pr-2 text-sm text-muted">{token.symbol}</span>}
+                    className="nums"
+                  />
+                </div>
+                <Button type="submit" icon={<Play />} loading={sim.loading} disabled={sim.loading}>
+                  Simulate
+                </Button>
+              </div>
+              <p id="test-amount-hint" className="text-xs leading-5 text-muted">
+                What Connect delivers to the intermediary. Change it and simulate again.
+              </p>
+            </form>
+            {!atomic && (
+              <Alert kind="danger">
+                "{tested}" is not an amount of {token.symbol}, which has {decimals} decimals.
+              </Alert>
+            )}
+            {sim.loading && <SimulationPending />}
+            {offline && <SimulatorOffline reason={sim.error!.message} />}
+            {sim.error && !offline && <Failure error={sim.error} retry={sim.retry} />}
+            {sim.data && <SimulationReport result={sim.data} tested={atomic && `Tested with ${fromAtomic(atomic, decimals)} ${token.symbol} delivered, as an intermediary that holds just that.`} />}
+          </Card>
+          <div className="flex min-w-0 flex-col gap-4 md:sticky md:top-24 md:col-span-5">
+            <Export stored={stored} />
+            <Button variant="primary" size="lg" block iconRight={<ArrowRight />} onClick={onRun}>
               Next: run it
-            </button>
-          </p>
-        </>
-      )}
+            </Button>
+          </div>
+        </div>
+      ))}
     </section>
   );
 }
 
-const SCREENS = ['Program', 'Instruction', 'Simulation', 'Run'];
+/** Steps 3 and 4 after a reload: the recipe is back, and waits on the token list to know what it receives. */
+function TokensPending({ list }: { list: ReturnType<typeof useJson<TokenList>> }) {
+  if (list.error) return <Failure error={list.error} retry={list.retry} />;
+  if (list.data) return <Alert kind="danger">Intents Connect lists no Solana token to deliver right now, so no recipe can be built.</Alert>;
+  return (
+    <p role="status" className="flex items-center gap-2 text-sm text-muted">
+      <Spinner size="sm" />
+      Loading the tokens Intents Connect can deliver…
+    </p>
+  );
+}
+
+const STEPS = ['Program', 'Instruction', 'Simulate', 'Run'];
+
+type Start = { saved?: Saved; imported?: StoredRecipe; problem?: string; screen: number };
+
+/** Where the builder opens: a recipe another page handed over, else what this tab left, at the step in the address. */
+function start(): Start {
+  const handed = readImport();
+  const step = stepInUrl();
+  if (handed?.recipe) return { imported: handed.recipe, screen: step ?? 2 };
+  return { saved: readSession(), problem: handed?.problem, screen: step ?? 1 };
+}
 
 export function Builder() {
   const exec = useExecution();
   const list = useJson<TokenList>('/api/tokens');
-  const [screen, setScreen] = useState(1);
-  const [idl, setIdl] = useState<Idl>();
-  const [idls, setIdls] = useState<Record<string, Idl>>({});
-  const [steps, setSteps] = useState<StoredStep[]>([]);
-  const [target, setTarget] = useState('');
+  const [initial] = useState(start);
+  const [screen, setScreen] = useState(initial.screen);
+  const [idl, setIdl] = useState<Idl | undefined>(() => {
+    const last = initial.imported?.steps.at(-1);
+    return last ? initial.imported!.idls[last.program] : initial.saved?.idl;
+  });
+  const [idls, setIdls] = useState<Record<string, Idl>>(() => initial.imported?.idls ?? initial.saved?.idls ?? {});
+  const [steps, setSteps] = useState<StoredStep[]>(() => initial.imported?.steps ?? initial.saved?.steps ?? []);
+  const [target, setTarget] = useState(() => initial.imported?.destination.assetId ?? initial.saved?.target ?? '');
+  const [problem, setProblem] = useState(initial.problem);
 
   // Known limit: native SOL is left out as a target, since it has no mint to fund a simulation with or to read a balance of. Wrapped tokens work.
   const targets = useMemo(() => (list.data?.tokens ?? []).filter(token => token.contractAddress).sort(bySymbol), [list.data]);
@@ -538,37 +612,100 @@ export function Builder() {
     setScreen(2);
   };
 
+  // The handed-over recipe is read once: the key goes, and a reload brings back the session instead.
+  const announced = useRef(false);
+  useEffect(() => {
+    if (announced.current || (!initial.imported && !initial.problem)) return;
+    announced.current = true;
+    dropImport();
+    const count = initial.imported?.steps.length ?? 0;
+    if (initial.imported) toast.success('Recipe opened in the builder', { description: `${count === 1 ? '1 step' : `${count} steps`}. Change them here, then simulate.` });
+  }, [initial]);
+
+  useEffect(() => saveSession({ idl, idls, steps, target }), [idl, idls, steps, target]);
+
+  // The step goes in the address, and the new step's heading takes the focus so that a screen reader says where it is.
+  const heading = useRef<HTMLHeadingElement>(null);
+  const shown = useRef(screen);
+  useEffect(() => {
+    if (screen !== 1 || stepInUrl() !== undefined) setStepInUrl(screen);
+    if (shown.current === screen) return;
+    shown.current = screen;
+    setProblem(undefined);
+    heading.current?.focus({ preventScroll: true });
+    window.scrollTo({ top: 0, behavior: reducedMotion() ? 'auto' : 'smooth' });
+  }, [screen]);
+
+  // ?step=3 or 4 for a recipe Connect would refuse is a way around the lock of the stepper, so it opens step 2
+  useEffect(() => {
+    if (screen >= 3 && destination && !exec.isBusy) setScreen(2);
+  }, [screen, destination, exec.isBusy]);
+
+  const pending = steps.length > 0 && !token ? <TokensPending list={list} /> : undefined;
+
+  const stepper: StepItem[] = STEPS.map((title, index) => {
+    // leaving screen 4 mid-run would hide the only way to act on a running execution
+    const locked = exec.isBusy || (index >= 2 && !!destination);
+    const done = [!!idl, steps.length > 0, screen > 3, false][index];
+    return {
+      id: String(index + 1),
+      title,
+      state: screen === index + 1 ? 'current' : locked ? 'locked' : done ? 'done' : 'upcoming',
+      reason: exec.isBusy ? 'A run is in progress, and this step shows the only way to act on it.' : 'Connect would refuse the recipe as it is: see the recipe in step 2.',
+    };
+  });
+
   return (
-    <>
-      <nav className="tabs" aria-label="Steps">
-        {SCREENS.map((name, index) => (
-          // leaving screen 4 mid-run would hide the only way to act on a running execution
-          <button key={name} className={screen === index + 1 ? 'chosen' : ''} aria-current={screen === index + 1 ? 'step' : undefined} disabled={exec.isBusy || (index >= 2 && !!destination)} onClick={() => setScreen(index + 1)}>
-            {index + 1}. {name}
-          </button>
-        ))}
-      </nav>
-      {screen === 1 && <ProgramScreen onLoad={onLoad} />}
+    <div className="flex flex-col gap-8">
+      <Stepper steps={stepper} onSelect={id => setScreen(Number(id))} className="border-b border-border pb-5" />
+      {problem && (
+        <Alert kind="danger" title="The recipe handed to the builder could not be opened">
+          {problem}
+        </Alert>
+      )}
+      {screen === 1 && <ProgramScreen onLoad={onLoad} heading={heading} />}
       {screen === 2 && (
         <Boundary>
-          <InstructionScreen idl={idl} list={list} targets={targets} token={token} onTarget={setTarget} steps={steps} onSteps={setSteps} destination={destination} onBack={() => setScreen(1)} onNext={() => setScreen(3)} />
+          <InstructionScreen
+            idl={idl}
+            idls={idls}
+            list={list}
+            targets={targets}
+            token={token}
+            onTarget={setTarget}
+            steps={steps}
+            onSteps={setSteps}
+            destination={destination}
+            onBack={() => setScreen(1)}
+            onNext={() => setScreen(3)}
+            heading={heading}
+          />
         </Boundary>
       )}
-      {screen === 3 && <SimulateScreen stored={stored} token={token} onBack={() => setScreen(idl ? 2 : 1)} onRun={() => setScreen(4)} />}
-      {screen === 4 &&
-        (stored && recipe ? (
-          <section>
-            <h2>4. Run</h2>
-            <Execute exec={exec} recipe={recipe} stored={stored} />
-          </section>
-        ) : (
-          <section>
-            <h2>4. Run</h2>
-            <Notice>
-              The recipe is empty. <button onClick={() => setScreen(idl ? 2 : 1)}>Add an instruction</button>
-            </Notice>
-          </section>
-        ))}
-    </>
+      {screen === 3 && <SimulateScreen stored={stored} token={token} pending={pending} onBack={() => setScreen(idl ? 2 : 1)} onRun={() => setScreen(4)} heading={heading} />}
+      {screen === 4 && (
+        <section aria-labelledby="builder-step" className="flex flex-col gap-6">
+          <StepHeader ref={heading} number={4} title="Run" description="Pay from Base, Arbitrum or Ethereum with one signature. Intents Connect delivers the token on Solana and runs the recipe." />
+          {pending ?? (stored && recipe ? (
+            // The run card is still the old screen, in the .legacy wrapper its styles are scoped to. The wrapper goes once the run card is redesigned.
+            <div className="legacy">
+              <Execute exec={exec} recipe={recipe} stored={stored} />
+            </div>
+          ) : (
+            <EmptyState
+              icon={<ListPlus />}
+              title="The recipe is empty."
+              action={
+                <Button variant="primary" onClick={() => setScreen(idl ? 2 : 1)}>
+                  Add an instruction
+                </Button>
+              }
+            >
+              Add an instruction, and it runs here.
+            </EmptyState>
+          ))}
+        </section>
+      )}
+    </div>
   );
 }

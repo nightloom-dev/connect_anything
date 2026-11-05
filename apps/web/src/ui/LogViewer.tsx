@@ -100,7 +100,7 @@ export function LogViewer({ logs, title = 'Program logs', errorsOnly = false, ma
           <ol className="w-max min-w-full">
             {shown.map(line => (
               <li key={line.number} className={cn('flex pr-4', TONE[line.kind])}>
-                <span className="w-11 shrink-0 pr-3 text-right text-faint select-none nums" aria-hidden>
+                <span className="w-11 shrink-0 pr-3 text-right text-muted select-none nums" aria-hidden>
                   {line.number}
                 </span>
                 <span className="whitespace-pre" style={{ paddingLeft: `${(line.depth - 1) * 14}px` }}>

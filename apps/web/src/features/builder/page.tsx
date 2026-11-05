@@ -1,12 +1,8 @@
 import { usePageTitle } from '../../app/title.ts';
 import { Builder } from './builder.tsx';
 
-/** /build. Until its redesign it is the old screen, in the .legacy wrapper its styles are scoped to. */
+/** /build: program, instruction, simulation and run. The run card inside step 4 keeps its own .legacy wrapper for now. */
 export default function BuilderPage() {
   usePageTitle('Build');
-  return (
-    <div className="legacy">
-      <Builder />
-    </div>
-  );
+  return <Builder />;
 }
