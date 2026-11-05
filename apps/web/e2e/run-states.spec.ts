@@ -5,7 +5,7 @@ import { HEALTHY, RECORDED_WALLET } from './mocks/kamino.ts';
 import { BASE_USDC, SOL_USDC } from './mocks/tokens.ts';
 import { KAMINO, shared } from './paths.ts';
 import { alertOf, expect, pollUntil, statusOf, test } from './support.ts';
-import { MockSolanaWallet, TX_HASH, WALLET, type MockWallet } from './wallet.ts';
+import { MockSolanaWallet, SOLANA_WALLET, TX_HASH, WALLET, WALLET_NAME, type MockWallet } from './wallet.ts';
 
 // Every state of the payment panel (Execute in src/features/run/execute.tsx), one test each, numbered as in the redesign brief. Most
 // run on /kamino, where the target LTV fills in 800 USDC; the fake Connect quotes it at 776.16 USDC delivered, at least.
@@ -37,26 +37,38 @@ async function quote(page: Page) {
 }
 
 const button = (page: Page, name: string) => page.getByRole('button', { name, exact: true });
+/** The stage of the run the card marks as the current one. */
+const stage = (page: Page) => page.getByRole('list', { name: 'Progress' }).locator('[aria-current="step"]');
 const shows = (page: Page, text: string | RegExp) => expect(page.getByText(text, typeof text === 'string' ? { exact: true } : undefined).first()).toBeVisible();
 
 test('state 01 no wallet: nothing is quoted until an EVM wallet connects', async ({ page, connect }) => {
   await page.goto(RESCUE);
   await expect(page.getByText('Repay $800.00, which is 800 USDC.')).toBeVisible();
   await shows(page, 'Connect an EVM wallet to continue.');
-  await expect(button(page, QUOTE)).toBeDisabled();
+  // the card's one button connects a wallet, and nothing that quotes is on the screen yet
+  await expect(button(page, QUOTE)).toHaveCount(0);
   await expect(button(page, 'Connect EVM wallet')).toBeEnabled();
   expect(connect.requests).toEqual([]);
 });
 
-test('state 02 a wallet that is not EVM is refused', async ({ page, connect }) => {
+test('state 02 a wallet that is not EVM is refused, and Switch wallet trades it for an EVM one', async ({ page, connect, wallet }) => {
   const solana = new MockSolanaWallet(page);
   await solana.install();
   await page.goto(RESCUE);
   await solana.connect();
   await shows(page, 'This is not an EVM wallet. Recipes are paid from Base, Arbitrum or Ethereum, so connect an EVM wallet.');
-  await expect(button(page, QUOTE)).toBeDisabled();
+  await expect(button(page, QUOTE)).toHaveCount(0);
   // nothing is looked up for it
   expect(connect.requests).toEqual([]);
+
+  // it disconnects the Solana wallet and opens the list of wallets again
+  await button(page, 'Switch wallet').click();
+  await page.getByRole('button', { name: new RegExp(WALLET_NAME) }).click();
+  await expect(page.getByText(WALLET, { exact: true })).toBeVisible();
+  await expect(page.getByText(SOLANA_WALLET, { exact: true })).toHaveCount(0);
+  await expect(page.getByText(`Your intermediary on Solana: ${INTERMEDIARY}`)).toBeVisible();
+  await expect(button(page, QUOTE)).toBeEnabled();
+  expect(await wallet.calls('personal_sign')).toEqual([]);
 });
 
 test('state 03 the intermediary is being looked up', async ({ page, connect, wallet }) => {
@@ -289,8 +301,10 @@ test('state 14 the run goes through its phases, and the form stays locked meanwh
   create.release();
 
   await signature.reached();
-  await expect(statusOf(page, 'Sign the message in your wallet.')).toBeVisible();
+  // the wallet asks, and the card says where to look
+  await expect(statusOf(page, 'Sign the message in your wallet.')).toContainText('Check your wallet');
   await shows(page, /^CREATED\. Execution/);
+  await expect(stage(page)).toContainText('Signature');
   await signature.release();
 
   await submit.reached();
@@ -298,13 +312,19 @@ test('state 14 the run goes through its phases, and the form stays locked meanwh
   submit.release();
 
   await transfer.reached();
-  await expect(statusOf(page, 'Confirm the deposit in your wallet.')).toBeVisible();
-  // the page has not read the execution since the signature
-  await shows(page, /^CREATED\. Execution/);
+  await expect(statusOf(page, 'Confirm the deposit in your wallet.')).toContainText('Check your wallet');
+  // The page has not read the execution since the signature, and its CREATED is stale: the stages are at the deposit,
+  // and the line under them leaves that status out.
+  await expect(stage(page)).toContainText('Deposit');
+  await expect(page.getByText(/^CREATED\. Execution/)).toHaveCount(0);
+  await shows(page, /^Execution /);
   await transfer.release();
 
   await expect(statusOf(page, SETTLING)).toBeVisible();
   await shows(page, /^DEPOSIT_PROCESSING\. Execution/);
+  await expect(stage(page)).toContainText('Bridge');
+  // the wait is timed, and the person can leave
+  await expect(page.getByText(/^Running for \d+:\d\d\. You can close this page: come back and press Resume\.$/)).toBeVisible();
   // one quote is good for one signature
   await expect(button(page, SIGN)).toHaveCount(0);
   await expect(button(page, QUOTE)).toBeDisabled();
@@ -356,6 +376,9 @@ test('state 17 the page stopped following an execution that has not finished', a
   const stopped = statusOf(page, 'This execution has not finished, and this page stopped following it. Do not pay again before you know how it ended.');
   await pollUntil(page, () => stopped.isVisible());
   await expect(alertOf(page, 'Intents Connect is not answering right now (503).')).toBeVisible();
+  // not failed, not running here: paused where it was
+  await expect(stage(page)).toContainText('paused');
+  await expect(stage(page)).toContainText('This page stopped following it');
   await expect(button(page, QUOTE)).toBeDisabled();
   await expect(button(page, SIGN)).toHaveCount(0);
 
@@ -532,6 +555,7 @@ test('state 26 an execution in flight that is not this recipe is never signed, o
   expect(await wallet.calls('personal_sign')).toEqual([]);
   await button(page, DELETE).click();
   await shows(page, `Execution ${foreign.id} was deleted, so a new run can start.`);
+  await expect(page.getByRole('region', { name: /Notifications/ }).getByText('Execution deleted')).toBeVisible();
   expect(connect.list()).toEqual([]);
 
   await button(page, SIGN).click();

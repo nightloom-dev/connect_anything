@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
-import { Check, Minus, X } from 'lucide-react';
+import { Check, Minus, Pause, X } from 'lucide-react';
 import { cn } from './cn.ts';
 import { Spinner } from './Spinner.tsx';
 
-export type StageState = 'pending' | 'active' | 'done' | 'failed' | 'success' | 'cancelled';
+/** paused: stopped where it is and waiting on the person, as an execution this page no longer follows. */
+export type StageState = 'pending' | 'active' | 'paused' | 'done' | 'failed' | 'success' | 'cancelled';
 
 export type TimelineStage = {
   id: string;
@@ -25,11 +26,12 @@ type TimelineProps = {
   className?: string;
 };
 
-const SPOKEN: Record<StageState, string> = { pending: 'waiting', active: 'in progress', done: 'done', failed: 'failed', success: 'complete', cancelled: 'cancelled' };
+const SPOKEN: Record<StageState, string> = { pending: 'waiting', active: 'in progress', paused: 'paused', done: 'done', failed: 'failed', success: 'complete', cancelled: 'cancelled' };
 
 const NODE: Record<StageState, string> = {
   pending: 'border-border-strong bg-surface',
   active: 'border-accent bg-accent/14 text-accent shadow-[0_0_0_4px_rgb(110_123_255/0.14)]',
+  paused: 'border-warning/50 bg-warning/14 text-warning',
   done: 'border-success/40 bg-success/12 text-success',
   failed: 'border-danger/50 bg-danger/14 text-danger-text',
   success: 'border-success bg-success text-[#062012]',
@@ -39,6 +41,7 @@ const NODE: Record<StageState, string> = {
 const TITLE: Record<StageState, string> = {
   pending: 'text-muted',
   active: 'text-text font-semibold',
+  paused: 'text-warning font-semibold',
   done: 'text-text',
   failed: 'text-danger-text font-semibold',
   success: 'text-success font-semibold',
@@ -47,6 +50,7 @@ const TITLE: Record<StageState, string> = {
 
 function Node({ state }: { state: StageState }) {
   if (state === 'active') return <Spinner size="xs" />;
+  if (state === 'paused') return <Pause className="size-3" strokeWidth={2.75} aria-hidden />;
   if (state === 'done' || state === 'success') return <Check className="size-3.5" strokeWidth={2.75} aria-hidden />;
   if (state === 'failed') return <X className="size-3.5" strokeWidth={2.75} aria-hidden />;
   if (state === 'cancelled') return <Minus className="size-3.5" strokeWidth={2.75} aria-hidden />;
@@ -64,7 +68,7 @@ export function Timeline({ stages, label = 'Progress', announce, className }: Ti
           const last = index === stages.length - 1;
           const reached = stage.state === 'done' || stage.state === 'success';
           return (
-            <li key={stage.id} aria-current={stage.state === 'active' ? 'step' : undefined} className={cn('relative flex gap-3', !last && 'pb-5')}>
+            <li key={stage.id} aria-current={stage.state === 'active' || stage.state === 'paused' ? 'step' : undefined} className={cn('relative flex gap-3', !last && 'pb-5')}>
               {!last && <span aria-hidden className={cn('absolute top-7 bottom-0.5 left-[11.5px] w-px', reached ? 'bg-success/40' : 'bg-border-strong')} />}
               <span className={cn('relative flex size-6 shrink-0 items-center justify-center rounded-full border transition-colors duration-300', NODE[stage.state])}>
                 <Node state={stage.state} />

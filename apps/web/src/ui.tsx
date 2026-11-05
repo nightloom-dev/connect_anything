@@ -2,7 +2,7 @@ import { Component, useEffect, useState, type ReactNode } from 'react';
 import { Check, Copy as CopyIcon, RotateCw } from 'lucide-react';
 import { explain } from './connect.ts';
 import { followsIntermediary, type Row } from './recipe.ts';
-import { Alert, Badge, Button } from './ui/index.ts';
+import { Address, Alert, Badge, Button } from './ui/index.ts';
 
 export class FetchError extends Error {
   status: number;
@@ -113,6 +113,10 @@ export const short = (value: string) => `${value.slice(0, 4)}…${value.slice(-4
 
 const SOURCE = { auto: 'found automatically', recipe: 'from the recipe', input: 'input' };
 
+// who an address stands for, and why there is none: a pill, and plain words
+const WHO = 'rounded-full border border-accent/36 bg-accent/14 px-2 text-xs leading-5 font-medium text-accent-hover not-italic';
+const NOTE = 'text-sm text-muted italic';
+
 type ListProps = {
   accounts: Row[];
   program: string;
@@ -128,26 +132,27 @@ type ListProps = {
 export function AccountList({ accounts, program, intermediary, real = false, inputLabel = SOURCE.input, edit }: ListProps) {
   const who = real ? 'your intermediary' : 'the intermediary of whoever runs this';
   const address = (row: Row) => {
-    if (!row.pubkey) return <em>needs an address</em>;
-    if (row.optional && row.pubkey === program && !row.isSigner && !row.isWritable) return <em>left out</em>;
+    if (!row.pubkey) return <em className={NOTE}>needs an address</em>;
+    if (row.optional && row.pubkey === program && !row.isSigner && !row.isWritable) return <em className={NOTE}>left out</em>;
     const self = row.pubkey === intermediary;
     const follows = followsIntermediary(row, intermediary);
     return (
       <>
-        {(real || !(self || follows)) && <code>{row.pubkey}</code>} {self && <em>{who}</em>}
-        {follows && <em>derived from {who}</em>}
+        {(real || !(self || follows)) && <Address value={row.pubkey} full className="text-balance" />} {self && <em className={WHO}>{who}</em>}
+        {follows && <em className={WHO}>derived from {who}</em>}
       </>
     );
   };
   return (
-    <ul className="accounts">
+    <ul className="flex min-w-0 flex-col divide-y divide-border rounded-lg border border-border bg-surface">
       {accounts.map((row, index) => (
-        <li key={index}>
-          <div className="account-head">
-            <strong>{row.name}</strong> {row.isSigner && <Badge variant="signs">signs</Badge>} {row.isWritable && <Badge variant="writable">writable</Badge>}{' '}
-            {row.optional && <Badge variant="optional">optional</Badge>} <Badge variant={row.source}>{row.source === 'input' ? inputLabel : SOURCE[row.source]}</Badge>
+        <li key={index} className="flex min-w-0 flex-col gap-1.5 px-3.5 py-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <strong className="mr-0.5 font-mono text-[0.8125rem] font-medium break-all text-text">{row.name}</strong> {row.isSigner && <Badge variant="signs">signs</Badge>}{' '}
+            {row.isWritable && <Badge variant="writable">writable</Badge>} {row.optional && <Badge variant="optional">optional</Badge>}{' '}
+            <Badge variant={row.source}>{row.source === 'input' ? inputLabel : SOURCE[row.source]}</Badge>
           </div>
-          <div className="account-address">{address(row)}</div>
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-sm text-muted">{address(row)}</div>
           {edit?.(row)}
         </li>
       ))}

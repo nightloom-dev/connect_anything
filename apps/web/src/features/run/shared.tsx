@@ -1,8 +1,47 @@
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
+import { FileWarning, Link2Off } from 'lucide-react';
 import { useExecution } from '@aurora-is-near/intents-connect/react';
 import { parseStored, toSolanaRecipe } from '../../recipe.ts';
-import { Failure, FetchError, Notice, useJson } from '../../ui.tsx';
+import { Failure, FetchError, useJson } from '../../ui.tsx';
+import { EmptyState, Skeleton, Spinner } from '../../ui/index.ts';
 import { Execute } from './execute.tsx';
+
+/** A link that leads nowhere that can run: what is wrong, and the one thing to do about it. */
+export function Dead({ icon, title, children }: { icon: ReactNode; title: string; children?: ReactNode }) {
+  return (
+    <div role="alert" className="rounded-xl border border-border bg-surface">
+      <EmptyState icon={icon} title={title}>
+        {children}
+        <p className="mt-1.5">Ask the sender for a new link.</p>
+      </EmptyState>
+    </div>
+  );
+}
+
+/** The recipe on its way: the trust panel, what will run and the card, as grey shapes. */
+export function Loading() {
+  return (
+    <div aria-busy className="flex flex-col gap-4">
+      <p role="status" className="flex items-center gap-2 text-sm text-muted">
+        <Spinner size="sm" />
+        Loading the recipe…
+      </p>
+      <Skeleton className="h-36 rounded-xl" />
+      <Skeleton className="h-12 rounded-xl" />
+      <Skeleton className="h-80 rounded-xl" />
+    </div>
+  );
+}
+
+/** The heading of /r/:id. */
+export function SharedHeader() {
+  return (
+    <header className="flex flex-col gap-1.5">
+      <h2 className="text-2xl leading-tight font-semibold tracking-tight text-text">A recipe someone shared with you</h2>
+      <p className="text-sm text-muted">Read what it runs on Solana, then pay for it from an EVM wallet with one signature.</p>
+    </header>
+  );
+}
 
 /** /r/:id: a recipe someone shared, loaded by its id, with the payment panel in its shared mode. */
 export function SharedRecipe({ id }: { id: string }) {
@@ -20,12 +59,16 @@ export function SharedRecipe({ id }: { id: string }) {
   const missing = found.error instanceof FetchError && (found.error.status === 404 || found.error.status === 400);
 
   return (
-    <section>
-      <h2>A recipe someone shared with you</h2>
-      {found.loading && <Notice>Loading the recipe…</Notice>}
-      {missing && <Notice kind="error">This link does not lead to a recipe. Check it with whoever sent it to you.</Notice>}
+    <section className="mx-auto flex w-full max-w-run min-w-0 flex-col gap-5">
+      <SharedHeader />
+      {found.loading && <Loading />}
+      {missing && <Dead icon={<Link2Off />} title="This link does not lead to a recipe." />}
       {found.error && !missing && <Failure error={found.error} retry={found.retry} />}
-      {parsed?.problem && <Notice kind="error">{parsed.problem} Nothing can run from this link.</Notice>}
+      {parsed?.problem && (
+        <Dead icon={<FileWarning />} title="This recipe cannot be read.">
+          <p>{parsed.problem} Nothing can run from this link.</p>
+        </Dead>
+      )}
       {parsed?.stored && <Execute exec={exec} recipe={parsed.recipe} stored={parsed.stored} shared />}
     </section>
   );

@@ -1,30 +1,53 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { BACKEND_PLACEHOLDERS, TERMINAL_STATUSES, guards, parseOriginAsset, signIntentsConnectPayload, type Execution, type ExecutionPreview, type ExecutionStep, type SolanaRecipe, type StepsPreview } from '@aurora-is-near/intents-connect';
+import { ArrowLeftRight, Calculator, Clock, Copy, PenLine, RefreshCw, RotateCcw, Undo2, Wallet } from 'lucide-react';
+import { TERMINAL_STATUSES, guards, parseOriginAsset, signIntentsConnectPayload, type Execution, type ExecutionPreview, type ExecutionStep, type SolanaRecipe, type StepsPreview } from '@aurora-is-near/intents-connect';
 import { useIntentsConnect, type UseExecutionResult } from '@aurora-is-near/intents-connect/react';
 import { useIntentsConnectWallet } from '@aurora-is-near/intents-connect-wallet/connect/appkit';
 import type { Idl } from '@connect-anything/core';
 import { checkCompat, issueText } from '../../compat.ts';
 import { CHAINS, STAGES, STAGE_OF, bridgeKeeps, bridgePlan, bySymbol, existingOffer, explain, fromAtomic, isQuoteMoved, legs, refundBody, retryPlan, stoppedFollowing, toAtomic, type Balance, type Token, type TokenList } from '../../connect.ts';
 import { STAND_IN, buildRecipe, destinationIssue, matchesPublished, runsRecipe, signsOnlyRecipe, takesAmount, type StoredRecipe } from '../../recipe.ts';
-import { AccountList, Failure, Notice, short, useAct, useAsync, useJson } from '../../ui.tsx';
+import { Failure, Notice, short, useAct, useAsync, useJson } from '../../ui.tsx';
+import { Address, Alert, Button, ChainIcon, Checkbox, Skeleton, Spinner, Timeline, TokenIcon, chainMeta, copyText, type StageState, type TimelineStage } from '../../ui/index.ts';
+import {
+  AMOUNT_INPUT,
+  Actions,
+  Arrives,
+  Block,
+  Caption,
+  ChainTag,
+  ConsentBox,
+  DeletedLine,
+  DepositBox,
+  Details,
+  ExecutionSteps,
+  ExistingFrame,
+  ExplorerLink,
+  Facts,
+  Figure,
+  Figures,
+  Held,
+  LONG_LABEL,
+  MetaLine,
+  NoFigure,
+  OptionTile,
+  PaidFrom,
+  Panel,
+  PanelArrow,
+  PhaseCallout,
+  QuoteBox,
+  Reason,
+  RunCard,
+  SelectPill,
+  SpendsRow,
+  Swap,
+  TokenTag,
+  WorkingLine,
+} from './parts.tsx';
+import { IdlCheck, Summary, TrustPanel } from './summary.tsx';
+import { CANCEL_NOTE, DOING, PHASE_TEXT, TIME_NOTE } from './words.ts';
 
 const SOLSCAN = 'https://solscan.io';
-const TIME_NOTE = 'After the deposit, execution takes about 150 seconds plus the MPC signature.';
-const CANCEL_NOTE = 'Cancelling only deletes the execution. It does not call back a deposit already sent, and this page stops following that deposit: if one is on its way, wait instead. If it reaches your intermediary, Refund here sends it back.';
-
-const PHASE_TEXT: Partial<Record<UseExecutionResult['phase'], string>> = {
-  'resolving-identity': 'Looking up your intermediary…',
-  planning: 'Working out the exact amounts…',
-  creating: 'Creating the execution…',
-  'awaiting-signature': 'Sign the message in your wallet.',
-  submitting: 'Submitting your signature…',
-  'awaiting-deposit': 'Confirm the deposit in your wallet.',
-  settling: `Waiting for the bridge and the execution. ${TIME_NOTE}`,
-  expired: 'The deposit window has passed. A late deposit can still revive this execution, or you can cancel it.',
-  success: 'Done: the instructions ran on Solana.',
-  cancelled: 'The execution was cancelled.',
-};
-
 // Known limit: these live in this browser, so another browser finds an execution only through the 409 of a second run.
 const recentKey = (address: string) => `executions:${address}`;
 
@@ -45,81 +68,20 @@ function saveRecent(address: string, ids: string[]) {
   }
 }
 
-const External = ({ href, children }: { href: string; children: React.ReactNode }) => (
-  <a href={href} target="_blank" rel="noreferrer">
-    {children}
-  </a>
-);
-
 function PublishedCheck({ stored, program }: { stored: StoredRecipe; program: string }) {
   const published = useJson<{ idl: Idl }>(`/api/idl/${program}`);
-  if (published.loading) return <span className="tag">checking the program's published IDL…</span>;
-  if (!published.data) return <span className="tag warn">could not be compared with an IDL the program publishes, so the names below are only the word of whoever made the link</span>;
-  return matchesPublished(stored, program, published.data.idl) ? (
-    <span className="tag ok">matches the IDL the program publishes</span>
-  ) : (
-    <span className="tag bad">differs from the IDL the program publishes: do not trust the names below</span>
-  );
+  if (published.loading) return <IdlCheck state="checking" />;
+  if (!published.data) return <IdlCheck state="unknown" />;
+  return matchesPublished(stored, program, published.data.idl) ? <IdlCheck state="match" /> : <IdlCheck state="differs" />;
 }
 
-type SummaryProps = {
-  stored: StoredRecipe;
-  steps: ReturnType<typeof buildRecipe>;
-  intermediary: string;
-  real: boolean;
-  amountKnown: boolean;
-  shared: boolean;
+const clock = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
+const timeOf = (iso?: string) => {
+  const at = iso ? new Date(iso) : undefined;
+  return at && Number.isFinite(at.getTime()) ? clock.format(at) : undefined;
 };
 
-function Summary({ stored, steps, intermediary, real, amountKnown, shared }: SummaryProps) {
-  const programs = [...new Set(stored.steps.map(({ program }) => program))];
-  return (
-    <details className="summary" open={shared}>
-      <summary>
-        What will run: {steps.length} {steps.length === 1 ? 'instruction' : 'instructions'} on {programs.length} {programs.length === 1 ? 'program' : 'programs'}
-      </summary>
-      <h4>{programs.length === 1 ? 'Program' : 'Programs'}</h4>
-      <ul className="programs">
-        {programs.map(program => (
-          <li key={program}>
-            <External href={`${SOLSCAN}/account/${program}`}>
-              <code>{program}</code>
-            </External>{' '}
-            {stored.idls[program].metadata?.name && <span className="hint">calls itself {stored.idls[program].metadata.name}</span>} {shared && <PublishedCheck stored={stored} program={program} />}
-          </li>
-        ))}
-      </ul>
-      <h4>Instructions, in this order</h4>
-      <ol className="steps">
-        {steps.map((step, index) => (
-          <li key={index}>
-            <strong>{step.ixName}</strong> <span className="hint">on {short(step.program)}</span>
-            <pre>{JSON.stringify(step.amountArg !== undefined && !amountKnown ? { ...step.args, [step.amountArg]: 'the amount delivered, known after the quote' } : step.args, null, 2)}</pre>
-            <div className="hint">
-              Data sent: <code>{step.instruction.data.toString('hex')}</code>
-              {step.amountArg !== undefined && !amountKnown && ' (0 in place of the amount)'}
-            </div>
-            <AccountList accounts={step.accounts} program={step.program} intermediary={intermediary} real={real} inputLabel={shared ? 'typed by whoever made the link' : undefined} />
-          </li>
-        ))}
-      </ol>
-      {stored.lookupTables?.length ? (
-        <>
-          <h4>Lookup tables</h4>
-          <ul>
-            {stored.lookupTables.map(table => (
-              <li key={table}>
-                <code>{table}</code>
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : null}
-    </details>
-  );
-}
-
-function Progress({ exec, chain, resumed }: { exec: UseExecutionResult; chain: string; resumed: boolean }) {
+function Progress({ exec, chain, resumed, unfinished }: { exec: UseExecutionResult; chain: string; resumed: boolean; unfinished: boolean }) {
   const { status, phase, execution, executionId, depositTxHash } = exec;
   // a resume asks the wallet for the deposit only while the execution is CREATED: after that the address is shown instead
   const text = exec.error || (resumed && phase === 'awaiting-deposit' && status !== 'CREATED') ? undefined : PHASE_TEXT[phase];
@@ -128,62 +90,74 @@ function Progress({ exec, chain, resumed }: { exec: UseExecutionResult; chain: s
   const evmTx = CHAINS.find(({ id }) => id === originChain)?.tx ?? CHAINS[0].tx;
   const { evmTxHash, solanaTxHash } = execution?.transaction ?? {};
   const failed = status === 'DEPOSIT_FAILED' || status === 'OPERATION_FAILED';
+
+  // Display only, from here. The page reads the execution again only after the deposit, so a CREATED it holds once the
+  // signature is in is stale: the stages show the deposit, and the line under them leaves that status out.
+  const stale = status === 'CREATED' && exec.hasSubmittedSignature;
+  const at = stale ? STAGE_OF.DEPOSIT_PENDING : stage;
+  // nothing runs on this page now: what stopped is waiting on the person (paused) or did not go through (failed)
+  const now: StageState = failed ? 'failed' : status === 'SUCCESS' ? 'success' : phase === 'cancelled' ? 'cancelled' : exec.isBusy ? 'active' : unfinished || phase === 'expired' ? 'paused' : 'failed';
+  const note =
+    status === 'OPERATION_FAILED'
+      ? 'The instructions failed on Solana'
+      : status === 'DEPOSIT_FAILED'
+        ? 'The deposit failed, so nothing ran'
+        : exec.recovery?.kind === 'retry-transfer'
+          ? 'The transfer did not go through'
+          : phase === 'expired'
+            ? 'The deposit window passed'
+            : unfinished
+              ? 'This page stopped following it'
+              : now === 'failed' && at === 0
+                ? 'Not signed'
+                : now === 'active'
+                  ? DOING[at]
+                  : undefined;
+  const explorer = (chainMeta(originChain) ?? chainMeta(CHAINS[0].id))!.explorer;
+  const links: (ReactNode | undefined)[] = [
+    undefined,
+    (depositTxHash || (evmTxHash && evmTxHash !== depositTxHash)) && (
+      <span className="flex flex-wrap gap-x-3 gap-y-1">
+        {depositTxHash && <ExplorerLink href={`${evmTx}${depositTxHash}`} label={short(depositTxHash)} explorer={explorer} />}
+        {evmTxHash && evmTxHash !== depositTxHash && <ExplorerLink href={`${evmTx}${evmTxHash}`} label={`EVM transaction ${short(evmTxHash)}`} explorer={explorer} />}
+      </span>
+    ),
+    undefined,
+    solanaTxHash && <ExplorerLink href={`${SOLSCAN}/tx/${solanaTxHash}`} label={short(solanaTxHash)} explorer="Solscan" />,
+    undefined,
+  ];
+  const stages: TimelineStage[] = STAGES.map((name, index) => {
+    const last = index === STAGES.length - 1;
+    return {
+      id: name,
+      title: last && status === 'SUCCESS' ? 'Success' : last && failed ? 'Failed' : name,
+      state: index < at ? 'done' : index === at ? now : 'pending',
+      description: index === at ? note : undefined,
+      time: index === 0 ? timeOf(execution?.createdAt) : undefined,
+      link: links[index] || undefined,
+    };
+  });
+
   return (
-    <div className="progress">
-      <h3>Status</h3>
-      <ol className="stages">
-        {STAGES.map((name, index) => {
-          const last = index === STAGES.length - 1;
-          const label = last && status === 'SUCCESS' ? 'SUCCESS' : last && failed ? 'FAILED' : name;
-          return (
-            <li key={name} className={index < stage ? 'done' : index === stage ? (failed ? 'bad' : status === 'SUCCESS' ? 'good' : 'now') : ''} aria-current={index === stage ? 'step' : undefined}>
-              {label}
-            </li>
-          );
-        })}
-      </ol>
-      {text && <p role="status">{text}</p>}
-      <p className="hint">
-        {status && `${status}. `}
-        {executionId && (
-          <>
-            Execution <code>{executionId}</code>
-          </>
-        )}
-      </p>
-      <ul className="links">
-        {depositTxHash && (
-          <li>
-            Deposit: <External href={`${evmTx}${depositTxHash}`}>{short(depositTxHash)}</External>
-          </li>
-        )}
-        {evmTxHash && evmTxHash !== depositTxHash && (
-          <li>
-            EVM transaction: <External href={`${evmTx}${evmTxHash}`}>{short(evmTxHash)}</External>
-          </li>
-        )}
-        {solanaTxHash && (
-          <li>
-            Solana transaction: <External href={`${SOLSCAN}/tx/${solanaTxHash}`}>{short(solanaTxHash)}</External>
-          </li>
-        )}
-      </ul>
-    </div>
+    <Block>
+      {text && <PhaseCallout phase={phase} text={text} since={execution?.createdAt} />}
+      {/* the callout says each phase as it changes, so the stages stay quiet */}
+      <Timeline stages={stages} label="Progress" announce="" />
+      {(status || executionId) && (
+        <MetaLine>
+          {status && !stale && `${status}. `}
+          {executionId && (
+            <>
+              Execution <code>{executionId}</code>
+            </>
+          )}
+        </MetaLine>
+      )}
+    </Block>
   );
 }
 
-const Spends = ({ stored, figure }: { stored: StoredRecipe; figure: string }) =>
-  takesAmount(stored) ? (
-    <>
-      <dt>The recipe spends</dt>
-      <dd>{figure}</dd>
-    </>
-  ) : (
-    <>
-      <dt>Amounts</dt>
-      <dd>Fixed in the recipe's instructions and listed under What will run, whatever you pay here. What they do not spend stays with your intermediary.</dd>
-    </>
-  );
+const Spends = ({ stored, figure }: { stored: StoredRecipe; figure: string }) => <SpendsRow figure={takesAmount(stored) ? figure : undefined} />;
 
 type RecoverProps = {
   exec: UseExecutionResult;
@@ -268,67 +242,87 @@ function Recover({ exec, execution, unsigned, act, locked, recipe, stored, gate,
   if (!execution && (!held || held.amount === '0')) return null;
 
   return (
-    <div className="recover">
-      {execution ? <Notice kind="error">{isRefund ? 'The Refund failed, so the money is still with your intermediary. You can send it back again.' : 'The instructions failed on Solana, so the money stayed with your intermediary. You can run them again with it, or send it back.'}</Notice> : <Notice>Whatever a run does not spend stays with your intermediary until you send it back.</Notice>}
+    <Block tight>
+      {execution ? (
+        <Notice kind="error">{isRefund ? 'The Refund failed, so the money is still with your intermediary. You can send it back again.' : 'The instructions failed on Solana, so the money stayed with your intermediary. You can run them again with it, or send it back.'}</Notice>
+      ) : (
+        <p role="status" className="text-sm leading-5 text-muted">
+          Whatever a run does not spend stays with your intermediary until you send it back.
+        </p>
+      )}
       {!token && <Notice kind="error">Intents Connect no longer lists the token of this execution, so its balance cannot be read here.</Notice>}
       {balance.loading && <Notice>Reading what your intermediary holds…</Notice>}
       {balance.error && <Failure error={balance.error} retry={balance.retry} />}
       {held?.amount === '0' && <Notice>Your intermediary holds no {symbol} now, so there is nothing to retry with or send back.</Notice>}
       {held && held.amount !== '0' && (
         <>
-          <p>
-            Your intermediary holds <strong>{amount(held.amount)}</strong>.
-          </p>
-          {execution && !isRefund && !sameRecipe && <p className="hint">Retry is offered on the page of the recipe that failed.</p>}
-          {sameRecipe && gate && <p className="hint">{gate}</p>}
-          <div className="row">
+          <Held>{amount(held.amount)}</Held>
+          {execution && !isRefund && !sameRecipe && <Caption>Retry is offered on the page of the recipe that failed.</Caption>}
+          {sameRecipe && gate && <Caption>{gate}</Caption>}
+          <div className="flex flex-col gap-2">
             {sameRecipe && (
-              <button disabled={locked || !!gate} onClick={askRetry}>
-                Retry
-              </button>
+              <OptionTile
+                icon={<RotateCcw />}
+                title="Run it again"
+                action={
+                  <Button size="sm" disabled={locked || !!gate} onClick={askRetry}>
+                    Retry
+                  </Button>
+                }
+              >
+                The instructions run again on what your intermediary holds, so nothing is deposited.
+              </OptionTile>
             )}
-            <button disabled={locked || !backTo} onClick={askRefund}>
-              Refund
-            </button>
+            <OptionTile
+              icon={<Undo2 />}
+              title="Send it back"
+              action={
+                <Button size="sm" disabled={locked || !backTo} onClick={askRefund}>
+                  Refund
+                </Button>
+              }
+            >
+              {backTo ? `As ${backTo.symbol} on ${CHAINS.find(({ id }) => id === backTo.blockchain)?.name}, to the wallet connected here.` : 'To the wallet connected here.'}
+            </OptionTile>
           </div>
           {retry && (
-            <div className="card">
-              <dl className="figures">
+            <QuoteBox title="Retry">
+              <Figures>
                 <dt>Fee</dt>
                 <dd>{amount(retry.networkFee)}</dd>
                 <Spends stored={stored} figure={amount(retry.spendable)} />
-              </dl>
+              </Figures>
               {moved && <Notice kind="warn">The fee moved before you signed. These are the new numbers, and nothing was charged.</Notice>}
               {unsigned && <Notice kind="warn">Your wallet will first ask you to sign the deletion of the earlier attempt. That moves no money.</Notice>}
-              <button className="primary" disabled={locked || !!gate} onClick={signRetry}>
+              <Button variant="primary" size="lg" block icon={<PenLine />} disabled={locked || !!gate} onClick={signRetry}>
                 Sign and retry
-              </button>
-            </div>
+              </Button>
+            </QuoteBox>
           )}
           {refund && backTo && (
-            <div className="card">
-              <dl className="figures">
+            <QuoteBox title="Refund">
+              <Figures>
                 <dt>You get at least</dt>
                 <dd>
                   {fromAtomic(refund.quote.minAmountOut, backTo.decimals)} {backTo.symbol} on {CHAINS.find(({ id }) => id === backTo.blockchain)?.name}
                 </dd>
                 <dt>Sent to</dt>
                 <dd>
-                  <code>{address}</code>
+                  <code className="font-mono text-[0.8125rem] break-all">{address}</code>
                 </dd>
                 <dt>Fee</dt>
                 <dd>{amount(refund.details.networkFee)}</dd>
-              </dl>
-              <p className="hint">Figures from a test run: the real one can differ by what the price does in the seconds before you sign.</p>
+              </Figures>
+              <Caption>Figures from a test run: the real one can differ by what the price does in the seconds before you sign.</Caption>
               {unsigned && <Notice kind="warn">Your wallet will first ask you to sign the deletion of the earlier attempt. That moves no money.</Notice>}
-              <button className="primary" disabled={locked} onClick={signRefund}>
+              <Button variant="primary" size="lg" block icon={<PenLine />} disabled={locked} onClick={signRefund}>
                 Sign and refund
-              </button>
-            </div>
+              </Button>
+            </QuoteBox>
           )}
         </>
       )}
-    </div>
+    </Block>
   );
 }
 
@@ -366,20 +360,29 @@ function Existing({ id, head, address, intermediary, stored, list, gate, locked,
       {head} <code>{id}</code>
     </p>
   );
-  const hide = onHide && <button onClick={onHide}>Hide</button>;
+  const hide = onHide && (
+    <Button size="sm" variant="ghost" onClick={onHide}>
+      Hide
+    </Button>
+  );
   // a 409 stays on the screen until a new flow starts, and once the execution is over a reload is the way to one
-  const reload = !onHide && <button onClick={() => location.reload()}>Reload this page</button>;
+  const reload = !onHide && (
+    <Button size="sm" icon={<RefreshCw />} onClick={() => location.reload()}>
+      Reload this page
+    </Button>
+  );
 
   if (!execution) {
     return (
-      <div className="card">
-        {title}
+      <ExistingFrame title={title}>
         {found.loading && <Notice>Reading it…</Notice>}
         {found.error && <Failure error={new Error(`Could not read it, so nothing is offered for it yet: ${explain(found.error)}`)} retry={found.retry} />}
-        {execution === null && <p>Connect no longer has it.</p>}
-        {hide}
-        {execution === null && reload}
-      </div>
+        {execution === null && <p className="text-sm text-muted">Connect no longer has it.</p>}
+        <Actions>
+          {hide}
+          {execution === null && reload}
+        </Actions>
+      </ExistingFrame>
     );
   }
 
@@ -400,9 +403,8 @@ function Existing({ id, head, address, intermediary, stored, list, gate, locked,
   const chain = CHAINS.find(({ id: known }) => known === token?.blockchain);
 
   return (
-    <div className="card">
-      {title}
-      <dl className="figures">
+    <ExistingFrame title={title}>
+      <Facts>
         <dt>Status</dt>
         <dd>
           {status}, {needsSignature ? 'and it still needs your signature' : 'signed'}
@@ -425,57 +427,38 @@ function Existing({ id, head, address, intermediary, stored, list, gate, locked,
         )}
         <dt>Deposit hash</dt>
         <dd>{transaction?.evmTxHash ? <code>{transaction.evmTxHash}</code> : 'none seen yet'}</dd>
-      </dl>
-      <details className="summary" open={asksWallet || other}>
-        <summary>
-          What it runs: {steps.length} {steps.length === 1 ? 'instruction' : 'instructions'}
-        </summary>
-        <ol className="steps">
-          {steps.map((step, index) => (
-            <li key={index}>
-              {'programId' in step ? (
-                <>
-                  <code>{step.programId}</code>
-                  <div className="hint">
-                    Data: <code>{step.discriminator}</code>
-                  </div>
-                  {step.args?.length > 0 && <pre>{JSON.stringify(step.args, null, 2)}</pre>}
-                  <ul className="programs">
-                    {step.accounts?.map(({ pubkey }, at) => (
-                      <li key={at}>
-                        <code>{pubkey}</code> {(pubkey === BACKEND_PLACEHOLDERS.intermediary || pubkey === intermediary) && <em>your intermediary</em>}
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              ) : (
-                <pre>{JSON.stringify(step, null, 2)}</pre>
-              )}
-            </li>
-          ))}
-        </ol>
-      </details>
+      </Facts>
+      <Details
+        open={asksWallet || other}
+        summary={
+          <>
+            What it runs: {steps.length} {steps.length === 1 ? 'instruction' : 'instructions'}
+          </>
+        }
+      >
+        <ExecutionSteps steps={steps} intermediary={intermediary} />
+      </Details>
       {other && asksWallet && <Notice kind="error">This is not the recipe on this page, so this page will not sign or fund it. Anyone who knows your wallet address can create an execution for it, so if you did not start this one, delete it.</Notice>}
-      {other && !asksWallet && <p className="hint">This is not the recipe on this page.</p>}
-      {over && <p>It is no longer in flight, so a new run can start.</p>}
-      {!asksWallet && !over && !terminal && <p className="hint">It is already signed, so resuming only follows it here and asks your wallet for nothing.</p>}
+      {other && !asksWallet && <Caption>This is not the recipe on this page.</Caption>}
+      {over && <p className="text-sm text-text">It is no longer in flight, so a new run can start.</p>}
+      {!asksWallet && !over && !terminal && <Caption>It is already signed, so resuming only follows it here and asks your wallet for nothing.</Caption>}
       {asksWallet && !deletable && <Notice kind="warn">{CANCEL_NOTE}</Notice>}
-      {resumable && !open && gate && <p className="hint">{gate}</p>}
-      <div className="row">
+      {resumable && !open && gate && <Caption>{gate}</Caption>}
+      <Actions>
         {resumable && (
-          <button disabled={locked || !open} onClick={resume(id)}>
+          <Button variant="primary" size="sm" icon={<RotateCcw />} disabled={locked || !open} onClick={resume(id)}>
             Resume it
-          </button>
+          </Button>
         )}
         {asksWallet && (
-          <button disabled={locked} onClick={remove}>
+          <Button size="sm" variant={!resumable && deletable ? 'primary' : 'secondary'} disabled={locked} onClick={remove} className={LONG_LABEL}>
             {deletable ? 'Delete it (a signature that moves no money)' : 'Cancel it'}
-          </button>
+          </Button>
         )}
         {hide}
         {over && reload}
-      </div>
-    </div>
+      </Actions>
+    </ExistingFrame>
   );
 }
 
@@ -661,174 +644,307 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
   const depositToken = list.data?.sources.find(token => token.assetId === deposit?.originAsset);
   const existing = { address: address!, intermediary, stored, list: list.data, gate: refused, locked, act, resume, drop: dropAndSay };
 
+  // the person reads what will run before they consent to it on a shared link, and finds it under the card elsewhere
+  const summary = built.steps && <Summary stored={stored} steps={built.steps} intermediary={intermediary ?? STAND_IN} real={!!intermediary} amountKnown={!!preview} shared={shared} />;
+  const quoted = preview && source && target;
+
   return (
-    <div className="execute">
-      {shared && (
-        <Notice kind="warn">
-          <strong>This recipe was made by whoever shared this link, not by Connect Anything.</strong> Nobody has checked it. If you run it you pay from your own wallet, and the instructions below run on Solana with your intermediary as the signer, so they can move whatever
-          your intermediary holds. Run it only if you trust the person who sent you the link and you understand what is listed here.
-        </Notice>
-      )}
-      {built.steps && <Summary stored={stored} steps={built.steps} intermediary={intermediary ?? STAND_IN} real={!!intermediary} amountKnown={!!preview} shared={shared} />}
+    <div data-ui="run" className="mx-auto flex w-full max-w-run min-w-0 flex-col gap-4">
+      {shared && <TrustPanel stored={stored} instructions={stored.steps.length} check={program => <PublishedCheck stored={stored} program={program} />} />}
+      {shared && summary}
       {built.problem && <Notice kind="error">This recipe cannot be built: {built.problem}</Notice>}
       {issues.length > 0 && (
         <Notice kind="error">
           Connect cannot run this recipe:
-          {issues.map(issue => (
-            <div key={issueText(issue)}>{issueText(issue)}</div>
-          ))}
+          <ul className="mt-1.5 flex list-disc flex-col gap-1 pl-5">
+            {issues.map(issue => (
+              <li key={issueText(issue)}>{issueText(issue)}</li>
+            ))}
+          </ul>
         </Notice>
       )}
-      {shared && (
-        <label className="inline consent">
-          <input type="checkbox" checked={understood} onChange={event => setUnderstood(event.target.checked)} /> I have read what will run, and I accept that it was made by whoever shared this link.
-        </label>
-      )}
 
-      <h3>Wallet</h3>
-      {wallet ? (
-        <p>
-          <code>{address}</code>{' '}
-          <button disabled={locked} onClick={() => disconnect()}>
-            Disconnect
-          </button>
-        </p>
-      ) : (
-        <button className="primary" disabled={isConnecting} onClick={() => connect()}>
-          {isConnecting ? 'Connecting…' : 'Connect EVM wallet'}
-        </button>
-      )}
-      {lookup.error && <Failure error={new Error(`Could not look up your intermediary: ${explain(lookup.error)}`)} retry={lookup.retry} />}
-      {intermediary && (
-        <p className="hint">
-          Your intermediary on Solana: <code>{intermediary}</code>
-        </p>
-      )}
+      <RunCard>
+        <Swap>
+          <Panel
+            label="You pay"
+            idle={!wallet}
+            aside={
+              list.data && (
+                <SelectPill
+                  label="Chain"
+                  compact
+                  value={chain}
+                  disabled={locked}
+                  onChange={event => clearing(setChain)(event.target.value)}
+                  display={
+                    <>
+                      <ChainIcon chain={chain} size={18} />
+                      {CHAINS.find(({ id }) => id === chain)?.name}
+                    </>
+                  }
+                >
+                  {CHAINS.map(({ id, name }) => (
+                    <option key={id} value={id}>
+                      {name}
+                    </option>
+                  ))}
+                </SelectPill>
+              )
+            }
+            footer={
+              <>
+                {wallet ? (
+                  <PaidFrom address={address}>
+                    <Button variant="ghost" size="xs" disabled={locked} onClick={() => disconnect()}>
+                      Disconnect
+                    </Button>
+                  </PaidFrom>
+                ) : (
+                  <span>No wallet connected yet.</span>
+                )}
+                {suggested && source && target && source.symbol !== target.symbol && (
+                  <span className="text-warning">
+                    The amount above is worked out in {target.symbol}. For {source.symbol}, enter what it is worth.
+                  </span>
+                )}
+              </>
+            }
+          >
+            {list.loading && (
+              <span role="status" className="flex flex-1 items-center gap-2 text-sm text-muted">
+                <Spinner size="sm" />
+                Loading tokens…
+              </span>
+            )}
+            {list.loading && <Skeleton className="h-9 w-28 rounded-full" />}
+            {list.data && (
+              <>
+                <input aria-label="Amount you pay" inputMode="decimal" autoComplete="off" placeholder="0.00" value={amount} disabled={locked} onChange={event => clearing(setTyped)(event.target.value)} className={AMOUNT_INPUT} />
+                <SelectPill
+                  label="Token"
+                  value={source?.assetId ?? ''}
+                  disabled={locked || !source}
+                  onChange={event => clearing(setPick)(event.target.value)}
+                  display={
+                    source ? (
+                      <>
+                        <TokenIcon symbol={source.symbol} size={22} />
+                        {source.symbol}
+                      </>
+                    ) : (
+                      'None'
+                    )
+                  }
+                >
+                  {sources.map(token => (
+                    <option key={token.assetId} value={token.assetId}>
+                      {token.symbol} {token.contractAddress ? `(${short(token.contractAddress)})` : '(native)'}
+                    </option>
+                  ))}
+                </SelectPill>
+              </>
+            )}
+          </Panel>
+          <PanelArrow />
+          <Panel
+            label="You get"
+            idle={!wallet}
+            aside={<ChainTag chain="sol" name="Solana" />}
+            footer={
+              (target || lookup.loading || intermediary) && (
+                <>
+                  {target && <span>It arrives on Solana as {target.symbol}.</span>}
+                  {lookup.loading && <Skeleton className="h-4 w-4/5" />}
+                  {intermediary && (
+                    <p className="min-w-0">
+                      Your intermediary on Solana: <Address value={intermediary} full className="text-balance" />
+                    </p>
+                  )}
+                </>
+              )
+            }
+          >
+            <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
+              {quoted ? <Arrives amount={fromAtomic(preview.execution.quote.minAmountOut, target.decimals)} symbol={target.symbol} kept={kept} /> : <NoFigure />}
+              {target && <TokenTag symbol={target.symbol} />}
+            </div>
+          </Panel>
+        </Swap>
 
-      <h3>Pay from</h3>
-      {list.loading && <Notice>Loading tokens…</Notice>}
-      {list.error && <Failure error={list.error} retry={list.retry} />}
-      {list.data && (
-        <div className="grid">
-          <label>
-            Chain{' '}
-            <select value={chain} disabled={locked} onChange={event => clearing(setChain)(event.target.value)}>
-              {CHAINS.map(({ id, name }) => (
-                <option key={id} value={id}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Token{' '}
-            <select value={source?.assetId ?? ''} disabled={locked || !source} onChange={event => clearing(setPick)(event.target.value)}>
-              {sources.map(token => (
-                <option key={token.assetId} value={token.assetId}>
-                  {token.symbol} {token.contractAddress ? `(${short(token.contractAddress)})` : '(native)'}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Amount <input inputMode="decimal" placeholder="0.00" value={amount} disabled={locked} onChange={event => clearing(setTyped)(event.target.value)} />
-          </label>
+        {lookup.error && <Failure error={new Error(`Could not look up your intermediary: ${explain(lookup.error)}`)} retry={lookup.retry} />}
+        {list.error && <Failure error={list.error} retry={list.retry} />}
+
+        {preview && source && target && (
+          <QuoteBox
+            title="Exact amounts"
+            action={
+              <Button variant="ghost" size="xs" icon={<RefreshCw />} disabled={!canQuote} onClick={askQuote}>
+                Get exact amount and fee
+              </Button>
+            }
+          >
+            <Figures>
+              <dt>You pay</dt>
+              <dd>
+                <Figure
+                  value={
+                    <>
+                      {fromAtomic(preview.execution.quote.amount, source.decimals)} {source.symbol} on {CHAINS.find(({ id }) => id === source.blockchain)?.name}
+                    </>
+                  }
+                  note="plus the gas of the deposit"
+                />
+              </dd>
+              <dt>Network fee</dt>
+              <dd>
+                <Figure
+                  value={preview.execution.details.networkFee ? `${fromAtomic(preview.execution.details.networkFee, target.decimals)} ${target.symbol}` : 'none stated'}
+                  note="taken out of what is delivered"
+                />
+              </dd>
+              <Spends stored={stored} figure={preview.spendable ? `${fromAtomic(preview.spendable, target.decimals)} ${target.symbol}` : '–'} />
+            </Figures>
+            <Figures className="border-t border-border pt-2.5 empty:hidden">{preview.spendable && outcome?.(preview.spendable)}</Figures>
+            {moved && <Notice kind="warn">The quote moved before you signed. These are the new numbers, and nothing was charged.</Notice>}
+            {unsigned && <Notice kind="warn">Your wallet will first ask you to sign the deletion of the earlier attempt. That moves no money.</Notice>}
+          </QuoteBox>
+        )}
+        {working && !preview && !exec.isBusy && <WorkingLine />}
+
+        {shared && (
+          <ConsentBox given={understood}>
+            <Checkbox checked={understood} onChange={setUnderstood} label="I have read what will run, and I accept that it was made by whoever shared this link." />
+          </ConsentBox>
+        )}
+
+        <div className="flex flex-col gap-2.5">
+          {!wallet ? (
+            <Button variant="primary" size="lg" block icon={<Wallet />} disabled={isConnecting} onClick={() => connect()}>
+              {isConnecting ? 'Connecting…' : 'Connect EVM wallet'}
+            </Button>
+          ) : !isEvm ? (
+            <Button
+              variant="primary"
+              size="lg"
+              block
+              icon={<ArrowLeftRight />}
+              disabled={locked}
+              onClick={async () => {
+                try {
+                  await disconnect();
+                  await connect();
+                } catch {
+                  // closing the list of wallets is no error, and the button stays for another try
+                }
+              }}
+            >
+              Switch wallet
+            </Button>
+          ) : quoted ? (
+            <Button variant="primary" size="lg" block icon={<PenLine />} loading={exec.isBusy} disabled={locked || !!exec.recovery || !!blocked || unfinished} onClick={sign}>
+              Sign and run
+            </Button>
+          ) : (
+            <Button variant={exec.status && atRest ? 'secondary' : 'primary'} size="lg" block icon={<Calculator />} disabled={!canQuote} onClick={askQuote}>
+              Get exact amount and fee
+            </Button>
+          )}
+          <div aria-live="polite">
+            {blocked && <Reason tone={wallet && !isEvm ? 'warning' : intermediary === null || (list.data && !target) ? 'danger' : 'muted'}>{blocked}</Reason>}
+          </div>
+          {preview && source && target && (
+            <Caption icon={<PenLine />}>Your wallet asks for one signature, then for the deposit, switching to {CHAINS.find(({ id }) => id === source.blockchain)?.name} if it is on another network.</Caption>
+          )}
+          <Caption icon={<Clock />}>{TIME_NOTE}</Caption>
         </div>
-      )}
-      {suggested && source && target && source.symbol !== target.symbol && (
-        <p className="hint">
-          The amount above is worked out in {target.symbol}. For {source.symbol}, enter what it is worth.
-        </p>
-      )}
-      <p className="hint">{TIME_NOTE}</p>
-      {target && <p className="hint">It arrives on Solana as {target.symbol}.</p>}
-      {blocked && <p className="hint">{blocked}</p>}
-      <button disabled={!canQuote} onClick={askQuote}>
-        Get exact amount and fee
-      </button>
-      {working && !preview && !exec.isBusy && <Notice>Working…</Notice>}
 
-      {preview && source && target && (
-        <div className="card">
-          <dl className="figures">
-            <dt>You pay</dt>
-            <dd>
-              {fromAtomic(preview.execution.quote.amount, source.decimals)} {source.symbol} on {CHAINS.find(({ id }) => id === source.blockchain)?.name}, plus the gas of the deposit
-            </dd>
-            <dt>Arrives on Solana</dt>
-            <dd>
-              at least {fromAtomic(preview.execution.quote.minAmountOut, target.decimals)} {target.symbol}, after the bridge's fee and slippage
-              {kept !== null && `: the bridge keeps ${Math.round(kept * 100)}% of what you pay`}
-            </dd>
-            <dt>Network fee</dt>
-            <dd>
-              {preview.execution.details.networkFee ? `${fromAtomic(preview.execution.details.networkFee, target.decimals)} ${target.symbol}` : 'none stated'}, taken out of what is delivered
-            </dd>
-            <Spends stored={stored} figure={preview.spendable ? `${fromAtomic(preview.spendable, target.decimals)} ${target.symbol}` : '–'} />
-            {preview.spendable && outcome?.(preview.spendable)}
-          </dl>
-          {moved && <Notice kind="warn">The quote moved before you signed. These are the new numbers, and nothing was charged.</Notice>}
-          {unsigned && <Notice kind="warn">Your wallet will first ask you to sign the deletion of the earlier attempt. That moves no money.</Notice>}
-          <p className="hint">Your wallet asks for one signature, then for the deposit, switching to {CHAINS.find(({ id }) => id === source.blockchain)?.name} if it is on another network.</p>
-          <button className="primary" disabled={locked || !!exec.recovery || !!blocked || unfinished} onClick={sign}>
-            Sign and run
-          </button>
-        </div>
-      )}
+        {/* the card above already says what a 409 means, but not that a deletion from it failed */}
+        {error && (exec.recovery?.kind !== 'resume-or-cancel' || error !== explain(exec.error)) && <Notice kind="error">{error}</Notice>}
+        {deleted && exec.phase !== 'cancelled' && <DeletedLine id={deleted} />}
+        {unsigned && !preview && (
+          <Alert
+            kind="warning"
+            actions={
+              <Button size="sm" disabled={locked} onClick={cancel(unsigned)} className={LONG_LABEL}>
+                Delete it (a signature that moves no money)
+              </Button>
+            }
+          >
+            An attempt was created and never signed, and it holds this wallet's one in-flight slot.
+          </Alert>
+        )}
+        {address && exec.recovery?.kind === 'resume-or-cancel' && <Existing key={exec.recovery.executionId} id={exec.recovery.executionId} head="This wallet already has an execution in flight, and Connect runs one at a time per wallet and chain:" {...existing} />}
 
-      {unsigned && !preview && (
-        <Notice kind="warn">
-          An attempt was created and never signed, and it holds this wallet's one in-flight slot. <button disabled={locked} onClick={cancel(unsigned)}>Delete it (a signature that moves no money)</button>
-        </Notice>
-      )}
-      {address && exec.recovery?.kind === 'resume-or-cancel' && <Existing key={exec.recovery.executionId} id={exec.recovery.executionId} head="This wallet already has an execution in flight, and Connect runs one at a time per wallet and chain:" {...existing} />}
-      {exec.recovery?.kind === 'retry-transfer' && (
-        <Notice kind="warn">
-          The deposit transfer did not go through. {CANCEL_NOTE}{' '}
-          <button disabled={locked} onClick={act(() => exec.retryDeposit())}>
-            Send the deposit again
-          </button>{' '}
-          <button disabled={locked} onClick={cancel(exec.recovery.executionId)}>
-            Cancel
-          </button>
-        </Notice>
-      )}
-      {unfinished && (
-        <Notice kind="warn">
-          This execution has not finished, and this page stopped following it. Do not pay again before you know how it ended.{' '}
-          <button disabled={locked} onClick={resume(exec.executionId!)}>
-            Resume
-          </button>
-        </Notice>
-      )}
-      {address && !exec.executionId && !locked && !exec.recovery && last && <Existing key={last} id={last} head="You started an execution from this browser:" onHide={() => setHidden([...hidden, last])} {...existing} />}
-      {/* the card above already says what a 409 means, but not that a deletion from it failed */}
-      {error && (exec.recovery?.kind !== 'resume-or-cancel' || error !== explain(exec.error)) && <Notice kind="error">{error}</Notice>}
-      {deleted && exec.phase !== 'cancelled' && (
-        <Notice>
-          Execution <code>{deleted}</code> was deleted, so a new run can start.
-        </Notice>
-      )}
+        {(exec.status || exec.isBusy || exec.phase === 'cancelled') && <Progress exec={exec} chain={chain} resumed={resumed} unfinished={unfinished} />}
+        {exec.recovery?.kind === 'retry-transfer' && (
+          <Alert
+            kind="warning"
+            title="The deposit transfer did not go through."
+            actions={
+              <>
+                <Button variant="primary" size="sm" disabled={locked} onClick={act(() => exec.retryDeposit())}>
+                  Send the deposit again
+                </Button>
+                <Button size="sm" disabled={locked} onClick={cancel(exec.recovery.executionId)}>
+                  Cancel
+                </Button>
+              </>
+            }
+          >
+            {CANCEL_NOTE}
+          </Alert>
+        )}
+        {unfinished && (
+          <Alert
+            kind="warning"
+            actions={
+              <Button variant="primary" size="sm" icon={<RotateCcw />} disabled={locked} onClick={resume(exec.executionId!)}>
+                Resume
+              </Button>
+            }
+          >
+            This execution has not finished, and this page stopped following it. Do not pay again before you know how it ended.
+          </Alert>
+        )}
+        {resumed && deposit?.depositAddress && !exec.depositTxHash && !exec.execution?.transaction?.evmTxHash && (exec.status === 'DEPOSIT_PENDING' || exec.status === 'EXPIRED') && (
+          <DepositBox
+            actions={
+              <>
+                <Button size="sm" icon={<Copy />} onClick={() => copyText(deposit.depositAddress, 'Deposit address copied')}>
+                  Copy the address
+                </Button>
+                <Button size="sm" variant="ghost" disabled={exec.isCancelling} onClick={cancel(exec.executionId!)}>
+                  Cancel, I will not send it
+                </Button>
+              </>
+            }
+          >
+            <p>
+              Waiting for a deposit of <strong>{depositToken ? `${fromAtomic(deposit.amount, depositToken.decimals)} ${depositToken.symbol}` : `${deposit.amount} atomic units`}</strong> to <code>{deposit.depositAddress}</code>. If you already sent it, wait: sending it again would pay
+              twice. If you have not, send it from any wallet and this page will follow it.
+            </p>
+            <p className="mt-2 text-xs text-muted">{CANCEL_NOTE}</p>
+          </DepositBox>
+        )}
+        {exec.phase === 'expired' && !resumed && (
+          <Alert
+            kind="warning"
+            actions={
+              <Button size="sm" disabled={exec.isCancelling} onClick={cancel(exec.executionId!)}>
+                Cancel the execution
+              </Button>
+            }
+          >
+            {CANCEL_NOTE}
+          </Alert>
+        )}
+        {exec.status === 'DEPOSIT_FAILED' && <Notice kind="error">The deposit failed, for example on an invalid amount, so nothing ran on Solana. What was transferred is refunded.</Notice>}
+        {address && !exec.executionId && !locked && !exec.recovery && last && <Existing key={last} id={last} head="You started an execution from this browser:" onHide={() => setHidden([...hidden, last])} {...existing} />}
+        {list.data && (failed || atRest) && <Recover key={failed?.id} exec={exec} execution={failed} unsigned={unsigned} act={act} locked={locked || !!exec.recovery || unfinished} recipe={recipe} stored={stored} gate={refused} list={list.data} intermediary={intermediary} source={source} />}
+      </RunCard>
 
-      {(exec.status || exec.isBusy || exec.phase === 'cancelled') && <Progress exec={exec} chain={chain} resumed={resumed} />}
-      {resumed && deposit?.depositAddress && !exec.depositTxHash && !exec.execution?.transaction?.evmTxHash && (exec.status === 'DEPOSIT_PENDING' || exec.status === 'EXPIRED') && (
-        <Notice>
-          Waiting for a deposit of {depositToken ? `${fromAtomic(deposit.amount, depositToken.decimals)} ${depositToken.symbol}` : `${deposit.amount} atomic units`} to <code>{deposit.depositAddress}</code>. If you already sent it, wait: sending it again would pay twice. If you have not, send it from any wallet and this page will follow it. {CANCEL_NOTE}{' '}
-          <button disabled={exec.isCancelling} onClick={cancel(exec.executionId!)}>
-            Cancel, I will not send it
-          </button>
-        </Notice>
-      )}
-      {exec.phase === 'expired' && !resumed && (
-        <Notice kind="warn">
-          {CANCEL_NOTE}{' '}
-          <button disabled={exec.isCancelling} onClick={cancel(exec.executionId!)}>
-            Cancel the execution
-          </button>
-        </Notice>
-      )}
-      {exec.status === 'DEPOSIT_FAILED' && <Notice kind="error">The deposit failed, for example on an invalid amount, so nothing ran on Solana. What was transferred is refunded.</Notice>}
-      {list.data && (failed || atRest) && <Recover key={failed?.id} exec={exec} execution={failed} unsigned={unsigned} act={act} locked={locked || !!exec.recovery || unfinished} recipe={recipe} stored={stored} gate={refused} list={list.data} intermediary={intermediary} source={source} />}
+      {!shared && summary}
     </div>
   );
 }

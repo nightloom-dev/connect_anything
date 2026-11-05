@@ -29,7 +29,9 @@ test('a shared recipe says who made it, and opens what will run', { tag: '@mobil
   // consent comes before anything else is asked (run-states state 08 has the rest)
   await expect(page.getByRole('checkbox', { name: CONSENT })).not.toBeChecked();
   await expect(page.getByText('Connect an EVM wallet to continue.')).toBeVisible();
-  await expect(page.getByRole('button', { name: QUOTE })).toBeDisabled();
+  // and until a wallet connects, connecting one is the only thing to do
+  await expect(page.getByRole('button', { name: QUOTE })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Connect EVM wallet' })).toBeEnabled();
 });
 
 test('the IDL a recipe carries is checked against the one the program publishes', async ({ page, api }) => {
@@ -54,12 +56,12 @@ test('the IDL a recipe carries is checked against the one the program publishes'
 test('a link that leads to no recipe, or to a malformed one, runs nothing', async ({ page }) => {
   for (const id of [RECIPES.missing, 'not-a-recipe-id']) {
     await page.goto(shared(id));
-    await expect(alertOf(page, 'This link does not lead to a recipe. Check it with whoever sent it to you.')).toBeVisible();
+    await expect(alertOf(page, 'This link does not lead to a recipe.')).toContainText('Ask the sender for a new link.');
     await expect(page.getByRole('button', { name: 'Connect EVM wallet' })).toHaveCount(0);
   }
 
   await page.goto(shared(RECIPES.corrupt));
-  await expect(alertOf(page, 'This recipe is malformed: it is not a version 1 recipe. Nothing can run from this link.')).toBeVisible();
+  await expect(alertOf(page, 'This recipe is malformed: it is not a version 1 recipe. Nothing can run from this link.')).toContainText('Ask the sender for a new link.');
   await expect(page.getByText('What will run')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Connect EVM wallet' })).toHaveCount(0);
 });
