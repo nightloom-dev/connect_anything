@@ -1,6 +1,8 @@
 import { Component, useEffect, useState, type ReactNode } from 'react';
+import { Check, Copy as CopyIcon, RotateCw } from 'lucide-react';
 import { explain } from './connect.ts';
 import { followsIntermediary, type Row } from './recipe.ts';
+import { Alert, Badge, Button } from './ui/index.ts';
 
 export class FetchError extends Error {
   status: number;
@@ -58,19 +60,27 @@ export function useAct() {
   return { working, error, act };
 }
 
+const ALERT = { info: 'info', warn: 'warning', error: 'danger', ok: 'success' } as const;
+
+/** The old screens' message, now an Alert: role alert for an error, status for the rest, as before. */
 export function Notice({ kind = 'info', children }: { kind?: 'info' | 'warn' | 'error' | 'ok'; children: ReactNode }) {
-  return (
-    <div className={`notice ${kind}`} role={kind === 'error' ? 'alert' : 'status'}>
-      {children}
-    </div>
-  );
+  return <Alert kind={ALERT[kind]}>{children}</Alert>;
 }
 
 export function Failure({ error, retry }: { error: Error; retry?: () => void }) {
   return (
-    <Notice kind="error">
-      {error.message} {retry && <button onClick={retry}>Try again</button>}
-    </Notice>
+    <Alert
+      kind="danger"
+      actions={
+        retry && (
+          <Button size="sm" icon={<RotateCw />} onClick={retry}>
+            Try again
+          </Button>
+        )
+      }
+    >
+      {error.message}
+    </Alert>
   );
 }
 
@@ -92,7 +102,11 @@ export function Copy({ text }: { text: string }) {
       () => setDone(true),
       () => {}, // the text is on the page and can be selected by hand
     );
-  return <button onClick={copy}>{done ? 'Copied' : 'Copy'}</button>;
+  return (
+    <Button size="sm" icon={done ? <Check className="text-success" /> : <CopyIcon />} onClick={copy}>
+      {done ? 'Copied' : 'Copy'}
+    </Button>
+  );
 }
 
 export const short = (value: string) => `${value.slice(0, 4)}…${value.slice(-4)}`;
@@ -129,11 +143,11 @@ export function AccountList({ accounts, program, intermediary, real = false, inp
     <ul className="accounts">
       {accounts.map((row, index) => (
         <li key={index}>
-          <div>
-            <strong>{row.name}</strong> {row.isSigner && <span className="tag strong">signs</span>} {row.isWritable && <span className="tag">writable</span>}{' '}
-            {row.optional && <span className="tag">optional</span>} <span className={`tag ${row.source}`}>{row.source === 'input' ? inputLabel : SOURCE[row.source]}</span>
+          <div className="account-head">
+            <strong>{row.name}</strong> {row.isSigner && <Badge variant="signs">signs</Badge>} {row.isWritable && <Badge variant="writable">writable</Badge>}{' '}
+            {row.optional && <Badge variant="optional">optional</Badge>} <Badge variant={row.source}>{row.source === 'input' ? inputLabel : SOURCE[row.source]}</Badge>
           </div>
-          <div>{address(row)}</div>
+          <div className="account-address">{address(row)}</div>
           {edit?.(row)}
         </li>
       ))}
