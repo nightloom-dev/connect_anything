@@ -35,6 +35,8 @@ test('a shared recipe says who made it, and opens what will run', { tag: '@mobil
 });
 
 test('the IDL a recipe carries is checked against the one the program publishes', async ({ page, api }) => {
+  // three page loads of the dev server, each several seconds of CPU when the suite runs in parallel
+  test.slow();
   const held = api.hold('idl');
   await page.goto(shared(RECIPES.demo));
   await held.reached();
@@ -54,6 +56,8 @@ test('the IDL a recipe carries is checked against the one the program publishes'
 });
 
 test('a link that leads to no recipe, or to a malformed one, runs nothing', async ({ page }) => {
+  // three page loads of the dev server, each several seconds of CPU when the suite runs in parallel
+  test.slow();
   for (const id of [RECIPES.missing, 'not-a-recipe-id']) {
     await page.goto(shared(id));
     await expect(alertOf(page, 'This link does not lead to a recipe.')).toContainText('Ask the sender for a new link.');

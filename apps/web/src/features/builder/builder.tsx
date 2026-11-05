@@ -687,10 +687,7 @@ export function Builder() {
         <section aria-labelledby="builder-step" className="flex flex-col gap-6">
           <StepHeader ref={heading} number={4} title="Run" description="Pay from Base, Arbitrum or Ethereum with one signature. Intents Connect delivers the token on Solana and runs the recipe." />
           {pending ?? (stored && recipe ? (
-            // The run card is still the old screen, in the .legacy wrapper its styles are scoped to. The wrapper goes once the run card is redesigned.
-            <div className="legacy">
-              <Execute exec={exec} recipe={recipe} stored={stored} />
-            </div>
+            <Execute exec={exec} recipe={recipe} stored={stored} />
           ) : (
             <EmptyState
               icon={<ListPlus />}

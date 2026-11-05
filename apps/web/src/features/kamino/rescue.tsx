@@ -143,10 +143,7 @@ function Position({ obligation, url, onBusy }: { obligation: Obligation; url: st
 
       <RunColumn>
         {ready.current ? (
-          // The run card's old markup needs the .legacy styles. This wrapper goes once the run card is redesigned.
-          <div className="legacy">
-            <Execute exec={exec} recipe={ready.current.recipe} stored={ready.current.stored} suggested={suggested} outcome={outcome} closed={why} />
-          </div>
+          <Execute exec={exec} recipe={ready.current.recipe} stored={ready.current.stored} suggested={suggested} outcome={outcome} closed={why} />
         ) : (
           <RunPlaceholder kind="closed" />
         )}
