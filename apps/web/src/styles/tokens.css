@@ -6,6 +6,8 @@
  * The scales are ours, not Tailwind's defaults: text-lg is 20px, rounded-lg is 12px, md starts at 960px.
  * Contrast, measured on surface (#12151c): text 15.4:1, muted 5.9:1, accent 5.2:1, white on accent-solid
  * 4.9:1. faint is 3.1:1, so it is for decoration and disabled things only, never for text that has to be read.
+ * border-control is 3.4:1 on surface and 3.2:1 on surface-2, the fill of a field: the edge is what shows where a
+ * field, a checkbox or a switch is, so it keeps 3:1 (WCAG 1.4.11). border and border-strong only part areas.
  */
 @theme static {
   --color-*: initial;
@@ -19,8 +21,11 @@
   --color-surface-3: #1f2430;
   --color-border: #242a36;
   --color-border-strong: #323a4a;
-  /* the edge of a field: lighter than a card's, so an input reads as one on any surface */
-  --color-border-control: #3b4457;
+  /* the edge of a field, a checkbox or a switch: 3:1 against its fill and the surfaces around it */
+  --color-border-control: #626b7f;
+  --color-border-control-hover: #7b8499;
+  /* the edge of a button under the pointer, which its label already identifies */
+  --color-border-hover: #3b4457;
 
   --color-text: #e8ecf3;
   --color-muted: #8a93a6;

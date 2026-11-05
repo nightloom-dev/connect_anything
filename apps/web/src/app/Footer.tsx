@@ -1,7 +1,9 @@
+import { ArrowUpRight } from 'lucide-react';
 import { Link } from 'wouter';
 import { DOCS_URL, LogoMark, REPO_URL } from './brand.tsx';
 
 const item = 'rounded-xs text-muted transition-colors duration-120 hover:text-text';
+const external = `${item} inline-flex items-center gap-1`;
 
 export function Footer() {
   return (
@@ -11,18 +13,22 @@ export function Footer() {
           <LogoMark size={18} className="shrink-0" />
           <span>Built on Aurora Intents Connect · Encode Solana Hackathon 2026</span>
         </p>
-        <nav aria-label="Footer" className="flex flex-wrap gap-x-5 gap-y-2">
+        <nav aria-label="Footer" className="flex flex-wrap gap-x-4 gap-y-2 sm:gap-x-5">
           <Link href="/kamino" className={item}>
             Rescue Kamino
           </Link>
           <Link href="/build" className={item}>
             Build
           </Link>
-          <a href={DOCS_URL} target="_blank" rel="noreferrer" className={item}>
-            README<span className="sr-only"> (opens in a new tab)</span>
+          <a href={DOCS_URL} target="_blank" rel="noreferrer" className={external}>
+            README
+            <ArrowUpRight className="size-3.5" aria-hidden />
+            <span className="sr-only"> (opens in a new tab)</span>
           </a>
-          <a href={REPO_URL} target="_blank" rel="noreferrer" className={item}>
-            GitHub<span className="sr-only"> (opens in a new tab)</span>
+          <a href={REPO_URL} target="_blank" rel="noreferrer" className={external}>
+            GitHub
+            <ArrowUpRight className="size-3.5" aria-hidden />
+            <span className="sr-only"> (opens in a new tab)</span>
           </a>
         </nav>
       </div>

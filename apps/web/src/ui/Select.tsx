@@ -46,7 +46,7 @@ export const fieldButton = ({ size = 'md', invalid = false, disabled = false }: 
       ? 'cursor-not-allowed border-border-control bg-surface text-muted opacity-60'
       : invalid
         ? 'border-danger/70 bg-surface-2 data-focus:border-danger data-focus:shadow-[0_0_0_4px_rgb(255_92_108/0.18)] data-open:border-danger'
-        : 'border-border-control bg-surface-2 [&[data-hover]:not([data-focus],[data-open])]:border-[#4a5468] data-focus:border-accent data-focus:shadow-glow data-open:border-accent',
+        : 'border-border-control bg-surface-2 [&[data-hover]:not([data-focus],[data-open])]:border-border-control-hover data-focus:border-accent data-focus:shadow-glow data-open:border-accent',
   );
 
 export const optionRow =

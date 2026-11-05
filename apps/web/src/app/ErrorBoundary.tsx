@@ -1,6 +1,9 @@
 import { Component, type ReactNode } from 'react';
 import { OctagonAlert, RotateCw } from 'lucide-react';
-import { Button, Card, CopyButton, Disclosure } from '../ui/index.ts';
+import { Button } from '../ui/Button.tsx';
+import { Card } from '../ui/Card.tsx';
+import { CopyButton } from '../ui/CopyButton.tsx';
+import { Disclosure } from '../ui/Disclosure.tsx';
 
 type Props = { children: ReactNode; /** A new value, such as the next route, clears the error. */ resetKey?: unknown };
 

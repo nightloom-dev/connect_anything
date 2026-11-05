@@ -12,7 +12,7 @@ const VARIANT: Record<ButtonVariant, string> = {
   primary:
     'border-transparent bg-accent-solid text-white shadow-button enabled:hover:bg-accent-solid-hover enabled:active:bg-accent-solid-active disabled:border-border disabled:bg-surface-2 disabled:text-faint disabled:shadow-none',
   secondary:
-    'border-border-strong bg-surface-2 text-text shadow-[inset_0_1px_0_rgb(255_255_255/0.03)] enabled:hover:border-border-control enabled:hover:bg-surface-3 disabled:border-border disabled:bg-surface disabled:text-faint disabled:shadow-none',
+    'border-border-strong bg-surface-2 text-text shadow-[inset_0_1px_0_rgb(255_255_255/0.03)] enabled:hover:border-border-hover enabled:hover:bg-surface-3 disabled:border-border disabled:bg-surface disabled:text-faint disabled:shadow-none',
   // accent tint, for a call to action that should not outshout the screen's primary: the wallet in the header
   soft: 'border-accent/36 bg-accent/14 text-accent-hover enabled:hover:border-accent/50 enabled:hover:bg-accent/20 enabled:hover:text-text enabled:active:bg-accent/25 disabled:border-border disabled:bg-surface disabled:text-faint',
   ghost: 'border-transparent bg-transparent text-muted enabled:hover:bg-white/6 enabled:hover:text-text enabled:active:bg-white/8 disabled:text-faint',

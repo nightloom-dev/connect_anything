@@ -118,7 +118,7 @@
   --normal-bg: var(--color-surface-2);
   --normal-bg-hover: var(--color-surface-3);
   --normal-border: var(--color-border-strong);
-  --normal-border-hover: var(--color-border-control);
+  --normal-border-hover: var(--color-border-hover);
   --normal-text: var(--color-text);
   --border-radius: var(--radius-lg);
   font-family: var(--font-sans);

@@ -80,7 +80,7 @@ export function Combobox<T>({
               ? 'cursor-not-allowed border-border-control bg-surface opacity-60'
               : error
                 ? 'border-danger/70 bg-surface-2 has-[input:focus]:border-danger has-[input:focus]:shadow-[0_0_0_4px_rgb(255_92_108/0.18)]'
-                : 'border-border-control bg-surface-2 [&:hover:not(:has(input:focus))]:border-[#4a5468] has-[input:focus]:border-accent has-[input:focus]:shadow-glow',
+                : 'border-border-control bg-surface-2 [&:hover:not(:has(input:focus))]:border-border-control-hover has-[input:focus]:border-accent has-[input:focus]:shadow-glow',
           )}
         >
           <Search className="size-4 shrink-0 text-muted" aria-hidden />

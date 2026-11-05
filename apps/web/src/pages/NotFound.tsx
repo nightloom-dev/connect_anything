@@ -1,7 +1,7 @@
 import { Blocks, LifeBuoy } from 'lucide-react';
 import { Link } from 'wouter';
 import { usePageTitle } from '../app/title.ts';
-import { buttonClass } from '../ui/index.ts';
+import { buttonClass } from '../ui/Button.tsx';
 
 export function NotFound() {
   usePageTitle('Not found');

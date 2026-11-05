@@ -43,10 +43,11 @@ Read from `apps/web/.env` or from the environment.
 
 ### Pages
 
-| Path      | What it is                                            |
-| --------- | ----------------------------------------------------- |
-| `/`       | Screens 1 to 4: program, form, simulation, run        |
-| `/r/:id`  | Run a recipe someone shared                           |
+| Path      | What it is                                              |
+| --------- | ------------------------------------------------------- |
+| `/`       | The landing page: what it does, and the two ways in     |
+| `/build`  | Screens 1 to 4: program, form, simulation, run          |
+| `/r/:id`  | Run a recipe someone shared                             |
 | `/kamino` | Repay a Kamino debt, `?wallet=&obligation=` fills it in |
 
 ### Server routes
@@ -112,7 +113,7 @@ recipe with two real repay transactions, in `packages/core/test/fixtures`. Publi
 
 `apps/web`, a switch on the path:
 
-- `/`: load a program by ID or an IDL file, pick an instruction, fill the form generated from its arguments and see
+- `/build`: load a program by ID or an IDL file, pick an instruction, fill the form generated from its arguments and see
   where each account comes from (found automatically, from the recipe, input). Simulate it, export it as TS code or a
   `/r/:id` link, and run it from Base, Arbitrum or Ethereum with one signature and a deposit: exact amount and fee
   before signing, statuses, transaction links.

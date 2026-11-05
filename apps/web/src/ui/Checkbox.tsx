@@ -34,7 +34,7 @@ export function Checkbox({ checked, onChange, label, description, indeterminate 
           onChange={event => onChange(event.target.checked)}
           className={cn(
             'peer absolute inset-0 m-0 cursor-pointer appearance-none rounded-xs border border-border-control bg-surface-2 transition-colors duration-120',
-            'hover:border-[#4a5468] checked:border-accent-solid checked:bg-accent-solid indeterminate:border-accent-solid indeterminate:bg-accent-solid disabled:cursor-not-allowed disabled:opacity-50',
+            'hover:border-border-control-hover checked:border-accent-solid checked:bg-accent-solid indeterminate:border-accent-solid indeterminate:bg-accent-solid disabled:cursor-not-allowed disabled:opacity-50',
           )}
         />
         <svg viewBox="0 0 16 16" fill="none" aria-hidden className="pointer-events-none absolute inset-0 hidden text-white peer-checked:block peer-indeterminate:hidden">

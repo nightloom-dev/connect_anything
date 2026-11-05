@@ -1,17 +1,18 @@
 import type { ReactNode } from 'react';
 import { ArrowUpRight, Menu, X } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
-import { Popover, Tooltip, buttonLook, cn } from '../ui/index.ts';
+import { buttonLook } from '../ui/Button.tsx';
+import { cn } from '../ui/cn.ts';
+import { Popover } from '../ui/Popover.tsx';
+import { Tooltip } from '../ui/Tooltip.tsx';
 import { DOCS_URL, GitHubMark, LogoMark, REPO_URL } from './brand.tsx';
-import { WalletButton } from './WalletButton.tsx';
 
 const NAV = [
   { href: '/kamino', label: 'Rescue Kamino' },
   { href: '/build', label: 'Build' },
 ];
 
-// the builder answers on / as well until the landing page takes it
-const isActive = (location: string, href: string) => location === href || (href === '/build' && location === '/');
+const isActive = (location: string, href: string) => location === href;
 
 function NavLink({ href, children }: { href: string; children: ReactNode }) {
   const [location] = useLocation();
@@ -70,7 +71,7 @@ function MobileMenu() {
           </a>
           <a href={REPO_URL} target="_blank" rel="noreferrer" className="flex h-10 items-center justify-between rounded-lg px-3 text-[15px] font-medium text-muted hover:bg-white/5 hover:text-text">
             GitHub
-            <GitHubMark className="size-4" />
+            <ArrowUpRight className="size-4" aria-hidden />
             <span className="sr-only"> (opens in a new tab)</span>
           </a>
         </nav>
@@ -79,14 +80,21 @@ function MobileMenu() {
   );
 }
 
-export function Header() {
+type HeaderProps = {
+  /** What stands in the wallet's place until the real button arrives in the slot. */
+  wallet?: ReactNode;
+  walletSlot?: (element: HTMLElement | null) => void;
+};
+
+export function Header({ wallet, walletSlot }: HeaderProps) {
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-bg/75 backdrop-blur-lg backdrop-saturate-150">
+    <header className="group/header sticky top-0 z-40 border-b border-border bg-bg/75 backdrop-blur-lg backdrop-saturate-150">
       <div className="mx-auto flex h-14 max-w-content items-center gap-2 px-4 sm:px-6">
-        <h1 className="mr-4 shrink-0 text-[15px] leading-none font-semibold tracking-tight">
+        <h1 className="mr-2 shrink-0 text-[15px] leading-none font-semibold tracking-tight sm:mr-4">
           <Link href="/" className="flex items-center gap-2.5 rounded-md text-text outline-offset-4">
             <LogoMark size={26} />
-            <span>Connect Anything</span>
+            {/* on a narrow phone a connected wallet needs the room, and the name stays for screen readers */}
+            <span className="max-[27.5rem]:group-has-data-[wallet=connected]/header:sr-only">Connect Anything</span>
           </Link>
         </h1>
         <nav aria-label="Main" className="hidden items-center gap-0.5 md:flex">
@@ -109,7 +117,8 @@ export function Header() {
               </a>
             </Tooltip>
           </div>
-          <WalletButton />
+          {wallet}
+          <span ref={walletSlot} className="contents" />
           <MobileMenu />
         </div>
       </div>

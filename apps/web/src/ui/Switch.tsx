@@ -33,7 +33,7 @@ export function Switch({ checked, onChange, label, description, disabled, size =
           onChange={event => onChange(event.target.checked)}
           className={cn(
             'peer absolute inset-0 m-0 cursor-pointer appearance-none rounded-full border border-border-control bg-surface-3 transition-colors duration-200 ease-out',
-            'hover:border-[#4a5468] checked:border-accent-solid checked:bg-accent-solid checked:hover:bg-accent-solid-hover disabled:cursor-not-allowed disabled:opacity-50',
+            'hover:border-border-control-hover checked:border-accent-solid checked:bg-accent-solid checked:hover:bg-accent-solid-hover disabled:cursor-not-allowed disabled:opacity-50',
           )}
         />
         <span

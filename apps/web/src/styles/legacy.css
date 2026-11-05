@@ -146,7 +146,7 @@
       transform var(--duration-fast) var(--ease-out);
   }
   .legacy :where(button:not([data-ui], [data-ui] *):hover:not(:disabled)) {
-    border-color: var(--color-border-control);
+    border-color: var(--color-border-hover);
     background: var(--color-surface-3);
   }
   .legacy :where(button:not([data-ui], [data-ui] *):active:not(:disabled)) {
@@ -200,7 +200,7 @@
     font-size: 13px;
   }
   .legacy :where(input:not([data-ui], [data-ui] *):hover:not(:disabled, :focus), select:not([data-ui], [data-ui] *):hover:not(:disabled, :focus)) {
-    border-color: #4a5468;
+    border-color: var(--color-border-control-hover);
   }
   .legacy :where(input:not([data-ui], [data-ui] *):focus, select:not([data-ui], [data-ui] *):focus) {
     border-color: var(--color-accent);
