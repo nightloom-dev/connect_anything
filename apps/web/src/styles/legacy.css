@@ -1,9 +1,9 @@
 /*
  * The classes builder.tsx, execute.tsx and rescue.tsx were written with, on the new tokens, until each screen is
- * redesigned on src/ui. The router wraps those screens in .legacy, which scopes the rules for bare elements. A
- * primitive marks its root with data-ui, and the element rules skip it and everything inside it, so a Button or an
- * Alert on an old screen looks the same as anywhere else. All of it sits in the components layer, under utilities.
- * Delete a block here once no screen uses its class.
+ * redesigned on src/ui. The router wraps those screens in .legacy, and every rule here starts with it, so none reaches
+ * a new page: .block, .inline and .grid are also Tailwind utilities. A primitive marks its root with data-ui, and the
+ * element rules skip it and everything inside it, so a Button or an Alert on an old screen looks the same as anywhere
+ * else. All of it sits in the components layer, under utilities. Delete a block here once no screen uses its class.
  */
 @layer components {
   .legacy {
@@ -252,39 +252,39 @@
 
   /* --- classes --- */
 
-  .hint {
+  .legacy .hint {
     color: var(--color-muted);
     font-size: var(--text-sm);
     line-height: 1.55;
   }
 
-  .block {
+  .legacy :where(.block:not([data-ui], [data-ui] *)) {
     display: block;
   }
 
-  .row {
+  .legacy .row {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
     align-items: center;
     margin: 12px 0;
   }
-  .row > input:not([type='checkbox']) {
+  .legacy .row > input:not([type='checkbox']) {
     flex: 1 1 240px;
     width: auto;
   }
 
-  .inline {
+  .legacy :where(.inline:not([data-ui], [data-ui] *)) {
     display: inline-flex;
     flex-wrap: wrap;
     gap: 8px;
     align-items: center;
   }
-  .inline input:not([type='checkbox']) {
+  .legacy :where(.inline:not([data-ui], [data-ui] *)) input:not([type='checkbox']) {
     width: 10em;
   }
 
-  .file {
+  .legacy .file {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -301,20 +301,20 @@
       border-color var(--duration-fast) var(--ease-out),
       background-color var(--duration-fast) var(--ease-out);
   }
-  .file:hover {
+  .legacy .file:hover {
     border-color: var(--color-accent-line);
     background: var(--color-surface-2);
   }
-  .file:focus-within {
+  .legacy .file:focus-within {
     border-color: var(--color-accent);
   }
 
-  .grid {
+  .legacy :where(.grid:not([data-ui], [data-ui] *)) {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     gap: 12px;
   }
-  .grid > label {
+  .legacy :where(.grid:not([data-ui], [data-ui] *)) > label {
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -323,7 +323,7 @@
     font-weight: 500;
   }
 
-  .notice {
+  .legacy .notice {
     margin: 12px 0;
     padding: 12px 14px;
     border: 1px solid var(--color-info-line);
@@ -331,20 +331,20 @@
     background: var(--color-info-soft);
     font-size: var(--text-sm);
   }
-  .notice.ok {
+  .legacy .notice.ok {
     border-color: var(--color-success-line);
     background: var(--color-success-soft);
   }
-  .notice.warn {
+  .legacy .notice.warn {
     border-color: var(--color-warning-line);
     background: var(--color-warning-soft);
   }
-  .notice.error {
+  .legacy .notice.error {
     border-color: var(--color-danger-line);
     background: var(--color-danger-soft);
   }
 
-  .tabs {
+  .legacy .tabs {
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
@@ -377,7 +377,7 @@
     color: var(--color-faint);
   }
 
-  .tag {
+  .legacy .tag {
     padding: 1px 8px;
     border: 1px solid var(--color-border-strong);
     border-radius: var(--radius-sm);
@@ -389,31 +389,31 @@
     box-decoration-break: clone;
     -webkit-box-decoration-break: clone;
   }
-  .tag.ok,
-  .tag.auto {
+  .legacy .tag.ok,
+  .legacy .tag.auto {
     border-color: var(--color-success-line);
     background: var(--color-success-soft);
     color: var(--color-success);
   }
-  .tag.recipe {
+  .legacy .tag.recipe {
     border-color: var(--color-accent-line);
     background: var(--color-accent-soft);
     color: var(--color-accent-hover);
   }
-  .tag.input,
-  .tag.warn {
+  .legacy .tag.input,
+  .legacy .tag.warn {
     border-color: var(--color-warning-line);
     background: var(--color-warning-soft);
     color: var(--color-warning);
   }
-  .tag.bad,
-  .tag.strong {
+  .legacy .tag.bad,
+  .legacy .tag.strong {
     border-color: var(--color-danger-line);
     background: var(--color-danger-soft);
     color: var(--color-danger-text);
   }
 
-  .accounts {
+  .legacy .accounts {
     margin: 8px 0;
     padding: 0;
     overflow: hidden;
@@ -422,27 +422,27 @@
     background: var(--color-surface);
     list-style: none;
   }
-  .accounts > li {
+  .legacy .accounts > li {
     display: grid;
     gap: 6px;
     padding: 12px 14px;
   }
-  .accounts > li + li {
+  .legacy .accounts > li + li {
     border-top: 1px solid var(--color-border);
   }
-  .accounts .account-head {
+  .legacy .accounts .account-head {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 6px;
   }
-  .accounts .account-head > strong {
+  .legacy .accounts .account-head > strong {
     margin-right: 2px;
     font-family: var(--font-mono);
     font-size: 13px;
     font-weight: 500;
   }
-  .accounts .account-address {
+  .legacy .accounts .account-address {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -458,7 +458,7 @@
     color: var(--color-text);
     font-size: 12.5px;
   }
-  .accounts em {
+  .legacy .accounts em {
     padding: 0 8px;
     border: 1px solid var(--color-accent-line);
     border-radius: 999px;
@@ -468,18 +468,18 @@
     font-style: normal;
     line-height: 1.8;
   }
-  .accounts .row {
+  .legacy .accounts .row {
     margin: 4px 0 0;
   }
 
-  .instructions,
-  .programs,
-  .links {
+  .legacy .instructions,
+  .legacy .programs,
+  .legacy .links {
     margin: 8px 0;
     padding: 0;
     list-style: none;
   }
-  .instructions {
+  .legacy .instructions {
     max-height: 360px;
     padding: 4px;
     overflow: auto;
@@ -504,29 +504,29 @@
     border-color: var(--color-accent-line);
     background: var(--color-accent-soft);
   }
-  .instructions button > strong:first-child {
+  .legacy .instructions button > strong:first-child {
     margin-right: 6px;
     font-family: var(--font-mono);
     font-size: 13px;
     font-weight: 500;
   }
-  .programs li {
+  .legacy .programs li {
     margin: 6px 0;
   }
-  .links {
+  .legacy .links {
     display: flex;
     flex-wrap: wrap;
     gap: 6px 20px;
     font-size: var(--text-sm);
   }
 
-  .steps {
+  .legacy .steps {
     margin: 8px 0;
     padding: 0;
     list-style: none;
     counter-reset: step;
   }
-  .steps > li {
+  .legacy .steps > li {
     position: relative;
     margin: 8px 0;
     padding: 12px 14px 12px 50px;
@@ -535,7 +535,7 @@
     background: var(--color-surface);
     counter-increment: step;
   }
-  .steps > li::before {
+  .legacy .steps > li::before {
     content: counter(step);
     position: absolute;
     top: 12px;
@@ -551,17 +551,17 @@
     font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
-  .steps > li > strong:first-child {
+  .legacy .steps > li > strong:first-child {
     font-family: var(--font-mono);
     font-size: 13.5px;
     font-weight: 500;
   }
 
-  .form,
-  .card,
-  .summary,
-  .recover,
-  .progress {
+  .legacy .form,
+  .legacy .card,
+  .legacy .summary,
+  .legacy .recover,
+  .legacy .progress {
     margin: 16px 0;
     padding: 16px 18px;
     border: 1px solid var(--color-border);
@@ -569,25 +569,25 @@
     background: var(--color-surface);
     box-shadow: var(--shadow-card);
   }
-  .form > :first-child,
-  .card > :first-child,
-  .recover > :first-child,
-  .progress > :first-child {
+  .legacy .form > :first-child,
+  .legacy .card > :first-child,
+  .legacy .recover > :first-child,
+  .legacy .progress > :first-child {
     margin-top: 0;
   }
-  .form > :last-child,
-  .card > :last-child,
-  .recover > :last-child,
-  .progress > :last-child {
+  .legacy .form > :last-child,
+  .legacy .card > :last-child,
+  .legacy .recover > :last-child,
+  .legacy .progress > :last-child {
     margin-bottom: 0;
   }
-  .card .card,
-  .summary .steps > li,
-  .recover .card {
+  .legacy .card .card,
+  .legacy .summary .steps > li,
+  .legacy .recover .card {
     background: var(--color-surface-2);
     box-shadow: none;
   }
-  .progress {
+  .legacy .progress {
     border-color: var(--color-accent-line);
   }
   .legacy .summary > summary {
@@ -601,43 +601,43 @@
     font-weight: 500;
   }
 
-  .field {
+  .legacy .field {
     margin: 16px 0;
   }
-  .field > div:first-child {
+  .legacy .field > div:first-child {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
     gap: 4px 8px;
     margin-bottom: 4px;
   }
-  .field > div:first-child > strong {
+  .legacy .field > div:first-child > strong {
     font-family: var(--font-mono);
     font-size: 13px;
     font-weight: 500;
   }
-  .field > .hint {
+  .legacy .field > .hint {
     margin-bottom: 6px;
   }
 
-  .nested {
+  .legacy .nested {
     margin-top: 8px;
     padding-left: 14px;
     border-left: 2px solid var(--color-border-strong);
   }
 
-  .item {
+  .legacy .item {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
     align-items: flex-start;
     margin: 8px 0;
   }
-  .item > :first-child {
+  .legacy .item > :first-child {
     flex: 1 1 200px;
   }
 
-  .figures {
+  .legacy .figures {
     display: grid;
     grid-template-columns: fit-content(40%) minmax(0, 1fr);
     margin: 12px 0;
@@ -646,40 +646,40 @@
     border-radius: var(--radius-md);
     font-size: var(--text-sm);
   }
-  .figures dt,
-  .figures dd {
+  .legacy .figures dt,
+  .legacy .figures dd {
     margin: 0;
     padding: 10px 14px;
     border-top: 1px solid var(--color-border);
   }
-  .figures dt:first-of-type,
-  .figures dt:first-of-type + dd {
+  .legacy .figures dt:first-of-type,
+  .legacy .figures dt:first-of-type + dd {
     border-top: 0;
   }
-  .figures dt {
+  .legacy .figures dt {
     color: var(--color-muted);
   }
-  .figures dd {
+  .legacy .figures dd {
     font-variant-numeric: tabular-nums;
   }
-  .figures .over {
+  .legacy .figures .over {
     color: var(--color-danger-text);
     font-weight: 600;
   }
   @media (width < 40rem) {
-    .figures {
+    .legacy .figures {
       grid-template-columns: minmax(0, 1fr);
     }
-    .figures dt {
+    .legacy .figures dt {
       padding-bottom: 0;
     }
-    .figures dd {
+    .legacy .figures dd {
       padding-top: 2px;
       border-top: 0;
     }
   }
 
-  .consent {
+  .legacy .consent {
     display: flex;
     flex-wrap: nowrap;
     align-items: flex-start;
@@ -693,11 +693,11 @@
     font-weight: 500;
     cursor: pointer;
   }
-  .consent input[type='checkbox'] {
+  .legacy .consent input[type='checkbox'] {
     margin-top: 2px;
   }
 
-  .stages {
+  .legacy .stages {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
@@ -705,7 +705,7 @@
     padding: 0;
     list-style: none;
   }
-  .stages li {
+  .legacy .stages li {
     display: inline-flex;
     align-items: center;
     gap: 7px;
@@ -718,7 +718,7 @@
     font-weight: 500;
     line-height: 1.6;
   }
-  .stages li::before {
+  .legacy .stages li::before {
     content: '';
     width: 6px;
     height: 6px;
@@ -726,32 +726,32 @@
     background: currentColor;
     opacity: 0.55;
   }
-  .stages .done {
+  .legacy .stages .done {
     border-color: var(--color-success-line);
     background: var(--color-success-soft);
     color: var(--color-success);
   }
-  .stages .now {
+  .legacy .stages .now {
     border-color: var(--color-accent-line);
     background: var(--color-accent-soft);
     color: var(--color-text);
   }
-  .stages .now::before {
+  .legacy .stages .now::before {
     background: var(--color-accent);
     color: var(--color-accent);
     opacity: 1;
     animation: var(--animate-pulse-dot);
   }
-  .stages .good {
+  .legacy .stages .good {
     border-color: var(--color-success);
     background: var(--color-success);
     color: #062012;
   }
-  .stages .good::before,
-  .stages .bad::before {
+  .legacy .stages .good::before,
+  .legacy .stages .bad::before {
     opacity: 1;
   }
-  .stages .bad {
+  .legacy .stages .bad {
     border-color: var(--color-danger-line);
     background: var(--color-danger-soft);
     color: var(--color-danger-text);
@@ -770,7 +770,7 @@
       font-size: 16px;
     }
     /* four steps do not fit one row, and two rows of two read in order */
-    .tabs {
+    .legacy .tabs {
       display: grid;
       grid-template-columns: 1fr 1fr;
     }

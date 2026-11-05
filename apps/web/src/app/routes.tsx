@@ -7,6 +7,8 @@ import { usePageTitle } from './title.ts';
 const Builder = lazy(() => import('../builder.tsx').then(module => ({ default: module.Builder })));
 const Rescue = lazy(() => import('../rescue.tsx').then(module => ({ default: module.Rescue })));
 const SharedRecipe = lazy(() => import('../execute.tsx').then(module => ({ default: module.SharedRecipe })));
+// the gallery of every state is a tool for building the UI, and the production bundle leaves it out
+const DevStates = import.meta.env.DEV ? lazy(() => import('../pages/DevStates.tsx')) : null;
 
 /** A screen from before the redesign, in the column and with the element styles it was written for. */
 function Legacy({ title, children }: { title: string; children: ReactNode }) {
@@ -59,6 +61,11 @@ export function Routes() {
             </Legacy>
           )}
         </Route>
+        {DevStates && (
+          <Route path="/dev/states">
+            <DevStates />
+          </Route>
+        )}
         <Route>
           <NotFound />
         </Route>

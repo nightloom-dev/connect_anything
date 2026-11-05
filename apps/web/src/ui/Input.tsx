@@ -50,7 +50,7 @@ export function Field({ label, aside, hint, error, htmlFor, hintId, errorId, cla
 export type InputSize = 'sm' | 'md' | 'lg';
 
 // 16px under 640px wide, or iOS zooms the page in on focus
-const BOX_SIZE: Record<InputSize, string> = {
+export const FIELD_SIZE: Record<InputSize, string> = {
   sm: 'h-8 px-2.5 text-base sm:text-sm',
   md: 'h-10 px-3 text-base sm:text-sm',
   lg: 'h-12 px-3.5 text-base',
@@ -60,7 +60,7 @@ const BOX_SIZE: Record<InputSize, string> = {
 export const fieldBox = ({ size = 'md', invalid = false, disabled = false, className }: { size?: InputSize; invalid?: boolean; disabled?: boolean; className?: string } = {}) =>
   cn(
     'flex w-full min-w-0 items-center gap-2 rounded-md border transition-[border-color,box-shadow,background-color] duration-120 ease-out',
-    BOX_SIZE[size],
+    FIELD_SIZE[size],
     disabled
       ? 'cursor-not-allowed border-border-control bg-surface opacity-60'
       : invalid

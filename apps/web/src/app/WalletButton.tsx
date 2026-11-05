@@ -1,9 +1,9 @@
-import { ChevronDown, LogOut, Wallet } from 'lucide-react';
+import { ArrowUpRight, ChevronDown, Copy, LogOut, Wallet } from 'lucide-react';
 import type { Intermediary } from '@aurora-is-near/intents-connect';
 import { useIntentsConnect } from '@aurora-is-near/intents-connect/react';
 import { useIntentsConnectWallet } from '@aurora-is-near/intents-connect-wallet/connect/appkit';
 import { useAsync } from '../ui.tsx';
-import { Address, Button, ChainIcon, Popover, Skeleton, buttonLook, chainMeta, chainOfCaip, cn, toast, truncateMiddle } from '../ui/index.ts';
+import { Address, Button, ChainIcon, Popover, Skeleton, buttonClass, buttonLook, chainMeta, chainOfCaip, cn, copyText, toast, truncateMiddle } from '../ui/index.ts';
 
 // Looked up once per address: it never changes for a wallet, and every open of the menu would ask again otherwise.
 const known = new Map<string, Intermediary>();
@@ -24,7 +24,7 @@ function IntermediaryRow({ address }: { address: string }) {
     <div className="rounded-lg border border-border bg-surface px-3 py-2.5">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-medium text-muted">Your Solana intermediary</span>
-        <ChainIcon chain="sol" size={14} />
+        <ChainIcon chain="sol" size={16} />
       </div>
       <div className="mt-1.5 min-h-6">
         {loading && <Skeleton className="h-5 w-40" />}
@@ -75,7 +75,7 @@ export function WalletButton({ className }: { className?: string }) {
     <Popover
       className={className}
       label="Wallet"
-      panelClassName="w-80"
+      panelClassName="w-[22rem]"
       trigger={
         <button type="button" data-ui="button" aria-label={`Wallet ${truncateMiddle(address)} on ${network}`} className={cn(buttonLook('secondary'), 'group h-8 gap-2 pr-2 pl-2.5 text-sm font-medium data-open:border-border-strong data-open:bg-surface-3')}>
           {chain ? <ChainIcon chain={chain} size={16} /> : <span className="size-2 rounded-full bg-success" aria-hidden />}
@@ -85,16 +85,31 @@ export function WalletButton({ className }: { className?: string }) {
       }
     >
       {({ close }) => (
-        <div className="flex flex-col gap-1.5">
-          <div className="px-1.5 pt-1.5 pb-1">
-            <span className="flex items-center gap-1.5 text-xs font-medium text-muted">
-              <span className="size-1.5 rounded-full bg-success" aria-hidden />
-              Connected on {network}
-            </span>
-            <Address value={address} chain={chain ?? ''} full className="mt-1.5" />
+        <div className="flex flex-col gap-2">
+          <div className="px-1.5 pt-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5 text-xs font-medium text-muted">
+                <span className="size-1.5 rounded-full bg-success" aria-hidden />
+                Connected on {network}
+              </span>
+              {chain && <ChainIcon chain={chain} size={16} />}
+            </div>
+            <p className="mt-2 font-mono text-xs leading-5 text-balance break-all text-text select-all">{address}</p>
+            <div className="mt-1.5 -ml-2 flex flex-wrap gap-0.5">
+              <Button variant="ghost" size="xs" icon={<Copy />} onClick={() => void copyText(address, 'Address copied')}>
+                Copy address
+              </Button>
+              {meta && (
+                <a href={`${meta.address}${address}`} target="_blank" rel="noreferrer" className={buttonClass({ variant: 'ghost', size: 'xs' })}>
+                  {meta.explorer}
+                  <ArrowUpRight className="size-3.5" aria-hidden />
+                  <span className="sr-only"> (opens in a new tab)</span>
+                </a>
+              )}
+            </div>
           </div>
           {isEvm && <IntermediaryRow address={address} />}
-          <div className="mt-0.5 border-t border-border pt-1.5">
+          <div className="border-t border-border pt-1.5">
             <Button
               variant="ghost"
               size="sm"

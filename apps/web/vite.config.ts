@@ -22,6 +22,8 @@ export default defineConfig(({ command, mode }) => {
     // vite preview answers 403 to a host it does not know
     preview: { port: 4173, allowedHosts: env.ALLOWED_HOSTS?.split(',') },
     define: { 'import.meta.env.CONNECT_API_URL': JSON.stringify(env.CONNECT_API_URL) },
+    // the browser picks font subsets by unicode-range and fetches only those; inlined, the CSS carried all of them
+    build: { assetsInlineLimit: (file: string) => (/\.woff2?$/.test(file) ? false : undefined) },
     plugins: [api(env), tailwindcss(), react(), nodePolyfills({ include: ['buffer', 'process', 'util', 'crypto'], globals: { Buffer: true, global: true, process: true } })],
   };
 });

@@ -4,7 +4,7 @@
  * even when no utility uses it, so legacy.css and inline styles can count on them.
  *
  * The scales are ours, not Tailwind's defaults: text-lg is 20px, rounded-lg is 12px, md starts at 960px.
- * Contrast, measured on surface (#12151c): text 15.6:1, muted 5.9:1, accent 5.2:1, white on accent-solid
+ * Contrast, measured on surface (#12151c): text 15.4:1, muted 5.9:1, accent 5.2:1, white on accent-solid
  * 4.9:1. faint is 3.1:1, so it is for decoration and disabled things only, never for text that has to be read.
  */
 @theme static {

@@ -42,6 +42,11 @@
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
   }
+  /* headlessui focuses its buttons by script on click, which Chrome can count as focus-visible; it sets data-focus
+     for keyboard focus only, so its elements trust that */
+  [data-headlessui-state]:focus-visible:not([data-focus]) {
+    outline: none;
+  }
 
   ::selection {
     background: color-mix(in srgb, var(--color-accent) 38%, transparent);

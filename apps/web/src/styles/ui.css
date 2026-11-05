@@ -89,17 +89,24 @@
   .code-hl .sh__token--comment {
     font-style: italic;
   }
+  .code-hl .code-line {
+    display: block;
+    min-height: 1lh;
+  }
   .code-lines {
     counter-reset: line;
+  }
+  .code-lines > .code-line {
+    position: relative;
+    padding-left: 3.25rem;
   }
   /* numbers from a counter are never part of what gets selected or copied */
   .code-lines > .code-line::before {
     counter-increment: line;
     content: counter(line);
-    display: inline-block;
+    position: absolute;
+    left: 0;
     width: 2.25rem;
-    margin-right: 1rem;
-    padding-right: 0.25rem;
     text-align: right;
     color: var(--color-faint);
     user-select: none;
