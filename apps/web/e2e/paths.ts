@@ -1,7 +1,7 @@
 // One constant per page, so that a page that moves (the builder to /build, say) is a one-line change here.
 
 /** The builder: program, instruction, simulation and run. */
-export const BUILDER = '/';
+export const BUILDER = '/build';
 
 /** Repay a Kamino debt. Takes ?wallet= and ?obligation=, the deep link of the Telegram watcher. */
 export const KAMINO = '/kamino';

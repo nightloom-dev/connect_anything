@@ -1,20 +1,14 @@
-import { lazy, Suspense, type ReactNode } from 'react';
+import { lazy, Suspense } from 'react';
 import { Route, Switch } from 'wouter';
 import { NotFound } from '../pages/NotFound.tsx';
 import { Skeleton } from '../ui/index.ts';
-import { usePageTitle } from './title.ts';
 
-const Builder = lazy(() => import('../builder.tsx').then(module => ({ default: module.Builder })));
-const Rescue = lazy(() => import('../rescue.tsx').then(module => ({ default: module.Rescue })));
-const SharedRecipe = lazy(() => import('../execute.tsx').then(module => ({ default: module.SharedRecipe })));
+// each feature's page.tsx owns its title and layout, so a redesign of one page does not touch this file
+const BuilderPage = lazy(() => import('../features/builder/page.tsx'));
+const KaminoPage = lazy(() => import('../features/kamino/page.tsx'));
+const SharedPage = lazy(() => import('../features/run/shared-page.tsx'));
 // the gallery of every state is a tool for building the UI, and the production bundle leaves it out
 const DevStates = import.meta.env.DEV ? lazy(() => import('../pages/DevStates.tsx')) : null;
-
-/** A screen from before the redesign, in the column and with the element styles it was written for. */
-function Legacy({ title, children }: { title: string; children: ReactNode }) {
-  usePageTitle(title);
-  return <div className="legacy">{children}</div>;
-}
 
 function PageSkeleton() {
   return (
@@ -40,27 +34,15 @@ export function Routes() {
       <Switch>
         {/* / is the builder until the landing page takes it */}
         <Route path="/">
-          <Legacy title="Build">
-            <Builder />
-          </Legacy>
+          <BuilderPage />
         </Route>
         <Route path="/build">
-          <Legacy title="Build">
-            <Builder />
-          </Legacy>
+          <BuilderPage />
         </Route>
         <Route path="/kamino">
-          <Legacy title="Rescue Kamino">
-            <Rescue />
-          </Legacy>
+          <KaminoPage />
         </Route>
-        <Route path="/r/:id">
-          {({ id }) => (
-            <Legacy title="Shared recipe">
-              <SharedRecipe id={id} />
-            </Legacy>
-          )}
-        </Route>
+        <Route path="/r/:id">{({ id }) => <SharedPage id={id} />}</Route>
         {DevStates && (
           <Route path="/dev/states">
             <DevStates />

@@ -2,7 +2,8 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from '@playwright/test';
 
 // Chromium comes from PLAYWRIGHT_BROWSERS_PATH (/opt/pw-browsers here), which has to match @playwright/test 1.63.0.
-const PORT = 5182;
+// E2E_PORT lets several checkouts run the suite at once, each against its own dev server
+const PORT = Number(process.env.E2E_PORT ?? 5182);
 
 export default defineConfig({
   testDir: '.',

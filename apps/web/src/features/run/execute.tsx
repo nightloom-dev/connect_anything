@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { BACKEND_PLACEHOLDERS, TERMINAL_STATUSES, guards, parseOriginAsset, signIntentsConnectPayload, type Execution, type ExecutionPreview, type ExecutionStep, type SolanaRecipe, type StepsPreview } from '@aurora-is-near/intents-connect';
-import { useExecution, useIntentsConnect, type UseExecutionResult } from '@aurora-is-near/intents-connect/react';
+import { useIntentsConnect, type UseExecutionResult } from '@aurora-is-near/intents-connect/react';
 import { useIntentsConnectWallet } from '@aurora-is-near/intents-connect-wallet/connect/appkit';
 import type { Idl } from '@connect-anything/core';
-import { checkCompat, issueText } from './compat.ts';
-import { CHAINS, STAGES, STAGE_OF, bridgeKeeps, bridgePlan, bySymbol, existingOffer, explain, fromAtomic, isQuoteMoved, legs, refundBody, retryPlan, stoppedFollowing, toAtomic, type Balance, type Token, type TokenList } from './connect.ts';
-import { STAND_IN, buildRecipe, destinationIssue, matchesPublished, parseStored, runsRecipe, signsOnlyRecipe, takesAmount, toSolanaRecipe, type StoredRecipe } from './recipe.ts';
-import { AccountList, Failure, FetchError, Notice, short, useAct, useAsync, useJson } from './ui.tsx';
+import { checkCompat, issueText } from '../../compat.ts';
+import { CHAINS, STAGES, STAGE_OF, bridgeKeeps, bridgePlan, bySymbol, existingOffer, explain, fromAtomic, isQuoteMoved, legs, refundBody, retryPlan, stoppedFollowing, toAtomic, type Balance, type Token, type TokenList } from '../../connect.ts';
+import { STAND_IN, buildRecipe, destinationIssue, matchesPublished, runsRecipe, signsOnlyRecipe, takesAmount, type StoredRecipe } from '../../recipe.ts';
+import { AccountList, Failure, Notice, short, useAct, useAsync, useJson } from '../../ui.tsx';
 
 const SOLSCAN = 'https://solscan.io';
 const TIME_NOTE = 'After the deposit, execution takes about 150 seconds plus the MPC signature.';
@@ -830,31 +830,5 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
       {exec.status === 'DEPOSIT_FAILED' && <Notice kind="error">The deposit failed, for example on an invalid amount, so nothing ran on Solana. What was transferred is refunded.</Notice>}
       {list.data && (failed || atRest) && <Recover key={failed?.id} exec={exec} execution={failed} unsigned={unsigned} act={act} locked={locked || !!exec.recovery || unfinished} recipe={recipe} stored={stored} gate={refused} list={list.data} intermediary={intermediary} source={source} />}
     </div>
-  );
-}
-
-export function SharedRecipe({ id }: { id: string }) {
-  const exec = useExecution();
-  const found = useJson<unknown>(`/api/recipes/${encodeURIComponent(id)}`);
-  const parsed = useMemo(() => {
-    if (found.data === undefined) return undefined;
-    try {
-      const stored = parseStored(found.data);
-      return { stored, recipe: toSolanaRecipe(stored) };
-    } catch (error) {
-      return { problem: (error as Error).message };
-    }
-  }, [found.data]);
-  const missing = found.error instanceof FetchError && (found.error.status === 404 || found.error.status === 400);
-
-  return (
-    <section>
-      <h2>A recipe someone shared with you</h2>
-      {found.loading && <Notice>Loading the recipe…</Notice>}
-      {missing && <Notice kind="error">This link does not lead to a recipe. Check it with whoever sent it to you.</Notice>}
-      {found.error && !missing && <Failure error={found.error} retry={found.retry} />}
-      {parsed?.problem && <Notice kind="error">{parsed.problem} Nothing can run from this link.</Notice>}
-      {parsed?.stored && <Execute exec={exec} recipe={parsed.recipe} stored={parsed.stored} shared />}
-    </section>
   );
 }

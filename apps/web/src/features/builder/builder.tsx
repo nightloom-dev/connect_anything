@@ -1,11 +1,11 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useExecution } from '@aurora-is-near/intents-connect/react';
 import { argFields, buildInstruction, flatten, listInstructions, type Field, type FieldType, type Idl, type SimResult } from '@connect-anything/core';
-import { checkCompat, issueText } from './compat.ts';
-import { bySymbol, fromAtomic, toAtomic, type Token, type TokenList } from './connect.ts';
-import { Execute } from './execute.tsx';
-import { STAND_IN, defaultValue, destinationIssue, isByte, recipeCode, resolveStep, simulationRequest, toSolanaRecipe, variantValue, type Row, type StoredRecipe, type StoredStep } from './recipe.ts';
-import { AccountList, Boundary, Copy, Failure, FetchError, Notice, fetchJson, short, useAct, useAsync, useJson } from './ui.tsx';
+import { checkCompat, issueText } from '../../compat.ts';
+import { bySymbol, fromAtomic, toAtomic, type Token, type TokenList } from '../../connect.ts';
+import { Execute } from '../run/execute.tsx';
+import { STAND_IN, defaultValue, destinationIssue, isByte, recipeCode, resolveStep, simulationRequest, toSolanaRecipe, variantValue, type Row, type StoredRecipe, type StoredStep } from '../../recipe.ts';
+import { AccountList, Boundary, Copy, Failure, FetchError, Notice, fetchJson, short, useAct, useAsync, useJson } from '../../ui.tsx';
 
 const CU_LIMIT = 200_000;
 const BYTES_LIMIT = 1232;

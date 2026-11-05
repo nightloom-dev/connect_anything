@@ -141,7 +141,7 @@ The specs pin the words of the money flows on purpose: changing one is a change 
 The suite has no screenshot comparisons, so `npm run e2e:update -w apps/web` has nothing to update unless one is added.
 
 The words the specs lean on most: "Connect EVM wallet", "Get exact amount and fee", "Sign and run", "Done: the
-instructions ran on Solana.", "Your intermediary on Solana:", the phase texts of `PHASE_TEXT` in `src/execute.tsx`, "This
+instructions ran on Solana.", "Your intermediary on Solana:", the phase texts of `PHASE_TEXT` in `src/features/run/execute.tsx`, "This
 wallet already has an execution in flight…", "You started an execution from this browser:", "Resume it", "Delete it (a
 signature that moves no money)", "Your intermediary holds … USDC.", "Refund", "Sign and refund", the figures of the quote
 card ("at least 776.16 USDC, …"), and on `/kamino` "Read positions", "Target LTV, %" and "Repay $800.00, which is 800 USDC."

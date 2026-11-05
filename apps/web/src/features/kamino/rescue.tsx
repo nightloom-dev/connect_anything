@@ -2,10 +2,10 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { SolanaRecipe } from '@aurora-is-near/intents-connect';
 import { useExecution } from '@aurora-is-near/intents-connect/react';
 import { CU_LIMIT, estimateCu, ltvAfter, rescuable, rescueAmount, rescueRecipe, targetFrom, type Obligation, type ObligationRow } from '@connect-anything/kamino-rescue';
-import { fromAtomic } from './connect.ts';
-import { Execute } from './execute.tsx';
-import { toSolanaRecipe, type StoredRecipe } from './recipe.ts';
-import { Failure, FetchError, Notice, short, useJson } from './ui.tsx';
+import { fromAtomic } from '../../connect.ts';
+import { Execute } from '../run/execute.tsx';
+import { toSolanaRecipe, type StoredRecipe } from '../../recipe.ts';
+import { Failure, FetchError, Notice, short, useJson } from '../../ui.tsx';
 
 type Positions = { obligations: Obligation[] };
 

@@ -7,7 +7,7 @@ import { KAMINO, shared } from './paths.ts';
 import { alertOf, expect, pollUntil, statusOf, test } from './support.ts';
 import { MockSolanaWallet, TX_HASH, WALLET, type MockWallet } from './wallet.ts';
 
-// Every state of the payment panel (Execute in src/execute.tsx), one test each, numbered as in the redesign brief. Most
+// Every state of the payment panel (Execute in src/features/run/execute.tsx), one test each, numbered as in the redesign brief. Most
 // run on /kamino, where the target LTV fills in 800 USDC; the fake Connect quotes it at 776.16 USDC delivered, at least.
 // What a state shows is pinned by its words, and what it does by the requests and wallet prompts behind it.
 
