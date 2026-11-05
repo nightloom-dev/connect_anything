@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    // the specs run in Node 22 and the page's Chromium, both past ES2023
+    "lib": ["ES2023", "DOM", "DOM.Iterable"]
+  },
+  "include": ["."]
+}

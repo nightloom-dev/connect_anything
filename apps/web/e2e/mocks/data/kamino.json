@@ -1,0 +1,103 @@
+{
+  "wallet": "8FKDyH8gkPLTE6Jqm3vkLukeerf8FWJUSDjMKNfgrCpq",
+  "obligations": [
+    {
+      "address": "PfqP2R8NB8gNjegeNrsjTVv4epj3WqcH8S58QQL5UwH",
+      "market": "CqAoLuqWtavaVE8deBjMKe8ZfSt9ghR6Vb8nfsyabyHA",
+      "deposits": [
+        {
+          "reserve": "BUTND9T7Ux4KR8RAEgd4WoZwnP7xA279oA1y3iPVcvSh",
+          "mint": "3b8X44fLF9ooXaUm3hhSgjpmVs6rZZ3pPoGnGahc3Uu7",
+          "symbol": "PRIME",
+          "decimals": 6,
+          "amount": "3774657",
+          "usd": 4.028937904767067,
+          "tokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          "supplyVault": "FkSkbRU5A6JXRXo5uaFwCS7jQ6jHYa1DxFtfpXfTz352",
+          "debtFarm": null,
+          "pythOracle": null,
+          "switchboardPriceOracle": null,
+          "switchboardTwapOracle": null,
+          "scopePrices": "3t4JZcueEzTbVP6kLxXrL3VpWx45jDer4eqysweBchNH"
+        }
+      ],
+      "borrows": [
+        {
+          "reserve": "GCRm26EuqzHtH8U3zTsXMEnq864qAGkkcAjMBL4dw9XC",
+          "mint": "CASHx9KJUStyftLFWGvEVf59SGeG9sh5FfcnZMVPCASH",
+          "symbol": "CASH",
+          "decimals": 6,
+          "amount": "3231051",
+          "usd": 3.231050532502513,
+          "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+          "supplyVault": "9wZ6pJ3Ce2yf6WL9BzdEjGNxiziVK5Agj7U77mZyR6a3",
+          "debtFarm": "3Dsn7mXKCxQ54QxDtogFsGqgMhhgWnVtN5MGLHvowh3E",
+          "pythOracle": null,
+          "switchboardPriceOracle": null,
+          "switchboardTwapOracle": null,
+          "scopePrices": "3NJYftD5sjVfxSnUdZ1wVML8f3aC6mp1CXCL6L7TnU8C"
+        }
+      ],
+      "collateralUsd": 4.028937904767067,
+      "debtUsd": 3.231050532502513,
+      "adjustedDebtUsd": 3.231050532502513,
+      "ltv": 0.801960866331425,
+      "liquidationLtv": 0.91,
+      "refreshRemaining": [
+        "BUTND9T7Ux4KR8RAEgd4WoZwnP7xA279oA1y3iPVcvSh",
+        "GCRm26EuqzHtH8U3zTsXMEnq864qAGkkcAjMBL4dw9XC"
+      ],
+      "repayRemaining": [],
+      "unjoinedDebtFarms": []
+    },
+    {
+      "address": "GoD6qy7kDpJQgkV5cZqdXtJmmjGhNvLzmdJNofjMCCN8",
+      "market": "7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF",
+      "deposits": [
+        {
+          "reserve": "37Jk2zkz23vkAYBT66HM2gaqJuNg2nYLsCreQAVt5MWK",
+          "mint": "cbbtcf3aa214zXHbiAZQwf4122FBYbraNdFqgw4iMij",
+          "symbol": "cbBTC",
+          "decimals": 8,
+          "amount": "9474166",
+          "usd": 7307.917848366096,
+          "tokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          "supplyVault": "BcPpdmg4vxXSenvkp12XbVp6XnzwKChnzfNa6cQXLW96",
+          "debtFarm": null,
+          "pythOracle": null,
+          "switchboardPriceOracle": null,
+          "switchboardTwapOracle": null,
+          "scopePrices": "3t4JZcueEzTbVP6kLxXrL3VpWx45jDer4eqysweBchNH"
+        }
+      ],
+      "borrows": [
+        {
+          "reserve": "H3t6qZ1JkguCNTi9uzVKqQ7dvt2cum4XiXWom6Gn5e5S",
+          "mint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+          "symbol": "USDT",
+          "decimals": 6,
+          "amount": "5218745016",
+          "usd": 5212.491897843718,
+          "tokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          "supplyVault": "2Eff8Udy2G2gzNcf2619AnTx3xM4renEv4QrHKjS1o9N",
+          "debtFarm": null,
+          "pythOracle": null,
+          "switchboardPriceOracle": null,
+          "switchboardTwapOracle": null,
+          "scopePrices": "3t4JZcueEzTbVP6kLxXrL3VpWx45jDer4eqysweBchNH"
+        }
+      ],
+      "collateralUsd": 7307.917848366096,
+      "debtUsd": 5212.491897843718,
+      "adjustedDebtUsd": 5212.491897843718,
+      "ltv": 0.7132663511001464,
+      "liquidationLtv": 0.8,
+      "refreshRemaining": [
+        "37Jk2zkz23vkAYBT66HM2gaqJuNg2nYLsCreQAVt5MWK",
+        "H3t6qZ1JkguCNTi9uzVKqQ7dvt2cum4XiXWom6Gn5e5S"
+      ],
+      "repayRemaining": [],
+      "unjoinedDebtFarms": []
+    }
+  ]
+}
