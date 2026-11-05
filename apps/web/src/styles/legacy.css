@@ -1,0 +1,778 @@
+/*
+ * The classes builder.tsx, execute.tsx and rescue.tsx were written with, on the new tokens, until each screen is
+ * redesigned on src/ui. The router wraps those screens in .legacy, which scopes the rules for bare elements. A
+ * primitive marks its root with data-ui, and the element rules skip it and everything inside it, so a Button or an
+ * Alert on an old screen looks the same as anywhere else. All of it sits in the components layer, under utilities.
+ * Delete a block here once no screen uses its class.
+ */
+@layer components {
+  .legacy {
+    max-width: 52rem;
+    margin-inline: auto;
+    overflow-wrap: anywhere;
+  }
+
+  /* --- bare elements, on old screens only --- */
+
+  .legacy :where(h2:not([data-ui], [data-ui] *)) {
+    margin: 0 0 16px;
+    font-size: var(--text-xl);
+    line-height: var(--text-xl--line-height);
+    letter-spacing: -0.02em;
+  }
+  .legacy :where(h3:not([data-ui], [data-ui] *)) {
+    margin: 32px 0 12px;
+    font-size: var(--text-base);
+    line-height: var(--text-base--line-height);
+  }
+  .legacy :where(h4:not([data-ui], [data-ui] *)) {
+    margin: 24px 0 8px;
+    color: var(--color-muted);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .legacy :where(p:not([data-ui], [data-ui] *)) {
+    margin: 12px 0;
+  }
+  .legacy :where(strong:not([data-ui], [data-ui] *)) {
+    font-weight: 600;
+  }
+  .legacy :where(a:not([data-ui], [data-ui] *)) {
+    color: var(--color-accent);
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+    text-underline-offset: 3px;
+  }
+  .legacy :where(a:not([data-ui], [data-ui] *):hover) {
+    color: var(--color-accent-hover);
+    text-decoration-color: currentColor;
+  }
+  .legacy :where(code:not([data-ui], [data-ui] *)) {
+    padding: 1px 5px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xs);
+    background: var(--color-surface-2);
+    color: #cdd4e2;
+    font-size: 0.82em;
+    word-break: break-all;
+  }
+  .legacy :where(pre:not([data-ui], [data-ui] *)) {
+    max-height: 420px;
+    margin: 8px 0;
+    padding: 12px 14px;
+    overflow: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: #0e1016;
+    color: #cdd4e2;
+    font-size: 12.5px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+  .legacy :where(pre:not([data-ui], [data-ui] *) code) {
+    padding: 0;
+    border: 0;
+    background: none;
+    font-size: inherit;
+  }
+  .legacy :where(ul:not([class]):not([data-ui] *), ol:not([class]):not([data-ui] *)) {
+    margin: 8px 0;
+    padding-left: 22px;
+    list-style: disc;
+  }
+  .legacy :where(ol:not([class]):not([data-ui] *)) {
+    list-style: decimal;
+  }
+  .legacy :where(li:not([class]):not([data-ui] *) + li) {
+    margin-top: 4px;
+  }
+  .legacy :where(details:not([class]):not([data-ui] *)) {
+    margin: 16px 0;
+  }
+  .legacy :where(summary:not([data-ui], [data-ui] *)) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: fit-content;
+    cursor: pointer;
+    color: var(--color-text);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    list-style: none;
+    border-radius: var(--radius-sm);
+  }
+  .legacy :where(summary:not([data-ui], [data-ui] *))::-webkit-details-marker {
+    display: none;
+  }
+  .legacy :where(summary:not([data-ui], [data-ui] *))::before {
+    content: '';
+    width: 16px;
+    height: 16px;
+    flex: none;
+    background: var(--color-muted);
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E")
+      center / 16px no-repeat;
+    transition: transform var(--duration-base) var(--ease-out);
+  }
+  .legacy :where(details[open] > summary:not([data-ui], [data-ui] *))::before {
+    transform: rotate(90deg);
+  }
+  .legacy :where(details[open] > summary:not([data-ui], [data-ui] *)) {
+    margin-bottom: 8px;
+  }
+
+  .legacy :where(button:not([data-ui], [data-ui] *)) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 36px;
+    padding: 6px 14px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-2);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.03);
+    color: var(--color-text);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    line-height: 1.4;
+    text-align: center;
+    cursor: pointer;
+    transition:
+      background-color var(--duration-fast) var(--ease-out),
+      border-color var(--duration-fast) var(--ease-out),
+      transform var(--duration-fast) var(--ease-out);
+  }
+  .legacy :where(button:not([data-ui], [data-ui] *):hover:not(:disabled)) {
+    border-color: var(--color-border-control);
+    background: var(--color-surface-3);
+  }
+  .legacy :where(button:not([data-ui], [data-ui] *):active:not(:disabled)) {
+    transform: translateY(1px);
+  }
+  .legacy :where(button:not([data-ui], [data-ui] *):disabled) {
+    border-color: var(--color-border);
+    background: var(--color-surface);
+    box-shadow: none;
+    color: var(--color-faint);
+    cursor: not-allowed;
+  }
+  .legacy :where(button.primary:not([data-ui], [data-ui] *):not(:disabled)) {
+    border-color: transparent;
+    background: var(--color-accent-solid);
+    box-shadow: var(--shadow-button);
+    color: #fff;
+  }
+  .legacy :where(button.primary:not([data-ui], [data-ui] *):hover:not(:disabled)) {
+    background: var(--color-accent-solid-hover);
+  }
+  .legacy :where(button.primary:not([data-ui], [data-ui] *):active:not(:disabled)) {
+    background: var(--color-accent-solid-active);
+  }
+  .legacy :where(button.chosen:not([data-ui], [data-ui] *)) {
+    border-color: var(--color-accent-line);
+    background: var(--color-accent-soft);
+  }
+
+  .legacy
+    :where(
+      input:not([type='checkbox'], [type='radio'], [type='file'], [type='range']):not([data-ui], [data-ui] *),
+      select:not([data-ui], [data-ui] *)
+    ) {
+    width: 100%;
+    min-height: 40px;
+    padding: 8px 12px;
+    border: 1px solid var(--color-border-control);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    font-size: var(--text-sm);
+    line-height: 1.4;
+    transition:
+      border-color var(--duration-fast) var(--ease-out),
+      box-shadow var(--duration-fast) var(--ease-out);
+  }
+  /* the old screens mark addresses, ids and numbers with spellCheck={false} */
+  .legacy :where(input[spellcheck='false']:not([data-ui], [data-ui] *)) {
+    font-family: var(--font-mono);
+    font-size: 13px;
+  }
+  .legacy :where(input:not([data-ui], [data-ui] *):hover:not(:disabled, :focus), select:not([data-ui], [data-ui] *):hover:not(:disabled, :focus)) {
+    border-color: #4a5468;
+  }
+  .legacy :where(input:not([data-ui], [data-ui] *):focus, select:not([data-ui], [data-ui] *):focus) {
+    border-color: var(--color-accent);
+    outline: none;
+    box-shadow: var(--shadow-glow);
+  }
+  .legacy :where(input:not([data-ui], [data-ui] *):disabled, select:not([data-ui], [data-ui] *):disabled) {
+    background: var(--color-surface);
+    color: var(--color-muted);
+    cursor: not-allowed;
+  }
+  .legacy :where(select:not([data-ui], [data-ui] *)) {
+    appearance: none;
+    padding-right: 36px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a93a6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-position: right 12px center;
+    background-repeat: no-repeat;
+    background-size: 16px;
+    cursor: pointer;
+  }
+  .legacy :where(input[type='checkbox']:not([data-ui], [data-ui] *)) {
+    width: 16px;
+    height: 16px;
+    flex: none;
+    margin: 0;
+    accent-color: var(--color-accent-solid);
+    cursor: pointer;
+  }
+  .legacy :where(input[type='file']:not([data-ui], [data-ui] *)) {
+    max-width: 100%;
+    color: var(--color-muted);
+    font-size: var(--text-sm);
+  }
+  .legacy :where(input[type='file']:not([data-ui], [data-ui] *))::file-selector-button {
+    margin-right: 12px;
+    padding: 7px 14px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    font: inherit;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color var(--duration-fast) var(--ease-out);
+  }
+  .legacy :where(input[type='file']:not([data-ui], [data-ui] *))::file-selector-button:hover {
+    background: var(--color-surface-3);
+  }
+
+  /* --- classes --- */
+
+  .hint {
+    color: var(--color-muted);
+    font-size: var(--text-sm);
+    line-height: 1.55;
+  }
+
+  .block {
+    display: block;
+  }
+
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin: 12px 0;
+  }
+  .row > input:not([type='checkbox']) {
+    flex: 1 1 240px;
+    width: auto;
+  }
+
+  .inline {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+  .inline input:not([type='checkbox']) {
+    width: 10em;
+  }
+
+  .file {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    margin: 16px 0;
+    padding: 16px;
+    border: 1px dashed var(--color-border-control);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    transition:
+      border-color var(--duration-fast) var(--ease-out),
+      background-color var(--duration-fast) var(--ease-out);
+  }
+  .file:hover {
+    border-color: var(--color-accent-line);
+    background: var(--color-surface-2);
+  }
+  .file:focus-within {
+    border-color: var(--color-accent);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+  }
+  .grid > label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: var(--color-muted);
+    font-size: var(--text-xs);
+    font-weight: 500;
+  }
+
+  .notice {
+    margin: 12px 0;
+    padding: 12px 14px;
+    border: 1px solid var(--color-info-line);
+    border-radius: var(--radius-md);
+    background: var(--color-info-soft);
+    font-size: var(--text-sm);
+  }
+  .notice.ok {
+    border-color: var(--color-success-line);
+    background: var(--color-success-soft);
+  }
+  .notice.warn {
+    border-color: var(--color-warning-line);
+    background: var(--color-warning-soft);
+  }
+  .notice.error {
+    border-color: var(--color-danger-line);
+    background: var(--color-danger-soft);
+  }
+
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 28px;
+    padding: 4px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+  }
+  .legacy .tabs button {
+    flex: 1 1 auto;
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    color: var(--color-muted);
+  }
+  .legacy .tabs button:hover:not(:disabled) {
+    border-color: transparent;
+    background: var(--color-surface-2);
+    color: var(--color-text);
+  }
+  .legacy .tabs button[aria-current='step'] {
+    border-color: var(--color-border-strong);
+    background: var(--color-surface-3);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04);
+    color: var(--color-text);
+  }
+  .legacy .tabs button:disabled {
+    background: transparent;
+    color: var(--color-faint);
+  }
+
+  .tag {
+    padding: 1px 8px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-2);
+    color: var(--color-muted);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    line-height: 1.8;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+  .tag.ok,
+  .tag.auto {
+    border-color: var(--color-success-line);
+    background: var(--color-success-soft);
+    color: var(--color-success);
+  }
+  .tag.recipe {
+    border-color: var(--color-accent-line);
+    background: var(--color-accent-soft);
+    color: var(--color-accent-hover);
+  }
+  .tag.input,
+  .tag.warn {
+    border-color: var(--color-warning-line);
+    background: var(--color-warning-soft);
+    color: var(--color-warning);
+  }
+  .tag.bad,
+  .tag.strong {
+    border-color: var(--color-danger-line);
+    background: var(--color-danger-soft);
+    color: var(--color-danger-text);
+  }
+
+  .accounts {
+    margin: 8px 0;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    list-style: none;
+  }
+  .accounts > li {
+    display: grid;
+    gap: 6px;
+    padding: 12px 14px;
+  }
+  .accounts > li + li {
+    border-top: 1px solid var(--color-border);
+  }
+  .accounts .account-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+  .accounts .account-head > strong {
+    margin-right: 2px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .accounts .account-address {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    color: var(--color-muted);
+    font-size: var(--text-sm);
+  }
+  .legacy .accounts .account-address code {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--color-text);
+    font-size: 12.5px;
+  }
+  .accounts em {
+    padding: 0 8px;
+    border: 1px solid var(--color-accent-line);
+    border-radius: 999px;
+    background: var(--color-accent-soft);
+    color: var(--color-accent-hover);
+    font-size: var(--text-xs);
+    font-style: normal;
+    line-height: 1.8;
+  }
+  .accounts .row {
+    margin: 4px 0 0;
+  }
+
+  .instructions,
+  .programs,
+  .links {
+    margin: 8px 0;
+    padding: 0;
+    list-style: none;
+  }
+  .instructions {
+    max-height: 360px;
+    padding: 4px;
+    overflow: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+  }
+  .legacy .instructions button {
+    display: block;
+    width: 100%;
+    padding: 10px 12px;
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    text-align: left;
+  }
+  .legacy .instructions button:hover:not(:disabled) {
+    border-color: transparent;
+    background: var(--color-surface-2);
+  }
+  .legacy .instructions button.chosen {
+    border-color: var(--color-accent-line);
+    background: var(--color-accent-soft);
+  }
+  .instructions button > strong:first-child {
+    margin-right: 6px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .programs li {
+    margin: 6px 0;
+  }
+  .links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 20px;
+    font-size: var(--text-sm);
+  }
+
+  .steps {
+    margin: 8px 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+  .steps > li {
+    position: relative;
+    margin: 8px 0;
+    padding: 12px 14px 12px 50px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    counter-increment: step;
+  }
+  .steps > li::before {
+    content: counter(step);
+    position: absolute;
+    top: 12px;
+    left: 14px;
+    display: grid;
+    width: 24px;
+    height: 24px;
+    place-items: center;
+    border-radius: 999px;
+    background: var(--color-surface-3);
+    color: var(--color-muted);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .steps > li > strong:first-child {
+    font-family: var(--font-mono);
+    font-size: 13.5px;
+    font-weight: 500;
+  }
+
+  .form,
+  .card,
+  .summary,
+  .recover,
+  .progress {
+    margin: 16px 0;
+    padding: 16px 18px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-card);
+  }
+  .form > :first-child,
+  .card > :first-child,
+  .recover > :first-child,
+  .progress > :first-child {
+    margin-top: 0;
+  }
+  .form > :last-child,
+  .card > :last-child,
+  .recover > :last-child,
+  .progress > :last-child {
+    margin-bottom: 0;
+  }
+  .card .card,
+  .summary .steps > li,
+  .recover .card {
+    background: var(--color-surface-2);
+    box-shadow: none;
+  }
+  .progress {
+    border-color: var(--color-accent-line);
+  }
+  .legacy .summary > summary {
+    width: auto;
+  }
+  .legacy .summary[open] > summary {
+    margin-bottom: 4px;
+  }
+  .legacy .form > h3:first-child {
+    font-family: var(--font-mono);
+    font-weight: 500;
+  }
+
+  .field {
+    margin: 16px 0;
+  }
+  .field > div:first-child {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 8px;
+    margin-bottom: 4px;
+  }
+  .field > div:first-child > strong {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .field > .hint {
+    margin-bottom: 6px;
+  }
+
+  .nested {
+    margin-top: 8px;
+    padding-left: 14px;
+    border-left: 2px solid var(--color-border-strong);
+  }
+
+  .item {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: flex-start;
+    margin: 8px 0;
+  }
+  .item > :first-child {
+    flex: 1 1 200px;
+  }
+
+  .figures {
+    display: grid;
+    grid-template-columns: fit-content(40%) minmax(0, 1fr);
+    margin: 12px 0;
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+  }
+  .figures dt,
+  .figures dd {
+    margin: 0;
+    padding: 10px 14px;
+    border-top: 1px solid var(--color-border);
+  }
+  .figures dt:first-of-type,
+  .figures dt:first-of-type + dd {
+    border-top: 0;
+  }
+  .figures dt {
+    color: var(--color-muted);
+  }
+  .figures dd {
+    font-variant-numeric: tabular-nums;
+  }
+  .figures .over {
+    color: var(--color-danger-text);
+    font-weight: 600;
+  }
+  @media (width < 40rem) {
+    .figures {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .figures dt {
+      padding-bottom: 0;
+    }
+    .figures dd {
+      padding-top: 2px;
+      border-top: 0;
+    }
+  }
+
+  .consent {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 16px 0;
+    padding: 14px 16px;
+    border: 1px solid var(--color-warning-line);
+    border-radius: var(--radius-lg);
+    background: var(--color-warning-soft);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .consent input[type='checkbox'] {
+    margin-top: 2px;
+  }
+
+  .stages {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 12px 0;
+    padding: 0;
+    list-style: none;
+  }
+  .stages li {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 3px 12px 3px 10px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: 999px;
+    background: var(--color-surface-2);
+    color: var(--color-muted);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    line-height: 1.6;
+  }
+  .stages li::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.55;
+  }
+  .stages .done {
+    border-color: var(--color-success-line);
+    background: var(--color-success-soft);
+    color: var(--color-success);
+  }
+  .stages .now {
+    border-color: var(--color-accent-line);
+    background: var(--color-accent-soft);
+    color: var(--color-text);
+  }
+  .stages .now::before {
+    background: var(--color-accent);
+    color: var(--color-accent);
+    opacity: 1;
+    animation: var(--animate-pulse-dot);
+  }
+  .stages .good {
+    border-color: var(--color-success);
+    background: var(--color-success);
+    color: #062012;
+  }
+  .stages .good::before,
+  .stages .bad::before {
+    opacity: 1;
+  }
+  .stages .bad {
+    border-color: var(--color-danger-line);
+    background: var(--color-danger-soft);
+    color: var(--color-danger-text);
+  }
+
+  /* --- phones --- */
+
+  @media (width < 40rem) {
+    /* 16px keeps iOS Safari from zooming into a field on focus */
+    .legacy
+      :where(
+        input:not([type='checkbox'], [type='radio'], [type='file'], [type='range']):not([data-ui], [data-ui] *),
+        select:not([data-ui], [data-ui] *),
+        textarea:not([data-ui], [data-ui] *)
+      ) {
+      font-size: 16px;
+    }
+    /* four steps do not fit one row, and two rows of two read in order */
+    .tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+}

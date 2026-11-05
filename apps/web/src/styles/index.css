@@ -1,0 +1,6 @@
+/* Tailwind scans src/ only, so the server, the tests and the e2e harness add no classes. */
+@import 'tailwindcss' source('../');
+@import './tokens.css';
+@import './base.css';
+@import './ui.css';
+@import './legacy.css';

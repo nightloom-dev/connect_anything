@@ -2,12 +2,15 @@ import { createRoot } from 'react-dom/client';
 import { createIntentsConnectApi } from '@aurora-is-near/intents-connect';
 import { IntentsConnectProvider } from '@aurora-is-near/intents-connect/react';
 import { AppKitProvider, useIntentsConnectWallet } from '@aurora-is-near/intents-connect-wallet/connect/appkit';
+import '@fontsource-variable/inter';
+import '@fontsource/jetbrains-mono/400.css';
+import '@fontsource/jetbrains-mono/500.css';
 import { Builder } from './builder.tsx';
 import { retry503 } from './connect.ts';
 import { SharedRecipe } from './execute.tsx';
 import { Rescue } from './rescue.tsx';
 import { Boundary, Notice } from './ui.tsx';
-import './styles.css';
+import './styles/index.css';
 
 const api = createIntentsConnectApi({
   baseUrl: import.meta.env.CONNECT_API_URL,
@@ -33,19 +36,21 @@ function App() {
   const { wallet } = useIntentsConnectWallet();
   return (
     <IntentsConnectProvider api={api} wallet={wallet}>
-      <header>
-        <h1>
-          <a href="/">Connect Anything</a>
-        </h1>
-        <p>
-          An instruction of an Anchor program on Solana, paid with one signature from an EVM chain. <a href="/kamino">Repay a Kamino debt</a>
-        </p>
-      </header>
-      <main>
-        <Boundary>
-          <Page />
-        </Boundary>
-      </main>
+      <div className="legacy px-4 py-8">
+        <header>
+          <h1>
+            <a href="/">Connect Anything</a>
+          </h1>
+          <p>
+            An instruction of an Anchor program on Solana, paid with one signature from an EVM chain. <a href="/kamino">Repay a Kamino debt</a>
+          </p>
+        </header>
+        <main>
+          <Boundary>
+            <Page />
+          </Boundary>
+        </main>
+      </div>
     </IntentsConnectProvider>
   );
 }

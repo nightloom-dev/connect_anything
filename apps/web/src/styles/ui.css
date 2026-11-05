@@ -1,0 +1,138 @@
+/* What the primitives in src/ui cannot say with utilities: vendor pseudo-elements, highlighter colors, toasts. */
+@layer components {
+  .skeleton {
+    background: linear-gradient(90deg, var(--color-surface-2) 25%, var(--color-surface-3) 50%, var(--color-surface-2) 75%);
+    background-size: 200% 100%;
+    animation: var(--animate-shimmer);
+  }
+
+  /* Slider: the filled part of the track follows --fill, set from the value */
+  .ui-range {
+    --fill: 0%;
+    --range-color: var(--color-accent);
+    appearance: none;
+    width: 100%;
+    height: 20px;
+    margin: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+  .ui-range::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 999px;
+    background: linear-gradient(to right, var(--range-color) 0 var(--fill), var(--color-surface-3) var(--fill) 100%);
+  }
+  .ui-range::-moz-range-track {
+    height: 6px;
+    border-radius: 999px;
+    background: var(--color-surface-3);
+  }
+  .ui-range::-moz-range-progress {
+    height: 6px;
+    border-radius: 999px;
+    background: var(--range-color);
+  }
+  .ui-range::-webkit-slider-thumb {
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    margin-top: -6px;
+    border: 0;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--range-color) 28%, transparent), 0 2px 6px rgb(0 0 0 / 0.5);
+    transition: transform var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
+  }
+  .ui-range::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border: 0;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--range-color) 28%, transparent), 0 2px 6px rgb(0 0 0 / 0.5);
+    transition: transform var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
+  }
+  .ui-range:hover:not(:disabled)::-webkit-slider-thumb,
+  .ui-range:active:not(:disabled)::-webkit-slider-thumb {
+    transform: scale(1.1);
+  }
+  .ui-range:hover:not(:disabled)::-moz-range-thumb,
+  .ui-range:active:not(:disabled)::-moz-range-thumb {
+    transform: scale(1.1);
+  }
+  .ui-range:focus-visible {
+    outline: none;
+  }
+  .ui-range:focus-visible::-webkit-slider-thumb {
+    box-shadow: 0 0 0 3px var(--color-bg), 0 0 0 5px var(--color-accent);
+  }
+  .ui-range:focus-visible::-moz-range-thumb {
+    box-shadow: 0 0 0 3px var(--color-bg), 0 0 0 5px var(--color-accent);
+  }
+  .ui-range:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  /* sugar-high reads its colors from these */
+  .code-hl {
+    --sh-class: #7dd3fc;
+    --sh-identifier: #dfe4ee;
+    --sh-sign: #8a93a6;
+    --sh-property: #a5b0ff;
+    --sh-entity: #5fe0c9;
+    --sh-jsxliterals: #c4b5fd;
+    --sh-string: #86e1a8;
+    --sh-keyword: #f59ac0;
+    --sh-comment: #7c8599;
+  }
+  .code-hl .sh__token--comment {
+    font-style: italic;
+  }
+  .code-lines {
+    counter-reset: line;
+  }
+  /* numbers from a counter are never part of what gets selected or copied */
+  .code-lines > .code-line::before {
+    counter-increment: line;
+    content: counter(line);
+    display: inline-block;
+    width: 2.25rem;
+    margin-right: 1rem;
+    padding-right: 0.25rem;
+    text-align: right;
+    color: var(--color-faint);
+    user-select: none;
+  }
+}
+
+/* sonner puts its stylesheet in <head> at run time, after ours, so these win by specificity instead of order */
+:root [data-sonner-toaster][data-sonner-theme='dark'] {
+  --normal-bg: var(--color-surface-2);
+  --normal-bg-hover: var(--color-surface-3);
+  --normal-border: var(--color-border-strong);
+  --normal-border-hover: var(--color-border-control);
+  --normal-text: var(--color-text);
+  --border-radius: var(--radius-lg);
+  font-family: var(--font-sans);
+}
+:root [data-sonner-toaster] [data-sonner-toast][data-styled='true'] {
+  gap: 10px;
+  padding: 12px 14px;
+  font-size: var(--text-sm);
+  box-shadow: var(--shadow-popover);
+}
+:root [data-sonner-toaster][data-sonner-theme='dark'] [data-sonner-toast] [data-description] {
+  color: var(--color-muted);
+}
+:root [data-sonner-toaster] [data-sonner-toast][data-styled='true'] [data-title] {
+  font-weight: 500;
+}
+:root [data-sonner-toaster] [data-sonner-toast][data-styled='true'] [data-button] {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-solid);
+  color: #fff;
+  font-size: var(--text-xs);
+}
