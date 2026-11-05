@@ -16,7 +16,7 @@ const VERDICT = {
 
 function Meters({ result, dim = false }: { result: SimResult; dim?: boolean }) {
   return (
-    <div className={cn('grid gap-x-6 gap-y-4 transition-opacity duration-200 sm:grid-cols-2', dim && 'opacity-50')}>
+    <div className={cn('grid gap-x-6 gap-y-4 transition-opacity duration-200 @md:grid-cols-2', dim && 'opacity-50')}>
       <Meter label="Compute units" value={result.computeUnits} max={CU_MAX} unit="CU" />
       <Meter label="Transaction size" value={result.txBytes} max={BYTES_MAX} unit="bytes" />
     </div>
@@ -25,7 +25,7 @@ function Meters({ result, dim = false }: { result: SimResult; dim?: boolean }) {
 
 function MetersSkeleton() {
   return (
-    <div aria-hidden className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+    <div aria-hidden className="grid gap-x-6 gap-y-4 @md:grid-cols-2">
       {[0, 1].map(key => (
         <div key={key} className="flex flex-col gap-2">
           <div className="flex justify-between">
@@ -99,7 +99,7 @@ export function ForkCheckCard({ check, amount, steps, onRetry, action }: ForkChe
           : 'Checked on a fork';
 
   return (
-    <Card as="section" aria-labelledby={id} padding="lg" className="flex min-w-0 flex-col gap-5">
+    <Card as="section" aria-labelledby={id} padding="lg" className="@container flex min-w-0 flex-col gap-5">
       <header className="flex flex-wrap items-start gap-3">
         <span className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border-strong bg-surface-2 text-muted" aria-hidden>
           <FlaskConical className="size-[18px]" />
@@ -149,7 +149,7 @@ export function ForkCheckCard({ check, amount, steps, onRetry, action }: ForkChe
         </div>
       )}
 
-      <footer className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+      <footer className="flex flex-col items-start gap-3 border-t border-border pt-4 @lg:flex-row @lg:items-center @lg:justify-between">
         <Instructions steps={steps} />
         {action && <div className="shrink-0">{action}</div>}
       </footer>

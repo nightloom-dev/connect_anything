@@ -1,18 +1,34 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import type { SolanaRecipe } from '@aurora-is-near/intents-connect';
 import { useExecution } from '@aurora-is-near/intents-connect/react';
-import { CU_LIMIT, estimateCu, ltvAfter, rescuable, rescueAmount, rescueRecipe, targetFrom, type Obligation, type ObligationRow } from '@connect-anything/kamino-rescue';
+import { CU_LIMIT, estimateCu, ltvAfter, rescuable, rescueAmount, rescueRecipe, targetFrom, type Obligation } from '@connect-anything/kamino-rescue';
 import { fromAtomic } from '../../connect.ts';
 import { Execute } from '../run/execute.tsx';
 import { toSolanaRecipe, type StoredRecipe } from '../../recipe.ts';
-import { Failure, FetchError, Notice, short, useJson } from '../../ui.tsx';
+import { Failure, FetchError, useJson } from '../../ui.tsx';
+import { AddressInput, Button, Card, ChainIcon, cn } from '../../ui/index.ts';
+import { BeforeAfter, ReadingAgain } from './BeforeAfter.tsx';
+import { BeforeYouPay } from './BeforeYouPay.tsx';
+import { ForkCheckCard } from './ForkCheck.tsx';
+import { dollars, listed, ltvOf, percent, risk } from './format.ts';
+import { COLUMNS, HowItWorks, LEFT, NoPositions, ReadingPositions, RunColumn, RunPlaceholder, WatcherBanner } from './layout.tsx';
+import { OpenInBuilder } from './OpenInBuilder.tsx';
+import { PositionCard } from './PositionCard.tsx';
+import { PositionList } from './PositionList.tsx';
+import { useForkCheck } from './simulate.ts';
+import { RepaySummary, TargetLtv } from './TargetLtv.tsx';
+import { AtLiquidation, NoCollateral, NotRepayable, NothingToRepay, OtherDebts, OverComputeLimit, ShortOfTarget, TargetPastLiquidation } from './warnings.tsx';
 
 type Positions = { obligations: Obligation[] };
 
-const percent = (fraction: number) => `${(fraction * 100).toFixed(2)}%`;
-const dollars = (usd: number) => usd.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
-const listed = (rows: ObligationRow[]) => rows.map(row => `${row.symbol} ${dollars(row.usd)}`).join(', ') || 'nothing';
-const ltvOf = (position: Obligation) => (position.collateralUsd > 0 ? percent(position.ltv) : 'no collateral');
+/** Renders nothing: it hands the position the amount a quote delivers, so that the HealthBar shows where the LTV lands. */
+function Quoted({ spendable, onQuote }: { spendable: string; onQuote: (spendable: string | undefined) => void }) {
+  useEffect(() => {
+    onQuote(spendable);
+    return () => onQuote(undefined);
+  }, [spendable]);
+  return null;
+}
 
 function Position({ obligation, url, onBusy }: { obligation: Obligation; url: string; onBusy: (busy: boolean) => void }) {
   const exec = useExecution();
@@ -44,6 +60,17 @@ function Position({ obligation, url, onBusy }: { obligation: Obligation; url: st
     }
   }
 
+  // For the screen only, none of it reaches the run: where the LTV lands with the amount the run card's quote delivers,
+  // the repay simulated on a fork, and the presets of the target, which type a target in as the field does.
+  const [quoted, setQuoted] = useState<string>();
+  const landing = debt && quoted ? ltvAfter(position, debt, quoted) : null;
+  const fork = useForkCheck(debt ? ready.current?.stored : undefined, amount && amount.atomic !== '0' ? amount.atomic : undefined);
+  const presets = [
+    { label: 'Safe (−10 pts)', value: String(Math.max(Math.floor(position.ltv * 100) - 10, 0)) },
+    { label: '−20 pts', value: String(Math.max(Math.floor(position.ltv * 100) - 20, 0)) },
+    { label: 'Repay all', value: '0' },
+  ];
+
   const outcome =
     debt &&
     ((spendable: string) => {
@@ -51,6 +78,7 @@ function Position({ obligation, url, onBusy }: { obligation: Obligation; url: st
       const surplus = BigInt(spendable) - BigInt(debt.amount);
       return (
         <>
+          <Quoted spendable={spendable} onQuote={setQuoted} />
           <dt>It repays</dt>
           <dd>
             {fromAtomic(surplus > 0n ? debt.amount : spendable, debt.decimals)} {debt.symbol}
@@ -78,79 +106,64 @@ function Position({ obligation, url, onBusy }: { obligation: Obligation; url: st
 
   return (
     <>
-      <h3>The position</h3>
-      <dl className="figures">
-        <dt>Obligation</dt>
-        <dd>
-          <code>{position.address}</code>
-        </dd>
-        <dt>LTV</dt>
-        <dd>
-          {ltvOf(position)}
-          {position.collateralUsd > 0 && `, liquidated at ${percent(position.liquidationLtv)}`}
-        </dd>
-        <dt>Collateral</dt>
-        <dd>
-          {dollars(position.collateralUsd)}: {listed(position.deposits)}
-        </dd>
-        <dt>Debt</dt>
-        <dd>
-          {dollars(position.debtUsd)}: {listed(position.borrows)}
-        </dd>
-      </dl>
-      {reread.loading && <Notice>Reading the position again…</Notice>}
-      {reread.error && <Failure error={reread.error} retry={reread.retry} />}
-      {latest && (
-        <Notice kind="ok">
-          After the run the debt is {dollars(latest.debtUsd)}, from {dollars(obligation.debtUsd)}
-          {latest.collateralUsd > 0 && obligation.collateralUsd > 0 && `, and the LTV is ${percent(latest.ltv)}, from ${percent(obligation.ltv)}`}. <button onClick={reread.retry}>Read again</button>
-        </Notice>
-      )}
-      {why && !ready.current && <Notice>{why}</Notice>}
+      <div className={cn(LEFT, 'flex flex-col gap-6')}>
+        {reread.loading && <ReadingAgain compact={!!latest} />}
+        {reread.error && <Failure error={reread.error} retry={reread.retry} />}
+        {latest && <BeforeAfter before={obligation} after={latest} reading={reread.loading} onReadAgain={reread.retry} />}
 
-      {debt && (
-        <>
-          <h3>Target LTV</h3>
-          <label className="inline">
-            Target LTV, % <input inputMode="decimal" value={target} disabled={exec.isBusy} onChange={event => setTarget(event.target.value)} />
-          </label>
-          {t === null && <p className="hint">Enter a target from 0 to 100.</p>}
-          {position.collateralUsd === 0 && <Notice kind="warn">This position has no collateral left, so an LTV means nothing here and the amount is the whole debt.</Notice>}
-          {amount && amount.atomic === '0' && (
-            <Notice>
-              At {ltvOf(position)} this position is already at or under that target, so there is nothing to repay. You can still enter an amount below.
-            </Notice>
-          )}
-          {amount && amount.atomic !== '0' && (
-            <p>
-              Repay <strong>{dollars(amount.usd)}</strong>, which is{' '}
-              <strong>
-                {suggested} {debt.symbol}
-              </strong>
-              .
-            </p>
-          )}
-          {amount?.short && (
-            <Notice kind="warn">
-              {debt.symbol} is only {dollars(debt.usd)} of what this position owes, and this recipe repays nothing else, so the target is out of reach{lowest != null && `: repaying all of it brings the LTV to ${percent(lowest)}`}.
-            </Notice>
-          )}
-          {others.length > 0 && !amount?.short && <Notice>This position also owes {listed(others)}, which this recipe does not repay.</Notice>}
-          {t !== null && position.collateralUsd > 0 && t >= position.liquidationLtv && <Notice kind="warn">That target is at or past the liquidation LTV of {percent(position.liquidationLtv)}, so the position could be liquidated even after it gets there.</Notice>}
-          {estimateCu(position, debt) > CU_LIMIT && (
-            <Notice kind="warn">
-              This repay would take about {estimateCu(position, debt).toLocaleString('en-US')} compute units by estimate, over the roughly {CU_LIMIT.toLocaleString('en-US')} Connect allows, so it is likely to fail on Solana. The money would then stay with your intermediary.
-            </Notice>
-          )}
-          <Notice kind="warn">
-            <strong>The position can move before this runs.</strong> After the deposit, execution takes about 150 seconds plus the MPC signature, and the amount is fixed when you sign. In that time prices change, interest accrues, and the position can be liquidated or repaid by someone else, so the LTV you end up with can differ from the target.
-            {position.collateralUsd > 0 && position.ltv >= position.liquidationLtv && ' This position is already at its liquidation LTV, so that can happen at any moment.'} If less is owed by then, only what is owed gets repaid, and if nothing is, the run fails. Either way what is not spent stays with your intermediary until Refund takes it back. A repay pays
-            off debt and nothing else: the collateral stays with the wallet that owns the position, even if that is not you.
-          </Notice>
-        </>
-      )}
+        <PositionCard position={position} target={debt ? t : null} after={landing}>
+          {why && !ready.current && <NotRepayable why={why} />}
 
-      {ready.current && <Execute exec={exec} recipe={ready.current.recipe} stored={ready.current.stored} suggested={suggested} outcome={outcome} closed={why} />}
+          {debt && (
+            <div className="flex flex-col gap-5 border-t border-border pt-6">
+              <TargetLtv
+                value={target}
+                onChange={setTarget}
+                fraction={t}
+                now={position.collateralUsd > 0 ? position.ltv : undefined}
+                liquidation={position.collateralUsd > 0 ? position.liquidationLtv : undefined}
+                presets={presets}
+                disabled={exec.isBusy}
+              />
+              {amount && amount.atomic !== '0' && <RepaySummary usd={dollars(amount.usd)} amount={suggested!} symbol={debt.symbol} />}
+              <div className="flex flex-col gap-3 empty:hidden">
+                {position.collateralUsd > 0 && position.ltv >= position.liquidationLtv && <AtLiquidation />}
+                {position.collateralUsd === 0 && <NoCollateral />}
+                {amount && amount.atomic === '0' && <NothingToRepay ltv={ltvOf(position)} />}
+                {amount?.short && <ShortOfTarget symbol={debt.symbol} owed={dollars(debt.usd)} lowest={lowest != null ? percent(lowest) : undefined} />}
+                {others.length > 0 && !amount?.short && <OtherDebts owed={listed(others)} />}
+                {t !== null && position.collateralUsd > 0 && t >= position.liquidationLtv && <TargetPastLiquidation liquidation={percent(position.liquidationLtv)} />}
+                {estimateCu(position, debt) > CU_LIMIT && <OverComputeLimit estimate={estimateCu(position, debt).toLocaleString('en-US')} limit={CU_LIMIT.toLocaleString('en-US')} />}
+              </div>
+              <BeforeYouPay atLiquidation={position.collateralUsd > 0 && position.ltv >= position.liquidationLtv} />
+            </div>
+          )}
+        </PositionCard>
+      </div>
+
+      <RunColumn>
+        {ready.current ? (
+          // The run card's old markup needs the .legacy styles. This wrapper goes once the run card is redesigned.
+          <div className="legacy">
+            <Execute exec={exec} recipe={ready.current.recipe} stored={ready.current.stored} suggested={suggested} outcome={outcome} closed={why} />
+          </div>
+        ) : (
+          <RunPlaceholder kind="closed" />
+        )}
+      </RunColumn>
+
+      {/* under the position on a wide screen, after the payment on a phone */}
+      {debt && ready.current && (
+        <div className={LEFT}>
+          <ForkCheckCard
+            check={fork.check}
+            amount={fork.amount && `${fromAtomic(fork.amount, debt.decimals)} ${debt.symbol}`}
+            steps={ready.current.stored.steps.map(step => step.ixName)}
+            onRetry={fork.retry}
+            action={<OpenInBuilder stored={ready.current.stored} />}
+          />
+        </div>
+      )}
     </>
   );
 }
@@ -175,36 +188,70 @@ export function Rescue() {
     setChosen('');
   };
 
-  return (
-    <section>
-      <h2>Repay a Kamino debt</h2>
-      <p className="hint">Enter the Solana wallet that owns the position. It does not have to be yours: anyone can repay a debt on Kamino, and you pay from an EVM chain with one signature.</p>
-      <form className="row" onSubmit={read}>
-        <input aria-label="Wallet address" placeholder="Solana wallet address" spellCheck={false} disabled={busy} value={typed} onChange={event => setTyped(event.target.value)} />
-        <button className="primary" disabled={busy || !typed.trim()}>
-          Read positions
-        </button>
-      </form>
+  // For the screen only: the position a watcher alert named, while it is the one asked for, and the riskiest position first.
+  const field = useId();
+  const alerted = linked.get('obligation') && linked.get('wallet') === wallet && linked.get('obligation') === chosen ? chosen : undefined;
+  const ranked = obligations && [...obligations].sort((one, other) => risk(other) - risk(one));
 
-      {found.loading && <Notice>Reading the positions of this wallet…</Notice>}
-      {badAddress && <Notice kind="error">That is not a Solana address.</Notice>}
+  return (
+    <div className="flex flex-col gap-6 sm:gap-8">
+      <header className="flex flex-col gap-2">
+        <p className="flex items-center gap-2 text-sm font-medium text-muted">
+          <ChainIcon chain="sol" size={16} />
+          Kamino Lend on Solana
+        </p>
+        <h2 className="text-xl font-semibold tracking-tight text-text sm:text-2xl">Repay a Kamino debt</h2>
+        <p className="max-w-2xl text-muted">
+          Enter the Solana wallet that owns the position. It does not have to be yours: anyone can repay a debt on Kamino, and you pay from an EVM chain with one signature.
+        </p>
+      </header>
+
+      {alerted && <WatcherBanner obligation={alerted} missing={!!obligations && !obligations.some(({ address }) => address === alerted)} />}
+
+      <Card padding="md">
+        <form onSubmit={read} className="flex flex-col gap-2">
+          <label htmlFor={field} className="text-sm font-medium text-text">
+            Wallet address
+          </label>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+            <div className="min-w-0 flex-1">
+              <AddressInput
+                id={field}
+                size="lg"
+                placeholder="Solana wallet address"
+                value={typed}
+                onChange={setTyped}
+                disabled={busy}
+                error={badAddress ? <span role="alert">That is not a Solana address.</span> : undefined}
+              />
+            </div>
+            <Button type="submit" variant={obligations?.length ? 'secondary' : 'primary'} size="lg" disabled={busy || !typed.trim()}>
+              Read positions
+            </Button>
+          </div>
+        </form>
+      </Card>
+
+      {(!url || badAddress) && <HowItWorks />}
+      {found.loading && <ReadingPositions />}
       {found.error && !badAddress && <Failure error={found.error} retry={found.retry} />}
-      {obligations?.length === 0 && <Notice>This wallet has no open positions on Kamino.</Notice>}
-      {obligations && obligations.length > 1 && (
-        <>
-          <p>This wallet has {obligations.length} positions. Choose one.</p>
-          <ul className="instructions">
-            {obligations.map(item => (
-              <li key={item.address}>
-                <button className={item.address === position?.address ? 'chosen' : ''} aria-pressed={item.address === position?.address} disabled={busy} onClick={() => setChosen(item.address)}>
-                  <strong>LTV {ltvOf(item)}</strong> owes {listed(item.borrows)} against {dollars(item.collateralUsd)} <span className="hint">{short(item.address)}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </>
+      {obligations?.length === 0 && <NoPositions />}
+      {ranked && ranked.length > 0 && (
+        <div className={COLUMNS}>
+          {ranked.length > 1 && (
+            <div className={LEFT}>
+              <PositionList positions={ranked} chosen={position?.address} disabled={busy} onChoose={setChosen} />
+            </div>
+          )}
+          {position && url ? (
+            <Position key={position.address} obligation={position} url={url} onBusy={setBusy} />
+          ) : (
+            <RunColumn>
+              <RunPlaceholder kind="choose" />
+            </RunColumn>
+          )}
+        </div>
       )}
-      {position && url && <Position key={position.address} obligation={position} url={url} onBusy={setBusy} />}
-    </section>
+    </div>
   );
 }

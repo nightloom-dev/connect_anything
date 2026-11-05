@@ -51,7 +51,7 @@ export function PositionCard({ position, target, after, children }: PositionCard
   const id = useId();
   const zone = health(position);
   return (
-    <Card as="section" aria-labelledby={id} padding="lg" className="flex min-w-0 flex-col gap-6">
+    <Card as="section" aria-labelledby={id} padding="lg" className="@container flex min-w-0 flex-col gap-6">
       <header className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <h3 id={id} className="text-base font-semibold text-text">
           Position
@@ -64,7 +64,8 @@ export function PositionCard({ position, target, after, children }: PositionCard
 
       {position.collateralUsd > 0 && <HealthBar value={position.ltv} liquidation={position.liquidationLtv} target={target} after={after} format={percent} />}
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      {/* side by side once the card, not the screen, is wide enough: the left column is narrow just past 960px */}
+      <div className="grid gap-3 @lg:grid-cols-2">
         <Holdings title="Collateral" total={position.collateralUsd} rows={position.deposits} empty="Nothing deposited" />
         <Holdings title="Debt" total={position.debtUsd} rows={position.borrows} empty="Nothing owed" />
       </div>

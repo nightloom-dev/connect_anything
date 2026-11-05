@@ -5,9 +5,11 @@ import { Address, Alert, Card, EmptyState, Skeleton, Spinner, cn } from '../../u
 /**
  * Two columns from 960px: on the left the list of positions, the position and the check on a fork, one under the other;
  * on the right the payment. On a phone one column in the order of the page, so the payment follows the position.
+ * The payment is 440px wide up to 1200px, so that the position keeps the wider column, then the run card's own width.
  * The last row takes whatever height the payment has over the left column.
  */
-export const COLUMNS = 'grid min-w-0 gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,30rem)] md:grid-rows-[auto_auto_1fr] md:gap-x-8';
+export const COLUMNS =
+  'grid min-w-0 gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,27.5rem)] md:grid-rows-[auto_auto_1fr] md:gap-x-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,var(--container-run))]';
 /** A place in the left column of COLUMNS: the next row free there. */
 export const LEFT = 'min-w-0 md:col-start-1 md:self-start';
 

@@ -42,25 +42,25 @@ export function BeforeAfter({ before, after, reading = false, onReadAgain }: Bef
   const fell = before.ltv - after.ltv;
 
   return (
-    <Card as="section" aria-labelledby={id} padding="lg" className="flex flex-col gap-5 border-success/32 bg-linear-to-b from-success/6 to-surface">
-      <header className="flex flex-wrap items-start gap-3">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-md border border-success/32 bg-success/12 text-success" aria-hidden>
-          <CircleCheck className="size-[18px]" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h3 id={id} className="text-base leading-6 font-semibold text-text">
+    <Card as="section" aria-labelledby={id} padding="lg" className="@container flex flex-col gap-5 border-success/32 bg-linear-to-b from-success/6 to-surface">
+      <header className="flex flex-col gap-3">
+        <div className="flex items-center gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-md border border-success/32 bg-success/12 text-success" aria-hidden>
+            <CircleCheck className="size-[18px]" />
+          </span>
+          <h3 id={id} className="min-w-0 flex-1 text-base leading-6 font-semibold text-text">
             After the run
           </h3>
-          <p role="status" className="mt-0.5 text-sm text-text/80">
-            After the run the debt is {dollars(after.debtUsd)}, from {dollars(before.debtUsd)}
-            {ltv && `, and the LTV is ${percent(after.ltv)}, from ${percent(before.ltv)}`}.
-          </p>
+          <Button size="sm" icon={<RotateCw />} loading={reading} onClick={onReadAgain}>
+            Read again
+          </Button>
         </div>
-        <Button size="sm" icon={<RotateCw />} loading={reading} onClick={onReadAgain}>
-          Read again
-        </Button>
+        <p role="status" className="text-sm text-text/80">
+          After the run the debt is {dollars(after.debtUsd)}, from {dollars(before.debtUsd)}
+          {ltv && `, and the LTV is ${percent(after.ltv)}, from ${percent(before.ltv)}`}.
+        </p>
       </header>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid gap-4 @sm:grid-cols-2">
         <Change label="Debt" from={dollars(before.debtUsd)} to={dollars(after.debtUsd)} delta={paid > 0 ? `${dollars(paid)} repaid` : 'unchanged'} down={paid > 0} />
         {ltv && <Change label="LTV" from={percent(before.ltv)} to={percent(after.ltv)} delta={fell > 0 ? `${points(fell)} lower` : fell < 0 ? `${points(fell)} higher` : 'unchanged'} down={fell > 0} />}
       </div>
