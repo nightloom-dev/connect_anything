@@ -2,14 +2,15 @@ import type { Idl } from '@connect-anything/core';
 
 /**
  * Programs to start from, with IDLs that ship with the page so that the demo does not wait on Solana or the converter.
- * Nothing here is written by hand: each IDL is a file the repository already has. klend publishes only a legacy IDL,
- * so its modern copy is recipes/kamino-rescue/klend.idl.json, what the server answers once the converter has run. The
- * other three are the IDLs read from chain by GET /api/idl for the simulator fixtures (fixtures/README.md, "Three more
- * programs"). Each loads as its own chunk, on a click.
+ * Nothing here is written by hand: each IDL is a file the repository already has. Kamino Lend (klend) publishes only a
+ * legacy IDL, so its modern copy is recipes/kamino-rescue/klend.idl.json, what the server answers once the converter
+ * has run. The other three are the IDLs read from chain by GET /api/idl for the simulator fixtures (fixtures/README.md,
+ * "Three more programs"). Each loads as its own chunk, on a click.
  */
 export type Example = {
+  /** The name the program goes by, as the landing page writes it. */
   name: string;
-  /** What kind of program it is, in two or three words. */
+  /** What kind of program it is, in two or three words, with the short name it is known by when it has one. */
   kind: string;
   program: string;
   load: () => Promise<Idl>;
@@ -25,8 +26,8 @@ const fromFixture = (module: { default: unknown }, program: string) => (module.d
 
 export const EXAMPLES: Example[] = [
   {
-    name: 'klend',
-    kind: 'Kamino lending',
+    name: 'Kamino Lend',
+    kind: 'Lending (klend)',
     program: KLEND,
     load: () => import('../../../../../recipes/kamino-rescue/klend.idl.json').then(module => module.default as unknown as Idl),
   },

@@ -115,6 +115,17 @@
 }
 
 /* sonner puts its stylesheet in <head> at run time, after ours, so these win by specificity instead of order */
+
+/* Toasts come down over the 56 px header and hide nothing of the page under it: centred between the logo and the wallet
+   button, and from 960 px between the nav and the GitHub and wallet buttons. Under 600 px sonner spans the screen. */
+:root [data-sonner-toaster] {
+  --toast-right: calc(50% - var(--width) / 2);
+}
+@media (width >= 60rem) {
+  :root [data-sonner-toaster] {
+    --toast-right: calc(max(0px, (100% - var(--container-content)) / 2) + 1.5rem + 14.5rem);
+  }
+}
 :root [data-sonner-toaster][data-sonner-theme='dark'] {
   --normal-bg: var(--color-surface-2);
   --normal-bg-hover: var(--color-surface-3);

@@ -4,6 +4,7 @@ import type { Field, FieldType } from '@connect-anything/core';
 import { defaultValue, isByte, variantValue } from '../../recipe.ts';
 import { Button, Checkbox, IconButton, Input, Select, Switch, cn } from '../../ui/index.ts';
 import { AddressField } from './AddressField.tsx';
+import { breakable } from './breakable.tsx';
 import type { QuickPick } from './known.ts';
 
 export const typeLabel = (type: FieldType): string => {
@@ -155,9 +156,7 @@ export function Labeled({ field, label, children, id, className, ...input }: Lab
   return (
     <div id={id} className={cn('flex min-w-0 scroll-mt-24 flex-col gap-2', className)}>
       <div className="flex min-w-0 items-baseline justify-between gap-3">
-        <span className="min-w-0 truncate font-mono text-[13px] font-medium text-text" title={field.name}>
-          {field.name}
-        </span>
+        <span className="min-w-0 font-mono text-[13px] font-medium [overflow-wrap:anywhere] text-text">{breakable(field.name)}</span>
         <span className="shrink-0 text-xs text-muted">{typeLabel(field)}</span>
       </div>
       {field.docs && <p className="-mt-1 text-xs leading-5 text-muted">{field.docs.join(' ')}</p>}

@@ -21,5 +21,9 @@ export function Skeleton({ className, width, height, lines }: SkeletonProps) {
       </span>
     );
   }
-  return <span data-ui="skeleton" aria-hidden className={cn('skeleton block h-4 rounded-md', className)} style={{ width, height }} />;
+  // a height or a radius in className replaces the default one: Tailwind puts h-3, size-7, rounded-full and rounded-lg
+  // before h-4 and rounded-md, so with both the default would win
+  const sized = height !== undefined || /(^|\s)(h|size)-/.test(className ?? '');
+  const rounded = /(^|\s)rounded(-|\s|$)/.test(className ?? '');
+  return <span data-ui="skeleton" aria-hidden className={cn('skeleton block', !sized && 'h-4', !rounded && 'rounded-md', className)} style={{ width, height }} />;
 }

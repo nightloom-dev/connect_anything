@@ -1,4 +1,5 @@
 import type { Idl } from '@connect-anything/core';
+import { PublicKey } from '@solana/web3.js';
 import { parseStored, type StoredRecipe, type StoredStep } from '../../recipe.ts';
 
 // What the builder keeps across a reload. sessionStorage, so a recipe in progress survives a reload of its tab and no
@@ -9,10 +10,20 @@ const SESSION = 'connect-anything:builder';
 export const IMPORT = 'connect-anything:builder-import';
 const RECENT = 'connect-anything:recent-programs';
 
-export type Saved = { idl?: Idl; idls: Record<string, Idl>; steps: StoredStep[]; target: string };
+/** `lookupTables` are those of a recipe handed over with them, kept as long as its steps are. */
+export type Saved = { idl?: Idl; idls: Record<string, Idl>; steps: StoredStep[]; target: string; lookupTables?: string[] };
 
 const isRecord = (value: unknown): value is Record<string, any> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const isIdl = (value: unknown): value is Idl => isRecord(value) && typeof value.address === 'string' && Array.isArray(value.instructions);
+
+/** What parseStored takes as a recipe's lookup tables: 16 Solana addresses at most. */
+function isLookupTables(value: unknown): value is string[] {
+  try {
+    return Array.isArray(value) && value.length <= 16 && value.every(key => typeof key === 'string' && new PublicKey(key).toBase58() === key);
+  } catch {
+    return false;
+  }
+}
 
 function read(storage: () => Storage, key: string): string | null {
   try {
@@ -46,17 +57,19 @@ export function readSession(): Saved | undefined {
     );
     // a recipe with a step dropped would run something else, so a session that lost one is not restored at all
     if (steps.length !== json.steps.length) return undefined;
+    // nor one whose lookup tables cannot be read: the recipe would then be sent without them
+    if (json.lookupTables !== undefined && !isLookupTables(json.lookupTables)) return undefined;
     const idl = typeof json.idl === 'string' && Object.hasOwn(idls, json.idl) ? idls[json.idl] : undefined;
-    return { idl, idls, steps, target: json.target };
+    return { idl, idls, steps, target: json.target, ...(json.lookupTables?.length ? { lookupTables: json.lookupTables } : {}) };
   } catch {
     return undefined;
   }
 }
 
 /** Keeps the IDL on screen and those the steps run, not every program loaded on the way. */
-export function saveSession({ idl, idls, steps, target }: Saved) {
+export function saveSession({ idl, idls, steps, target, lookupTables }: Saved) {
   const kept = Object.fromEntries([...(idl ? [idl.address] : []), ...steps.map(step => step.program)].filter(address => idls[address]).map(address => [address, idls[address]]));
-  write(session, SESSION, JSON.stringify({ version: 1, idl: idl?.address, idls: kept, steps, target }));
+  write(session, SESSION, JSON.stringify({ version: 1, idl: idl?.address, idls: kept, steps, target, ...(lookupTables?.length ? { lookupTables } : {}) }));
 }
 
 /** A recipe another page handed over, or why it cannot be used. The key stays until `dropImport`. */

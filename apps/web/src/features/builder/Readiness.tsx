@@ -1,5 +1,6 @@
 import { useId, useState, type MouseEvent } from 'react';
 import { ArrowRight, CircleCheck, CircleDashed } from 'lucide-react';
+import { breakable } from './breakable.tsx';
 
 /** One thing the form still lacks, with the field that takes it. */
 export type ReadinessItem = { key: string; label: string; problem: string; anchor?: string };
@@ -78,7 +79,7 @@ function Line({ item }: { item: ReadinessItem }) {
     <>
       <CircleDashed className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
       <span className="min-w-0 flex-1">
-        <span className="font-mono text-[13px] break-all text-text">{item.label}</span> <span className="text-muted">{item.problem}</span>
+        <span className="font-mono text-[13px] [overflow-wrap:anywhere] text-text">{breakable(item.label)}</span> <span className="text-muted">{item.problem}</span>
       </span>
     </>
   );

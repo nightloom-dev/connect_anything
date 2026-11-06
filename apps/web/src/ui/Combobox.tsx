@@ -80,7 +80,7 @@ export function Combobox<T>({
         invalid={!!error}
       >
         {/* The input is the frame: the list anchors to it, so it takes the field's width and left edge. */}
-        <div className={cn('group relative w-full min-w-0', disabled && 'opacity-60')}>
+        <div className="group relative w-full min-w-0">
           <Search className={cn('pointer-events-none absolute top-1/2 size-4 -translate-y-1/2 text-muted', AFFIX[size].icon)} aria-hidden />
           <ComboboxInput
             aria-label={rest['aria-label']}
@@ -90,14 +90,14 @@ export function Combobox<T>({
             autoComplete="off"
             spellCheck={false}
             className={cn(
-              'block w-full min-w-0 rounded-md border text-text outline-none transition-[border-color,box-shadow] duration-120 ease-out placeholder:text-placeholder',
+              'block w-full min-w-0 rounded-md border outline-none transition-[border-color,box-shadow] duration-120 ease-out placeholder:text-placeholder',
               FIELD_SIZE[size],
               AFFIX[size].input,
               disabled
-                ? 'cursor-not-allowed border-border-control bg-surface'
+                ? 'cursor-not-allowed border-border-strong bg-surface text-muted'
                 : error
-                  ? 'border-danger/70 bg-surface-2 focus:border-danger focus:shadow-[0_0_0_4px_rgb(255_92_108/0.18)]'
-                  : 'border-border-control bg-surface-2 group-hover:[&:not(:focus)]:border-border-control-hover focus:border-accent focus:shadow-glow',
+                  ? 'border-danger/70 bg-surface-2 text-text focus:border-danger focus:shadow-[0_0_0_4px_rgb(255_92_108/0.18)]'
+                  : 'border-border-control bg-surface-2 text-text group-hover:[&:not(:focus)]:border-border-control-hover focus:border-accent focus:shadow-glow',
             )}
           />
           <ComboboxButton className={cn('absolute top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-sm text-muted hover:text-text', AFFIX[size].button)} aria-label="Show all">

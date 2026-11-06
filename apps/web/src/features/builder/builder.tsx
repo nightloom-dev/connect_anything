@@ -9,6 +9,7 @@ import { STAND_IN, defaultValue, destinationIssue, followsIntermediary, recipeCo
 import { Boundary, Failure, FetchError, fetchJson, useAct, useAsync, useJson } from '../../ui.tsx';
 import { Alert, Button, Card, EmptyState, Input, Spinner, Stepper, Switch, cn, isSolanaAddress, solanaAddressProblem, toast, type StepItem } from '../../ui/index.ts';
 import { AccountsPanel, type AccountGroup, type AccountView } from './AccountsPanel.tsx';
+import { breakable } from './breakable.tsx';
 import { EXAMPLES, exampleOf, loadExample } from './examples.ts';
 import { ExportTabs } from './ExportPanel.tsx';
 import { Labeled, type KeyPicks } from './FieldInput.tsx';
@@ -33,6 +34,7 @@ function ProgramScreen({ onLoad, heading, hint }: { onLoad: (idl: Idl) => void; 
   const [programId, setProgramId] = useState('');
   const [idError, setIdError] = useState<string>();
   const [example, setExample] = useState<string>();
+  const [rereading, setRereading] = useState<string>();
   const [recent, setRecent] = useState(readRecent);
   const { working, error, act } = useAct();
   const id = programId.trim();
@@ -92,10 +94,12 @@ function ProgramScreen({ onLoad, heading, hint }: { onLoad: (idl: Idl) => void; 
           <RecentPrograms
             recent={recent}
             disabled={working}
+            loading={rereading}
             onPick={address => {
               setProgramId(address);
               setIdError(undefined);
-              fromChain(address)();
+              setRereading(address);
+              fromChain(address)().finally(() => setRereading(undefined));
             }}
             onClear={() => {
               forgetRecent();
@@ -202,7 +206,7 @@ export function InstructionForm({ idl, ixName, mint, symbol, onAdd }: { idl: Idl
       optional: row.optional,
       editable: editable(row),
       value: inputs[row.name] ?? '',
-      placeholder: row.pubkey && row.pubkey !== idl.address ? 'Another address' : row.optional ? 'Blank leaves it out' : 'Address',
+      placeholder: row.pubkey && row.pubkey !== idl.address ? 'Another address' : row.optional ? 'Optional' : 'Address',
       docs: specs.get(row.name)?.docs?.join(' '),
       suggestions: suggestionsFor(row.name, mintPick),
     };
@@ -234,8 +238,8 @@ export function InstructionForm({ idl, ixName, mint, symbol, onAdd }: { idl: Idl
   return (
     <Card as="section" aria-labelledby="instruction-name" padding="lg" className="flex flex-col gap-8 max-sm:[--card-p:1rem]">
       <header className="flex flex-col gap-1.5">
-        <h3 id="instruction-name" className="font-mono text-lg font-semibold break-all text-text">
-          {ixName}
+        <h3 id="instruction-name" className="font-mono text-lg font-semibold [overflow-wrap:anywhere] text-text">
+          {breakable(ixName)}
         </h3>
         {instruction.docs && <Docs text={instruction.docs.join(' ')} />}
       </header>
@@ -327,6 +331,8 @@ type InstructionScreenProps = {
   onTarget: (assetId: string) => void;
   steps: StoredStep[];
   onSteps: (steps: StoredStep[]) => void;
+  /** Those of a recipe handed over with them, for the tray to show. */
+  lookupTables?: string[];
   /** Why Connect would refuse the recipe as it stands. */
   destination?: string;
   onBack: () => void;
@@ -334,7 +340,7 @@ type InstructionScreenProps = {
   heading: HeadingRef;
 };
 
-function InstructionScreen({ idl, idls, list, targets, token, onTarget, steps, onSteps, destination, onBack, onNext, heading }: InstructionScreenProps) {
+function InstructionScreen({ idl, idls, list, targets, token, onTarget, steps, onSteps, lookupTables, destination, onBack, onNext, heading }: InstructionScreenProps) {
   const [chosen, setChosen] = useState<string>();
   const instructions = useMemo(() => (idl ? listInstructions(idl) : []), [idl]);
   const ixName = instructions.some(({ name }) => name === chosen) ? chosen : undefined; // another program may have been loaded since
@@ -430,6 +436,7 @@ function InstructionScreen({ idl, idls, list, targets, token, onTarget, steps, o
             onUp={index => move(index)}
             onDown={index => move(index + 1)}
             onRemove={index => onSteps(steps.filter((_, at) => at !== index))}
+            lookupTables={lookupTables}
             destination={destination}
             nextDisabled={steps.length === 0 || !token || !!destination}
             onNext={onNext}
@@ -490,7 +497,7 @@ function SimulateScreen({ stored, token, pending, onBack, onRun, heading }: Simu
 
   return (
     <section aria-labelledby="builder-step" className="flex flex-col gap-6">
-      <StepHeader ref={heading} number={3} title="Simulation and export" description="A run on a fork of mainnet, as an intermediary that holds just the amount delivered. Then share it as a link, or as code." />
+      <StepHeader ref={heading} number={3} title="Simulation" description="A run on a fork of mainnet, as an intermediary that holds just the amount delivered. Then share it as a link, or as code." />
       {pending ?? (!stored || !token ? (
         <EmptyState
           icon={<ListPlus />}
@@ -530,7 +537,7 @@ function SimulateScreen({ stored, token, pending, onBack, onRun, heading }: Simu
                     className="nums"
                   />
                 </div>
-                <Button type="submit" icon={<Play />} loading={sim.loading} disabled={sim.loading}>
+                <Button type="submit" icon={<Play />} loading={sim.loading}>
                   Simulate
                 </Button>
               </div>
@@ -572,7 +579,8 @@ function TokensPending({ list }: { list: ReturnType<typeof useJson<TokenList>> }
   );
 }
 
-const STEPS = ['Program', 'Instruction', 'Simulate', 'Run'];
+// the names the landing page gives the steps too
+const STEPS = ['Program', 'Instruction', 'Simulation', 'Run'];
 
 /** Why the builder opened at the program in place of the later step the address asked for. */
 const NOTHING_YET: Record<number, string> = {
@@ -608,6 +616,8 @@ export function Builder() {
   const [idls, setIdls] = useState<Record<string, Idl>>(() => initial.imported?.idls ?? initial.saved?.idls ?? {});
   const [steps, setSteps] = useState<StoredStep[]>(() => initial.imported?.steps ?? initial.saved?.steps ?? []);
   const [target, setTarget] = useState(() => initial.imported?.destination.assetId ?? initial.saved?.target ?? '');
+  // a handed-over recipe's lookup tables go with its steps, and the transaction then needs them to fit
+  const [lookupTables, setLookupTables] = useState(() => (initial.imported ? initial.imported.lookupTables : initial.saved?.lookupTables));
   const [problem, setProblem] = useState(initial.problem);
 
   // Known limit: native SOL is left out as a target, since it has no mint to fund a simulation with or to read a balance of. Wrapped tokens work.
@@ -622,12 +632,19 @@ export function Builder() {
             destination: { chain: 'sol', assetId: token.assetId, tokenAddress: token.contractAddress! },
             idls: Object.fromEntries(steps.map(({ program }) => [program, idls[program]])),
             steps,
+            ...(lookupTables?.length ? { lookupTables } : {}),
           }
         : undefined,
-    [token, steps, idls],
+    [token, steps, idls, lookupTables],
   );
   const recipe = useMemo(() => stored && toSolanaRecipe(stored), [stored]);
   const destination = useMemo(() => (stored ? destinationIssue(stored, STAND_IN) : undefined), [stored]);
+
+  // once every step is gone, the recipe that came with them is too: a new one starts without its lookup tables
+  const onSteps = (next: StoredStep[]) => {
+    setSteps(next);
+    if (next.length === 0) setLookupTables(undefined);
+  };
 
   const onLoad = (loaded: Idl) => {
     setIdl(loaded);
@@ -645,7 +662,7 @@ export function Builder() {
     if (initial.imported) toast.success('Recipe opened in the builder', { description: `${count === 1 ? '1 step' : `${count} steps`}. Change them here, then simulate.` });
   }, [initial]);
 
-  useEffect(() => saveSession({ idl, idls, steps, target }), [idl, idls, steps, target]);
+  useEffect(() => saveSession({ idl, idls, steps, target, lookupTables }), [idl, idls, steps, target, lookupTables]);
 
   // The step goes in the address, and the new step's heading takes the focus so that a screen reader says where it is.
   const heading = useRef<HTMLHeadingElement>(null);
@@ -697,7 +714,8 @@ export function Builder() {
             token={token}
             onTarget={setTarget}
             steps={steps}
-            onSteps={setSteps}
+            onSteps={onSteps}
+            lookupTables={lookupTables}
             destination={destination}
             onBack={() => setScreen(1)}
             onNext={() => setScreen(3)}
@@ -710,7 +728,10 @@ export function Builder() {
         <section aria-labelledby="builder-step" className="flex flex-col gap-6">
           <StepHeader ref={heading} number={4} title="Run" description="Pay from Base, Arbitrum or Ethereum with one signature. Intents Connect delivers the token on Solana and runs the recipe." />
           {pending ?? (stored && recipe ? (
-            <Execute exec={exec} recipe={recipe} stored={stored} />
+            // the run card is as wide as on a shared link, and starts where the heading does
+            <div className="w-full max-w-run min-w-0">
+              <Execute exec={exec} recipe={recipe} stored={stored} />
+            </div>
           ) : (
             <EmptyState
               icon={<ListPlus />}

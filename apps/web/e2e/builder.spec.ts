@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { KLEND, WRONG_MARKET_RECIPE } from './mocks/fixtures.ts';
 import { SOL_USDT } from './mocks/tokens.ts';
 import { BUILDER } from './paths.ts';
@@ -12,6 +12,8 @@ const STAND_IN = '3giHp8wAqP8khAKkhLDJqGWJvUpmwTPp8zwgh12WpVz7';
 const WHIRLPOOLS = 'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc';
 /** Where another page, as /kamino, leaves a recipe for the builder. */
 const IMPORT = 'connect-anything:builder-import';
+/** The lookup table of fixtures/klend-repay-lookup-table.sim.json, which the klend repay can be sent with. */
+const LOOKUP_TABLE = '284iwGtA9X9aLy3KsyV8uT2pXLARhYbiSi5SiM2g47M2';
 
 // The repay of fixtures/klend-repay.sim.json, the one the simulation fixtures were recorded with.
 const REPAY_ACCOUNTS = {
@@ -121,8 +123,8 @@ test('an uploaded IDL lists its instructions, and a repay is added once its acco
   await expect(recipeSteps(page).filter({ hasText: REPAY }).filter({ hasText: 'kamino_lending' }).filter({ hasText: 'KLen…gmjD' })).toBeVisible();
   await expect(page.getByRole('button', { name: `Remove ${REPAY}` })).toBeVisible();
   await page.getByRole('button', { name: 'Next: simulate' }).click();
-  await expect(page.getByRole('heading', { name: '3. Simulation and export' })).toBeVisible();
-  await expect(stepper(page).getByRole('button', { name: 'Simulate' })).toHaveAttribute('aria-current', 'step');
+  await expect(page.getByRole('heading', { name: '3. Simulation' })).toBeVisible();
+  await expect(stepper(page).getByRole('button', { name: 'Simulation' })).toHaveAttribute('aria-current', 'step');
 });
 
 test('a simulation shows its verdict, compute units, bytes and logs: ok, warn, fail and offline', async ({ page, api }) => {
@@ -206,6 +208,7 @@ test('export makes a link that opens the recipe, and TypeScript for the SDK', as
   const posted = api.requests.find(({ method, path }) => method === 'POST' && path === '/api/recipes')?.body as Record<string, any>;
   expect(posted).toMatchObject({ version: 1, destination: { chain: 'sol', tokenAddress: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' }, steps: [{ program: KLEND, ixName: REPAY, amountArg: 'liquidity_amount' }] });
   expect(Object.keys(posted.idls)).toEqual([KLEND]);
+  expect(posted).not.toHaveProperty('lookupTables');
 
   const href = (await link.getAttribute('href'))!;
 
@@ -294,7 +297,7 @@ test('with no Solana token to deliver, no recipe can be built', async ({ page, a
 test('an example loads the IDL that ships with the page, with no request', async ({ page, api }) => {
   await page.goto(BUILDER);
   const examples: [string, string, string][] = [
-    ['klend', 'kamino_lending', KLEND],
+    ['Kamino Lend', 'kamino_lending', KLEND],
     ['Orca Whirlpools', 'whirlpool', WHIRLPOOLS],
     ['Meteora DLMM', 'lb_clmm', 'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo'],
     ['Meteora DAMM v2', 'cp_amm', 'cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG'],
@@ -388,6 +391,24 @@ test('suggested and known addresses fill an account in one click, and the checkl
   await expect(address(page, 'repay_accounts.obligation')).toHaveValue(STAND_IN);
 });
 
+test('the two buttons beside each address say what they do, in a key over the fields and in a tooltip on focus', async ({ page }) => {
+  await uploadKlend(page);
+  await pick(page, REPAY);
+  // said once over the fields, next to each button as it looks
+  await expect(page.getByText('Use the intermediary of whoever runs this', { exact: true })).toBeVisible();
+  await expect(page.getByText('Pick a known program or sysvar', { exact: true })).toBeVisible();
+  // and by each button when the keyboard reaches it, under the name it always had
+  await address(page, 'repay_accounts.obligation').focus();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: 'Paste' }).first()).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: 'Use the intermediary of whoever runs this' }).first()).toBeFocused();
+  await expect(page.getByRole('tooltip')).toHaveText('Use the intermediary of whoever runs this');
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: 'Known addresses' }).first()).toBeFocused();
+  await expect(page.getByRole('tooltip')).toHaveText('Known addresses');
+});
+
 test('a reload keeps the recipe, its token and the step, which is in the address', async ({ page }) => {
   // three loads of the dev page, seconds of CPU each
   test.slow();
@@ -409,12 +430,14 @@ test('a reload keeps the recipe, its token and the step, which is in the address
   await page.getByRole('button', { name: 'Next: simulate' }).click();
   await expect(page).toHaveURL(/\?step=3$/);
   await page.reload();
-  await expect(page.getByRole('heading', { name: '3. Simulation and export' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '3. Simulation' })).toBeVisible();
   await expect(statusOf(page, 'The recipe passed simulation.')).toBeVisible();
   await expect(page.getByText('Tested with 1 USDC delivered, as an intermediary that holds just that.')).toBeVisible();
 });
 
 test('a recipe another page hands over opens at step 2 in place of what the tab had, once', async ({ page }) => {
+  // three loads of the dev page, seconds of CPU each
+  test.slow();
   await page.goto(BUILDER);
   await page.getByRole('button', { name: /^Orca Whirlpools\b/ }).click();
   await expect(page.getByText(WHIRLPOOLS, { exact: true })).toBeVisible();
@@ -447,6 +470,245 @@ test('a recipe another page hands over opens at step 2 in place of what the tab 
   await expect(statusOf(page, 'The recipe passed simulation.')).toBeVisible();
 });
 
+/** A name drawn whole on more than one line, each line but the last ending where the name may break: a dot or an underscore. */
+async function expectWrappedAtSeparators(element: Locator, name: string) {
+  const lines = await element.evaluate(element => {
+    const rows = new Map<number, string>();
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = node.textContent ?? '';
+      for (let index = 0; index < text.length; index++) {
+        const range = document.createRange();
+        range.setStart(node, index);
+        range.setEnd(node, index + 1);
+        const top = Math.round(range.getBoundingClientRect().top);
+        rows.set(top, (rows.get(top) ?? '') + text[index]);
+      }
+    }
+    return [...rows.entries()].sort(([a], [b]) => a - b).map(([, row]) => row);
+  });
+  expect(lines.join('')).toBe(name);
+  expect(lines.length).toBeGreaterThan(1);
+  for (const line of lines.slice(0, -1)) expect(line).toMatch(/[._]$/);
+}
+
+test('every step fits a 360 px screen, and a long IDL name wraps after a dot or an underscore, not inside a word or behind an ellipsis', async ({ page }) => {
+  // four screens of the dev page, seconds of CPU each
+  test.slow();
+  await page.setViewportSize({ width: 360, height: 780 });
+  const sideways = () => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  await page.goto(BUILDER);
+  await expect(page.getByRole('heading', { name: '1. Program' })).toBeVisible();
+  expect(await sideways()).toBe(0);
+
+  await page.getByLabel('IDL file').setInputFiles(KLEND_FILE);
+  await pick(page, REPAY);
+  // the instruction's name is wider than the screen
+  await expectWrappedAtSeparators(page.getByRole('heading', { name: REPAY, exact: true }), REPAY);
+  expect(await sideways()).toBe(0);
+
+  // the repay is picked already: fill it and add it
+  for (const [account, value] of Object.entries(REPAY_ACCOUNTS)) await address(page, account).fill(value);
+  await page.getByLabel('Uses the amount delivered').check();
+  await page.getByRole('button', { name: 'Add to recipe' }).click();
+  await expect(recipeSteps(page)).toHaveCount(1);
+  // and wider than its row of the recipe, beside the buttons that move and remove it
+  await expectWrappedAtSeparators(recipeSteps(page).getByText(REPAY, { exact: true }), REPAY);
+  expect(await sideways()).toBe(0);
+  await page.getByRole('button', { name: 'Next: simulate' }).click();
+  await expect(statusOf(page, 'The recipe passed simulation.')).toBeVisible();
+  expect(await sideways()).toBe(0);
+  await page.getByRole('button', { name: 'Next: run it' }).click();
+  await expect(page.getByRole('button', { name: 'Connect EVM wallet' })).toBeVisible();
+  expect(await sideways()).toBe(0);
+});
+
+test('going back up the form with Shift+Tab, what takes the focus comes out from under the sticky header whole', async ({ page }) => {
+  // some sixty stops down and as many back up
+  test.slow();
+  await uploadKlend(page);
+  await pick(page, REPAY);
+  const focused = (target: ReturnType<Page['getByRole']>) => target.evaluate(element => element === document.activeElement);
+  const last = page.getByRole('contentinfo').getByRole('link').last();
+  for (let presses = 0; presses < 120 && !(await focused(last)); presses++) await page.keyboard.press('Tab');
+  await expect(last).toBeFocused();
+
+  const header = (await page.getByRole('banner').boundingBox())!.height;
+  const search = page.getByRole('combobox', { name: 'Instruction' });
+  const under: string[] = [];
+  for (let presses = 0; presses < 120 && !(await focused(search)); presses++) {
+    await page.keyboard.press('Shift+Tab');
+    const stop = await page.evaluate(() => {
+      const element = document.activeElement!;
+      const name = element.getAttribute('aria-label') ?? element.textContent?.trim().slice(0, 40) ?? element.tagName;
+      return { inPage: !!element.closest('main'), top: element.getBoundingClientRect().top, name };
+    });
+    if (stop.inPage && stop.top < header) under.push(`${stop.name}, its top at ${Math.round(stop.top)} px`);
+  }
+  await expect(search).toBeFocused();
+  expect(under, `under the ${header} px of the header`).toEqual([]);
+});
+
+test('an example, Load and a recent program keep the focus while they read the IDL, and take no second press', async ({ page, api }) => {
+  await page.goto(BUILDER);
+  // an example comes in a chunk of the page's own, held here until the test lets it go
+  let reached!: () => void;
+  let release!: () => void;
+  const requested = new Promise<void>(done => (reached = done));
+  const released = new Promise<void>(done => (release = done));
+  await page.route(/orca-whirlpool-swap\.sim/, async route => {
+    reached();
+    await released;
+    await route.continue();
+  });
+  const example = page.getByRole('button', { name: /^Orca Whirlpools\b/ });
+  await example.focus();
+  await page.keyboard.press('Enter');
+  await requested;
+  await expect(example).toHaveAttribute('aria-busy', 'true');
+  await expect(example).toBeFocused();
+  release();
+  await expect(page.getByRole('heading', { name: '2. Instruction' })).toBeVisible();
+  await expect(page.getByText(WHIRLPOOLS, { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Load another program' }).click();
+
+  await page.getByLabel('Program ID').fill(KLEND);
+  const load = page.getByRole('button', { name: 'Load', exact: true });
+  const held = api.hold('idl');
+  await load.focus();
+  await page.keyboard.press('Enter');
+  await held.reached();
+  await expect(load).toHaveAttribute('aria-busy', 'true');
+  await expect(load).toBeFocused();
+  await page.keyboard.press('Enter');
+  await page.getByLabel('Program ID').press('Enter');
+  held.release();
+  await expect(page.getByRole('heading', { name: '2. Instruction' })).toBeVisible();
+  await expect(page.getByText(KLEND, { exact: true })).toBeVisible();
+  expect(api.requests.filter(({ path }) => path.startsWith('/api/idl'))).toHaveLength(1);
+
+  // what was read from chain is a chip now, which reads it again
+  await page.getByRole('button', { name: 'Load another program' }).click();
+  const recent = page.getByRole('button', { name: /^kamino_lending KLen…gmjD/ });
+  const again = api.hold('idl');
+  await recent.focus();
+  await page.keyboard.press('Enter');
+  await again.reached();
+  await expect(recent).toHaveAttribute('aria-busy', 'true');
+  await expect(recent).toBeFocused();
+  await page.keyboard.press('Enter');
+  again.release();
+  await expect(page.getByRole('heading', { name: '2. Instruction' })).toBeVisible();
+  expect(api.requests.filter(({ path }) => path.startsWith('/api/idl'))).toHaveLength(2);
+});
+
+test('Simulate and Create a link keep the focus while they work, take no second press, and the link once made takes the focus', async ({ page, api }) => {
+  await uploadKlend(page);
+  await addRepay(page);
+  await page.getByRole('button', { name: 'Next: simulate' }).click();
+  const passed = page.getByRole('status').filter({ hasText: 'The recipe passed simulation.' });
+  await expect(passed).toBeVisible();
+  const simulations = () => api.requests.filter(({ path }) => path === '/api/simulate');
+  expect(simulations()).toHaveLength(1);
+
+  const simulate = page.getByRole('button', { name: 'Simulate', exact: true });
+  const simulating = api.hold('simulate');
+  await simulate.focus();
+  await page.keyboard.press('Enter');
+  await simulating.reached();
+  await expect(simulate).toHaveAttribute('aria-busy', 'true');
+  await expect(simulate).toBeFocused();
+  // a second press, and Enter in the amount, which sends the form too
+  await page.keyboard.press('Enter');
+  await page.getByLabel('Test amount').press('Enter');
+  simulating.release();
+  await expect(simulate).not.toHaveAttribute('aria-busy');
+  await expect(passed).toBeVisible();
+  expect(simulations()).toHaveLength(2);
+
+  const create = page.getByRole('button', { name: 'Create a link' });
+  const creating = api.hold('recipes');
+  await create.focus();
+  await page.keyboard.press('Enter');
+  await creating.reached();
+  await expect(page.getByRole('button', { name: 'Creating the link…' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  creating.release();
+  await expect(page.getByRole('link', { name: /\/r\/e2e0+1$/ })).toBeFocused();
+  expect(api.requests.filter(({ method, path }) => method === 'POST' && path === '/api/recipes')).toHaveLength(1);
+});
+
+test('the toast that says a recipe was handed over comes over the header, clear of the page', { tag: '@mobile' }, async ({ page }) => {
+  await page.goto(BUILDER);
+  await handOver(page, WRONG_MARKET_RECIPE);
+  await page.reload();
+  const toast = page.getByRole('region', { name: /^Notifications/ }).getByRole('listitem').filter({ hasText: 'Recipe opened in the builder' });
+  await expect(toast).toBeVisible();
+  // once it has slid in, it ends above the stepper, the first thing on the page
+  await expect(async () => {
+    const box = (await toast.boundingBox())!;
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.y + box.height).toBeLessThanOrEqual((await stepper(page).boundingBox())!.y);
+  }).toPass();
+});
+
+test('a handed-over recipe keeps its lookup table through a reload, and the simulation, the link, the code and the run carry it', async ({ page, api, connect, wallet }) => {
+  // three loads of the dev page, seconds of CPU each
+  test.slow();
+  await page.goto(BUILDER);
+  await handOver(page, { ...WRONG_MARKET_RECIPE, lookupTables: [LOOKUP_TABLE] });
+  await page.reload();
+  await expect(page.getByRole('heading', { name: '2. Instruction' })).toBeVisible();
+  const tables = page.getByRole('list', { name: 'Address lookup tables' });
+  await expect(tables).toContainText('284i…47M2');
+  // the key was read once: what a reload brings back is the tab's session
+  expect(await handedOver(page)).toBeNull();
+  await page.reload();
+  await expect(recipeSteps(page)).toHaveCount(4);
+  await expect(tables).toContainText('284i…47M2');
+
+  await page.getByRole('button', { name: 'Next: simulate' }).click();
+  await expect(statusOf(page, 'The recipe passed simulation.')).toBeVisible();
+  expect(api.requests.findLast(({ path }) => path === '/api/simulate')?.body).toMatchObject({ lookupTables: [LOOKUP_TABLE] });
+  await page.getByRole('tab', { name: 'TypeScript' }).click();
+  await expect(page.getByText(`addressLookupTables: ["${LOOKUP_TABLE}"]`)).toBeVisible();
+  await page.getByRole('tab', { name: 'Link' }).click();
+  await page.getByRole('button', { name: 'Create a link' }).click();
+  await expect(page.getByRole('link', { name: /\/r\/e2e0+1$/ })).toBeVisible();
+  expect(api.requests.find(({ method, path }) => method === 'POST' && path === '/api/recipes')?.body).toMatchObject({ lookupTables: [LOOKUP_TABLE] });
+
+  // and Connect gets it with the steps
+  await page.getByRole('button', { name: 'Next: run it' }).click();
+  await wallet.connect();
+  await page.getByLabel('Amount').fill('5');
+  await page.getByRole('button', { name: 'Get exact amount and fee' }).click();
+  await expect(page.getByRole('button', { name: 'Sign and run' })).toBeEnabled();
+  const priced = connect.requests.filter(({ method, path, body }) => method === 'POST' && /^\/api\/v1\/executions\/[^/]+$/.test(path) && body?.steps?.length);
+  expect(priced.length).toBeGreaterThan(0);
+  for (const { body } of priced) expect(body.addressLookupTables).toEqual([LOOKUP_TABLE]);
+});
+
+test('a recipe emptied of its steps leaves the lookup tables it came with', async ({ page, api }) => {
+  await page.goto(BUILDER);
+  await handOver(page, { ...WRONG_MARKET_RECIPE, lookupTables: [LOOKUP_TABLE] });
+  await page.reload();
+  await expect(recipeSteps(page)).toHaveCount(4);
+  for (let left = 4; left > 0; left--) await recipeSteps(page).first().getByRole('button', { name: /^Remove / }).click();
+  await expect(page.getByRole('list', { name: 'Address lookup tables' })).toHaveCount(0);
+  expect(JSON.parse((await page.evaluate(() => sessionStorage.getItem('connect-anything:builder')))!)).not.toHaveProperty('lookupTables');
+
+  // a new recipe is made and sent without them
+  await stepper(page).getByRole('button', { name: 'Program' }).click();
+  await page.getByLabel('IDL file').setInputFiles(KLEND_FILE);
+  await expect(page.getByRole('heading', { name: '2. Instruction' })).toBeVisible();
+  await addRepay(page);
+  await expect(recipeSteps(page)).toHaveCount(1);
+  await expect(page.getByRole('list', { name: 'Address lookup tables' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Next: simulate' }).click();
+  await expect(statusOf(page, 'The recipe passed simulation.')).toBeVisible();
+  expect(api.requests.findLast(({ path }) => path === '/api/simulate')?.body).not.toHaveProperty('lookupTables');
+});
+
 test('a handed-over recipe for a token none of its steps touches stays at step 2, with the run locked', async ({ page }) => {
   await page.goto(BUILDER);
   await handOver(page, { ...WRONG_MARKET_RECIPE, destination: { chain: 'sol', assetId: SOL_USDT.assetId, tokenAddress: SOL_USDT.contractAddress } });
@@ -456,15 +718,15 @@ test('a handed-over recipe for a token none of its steps touches stays at step 2
   await expect(page.getByLabel('Token the recipe receives')).toContainText('USDT');
   await expect(alertOf(page, 'Connect would refuse this recipe')).toContainText(`No step references the token this recipe receives, ${SOL_USDT.contractAddress}`);
   await expect(page.getByRole('button', { name: 'Next: simulate' })).toBeDisabled();
-  for (const name of ['Simulate', 'Run']) await expect(stepper(page).getByRole('button', { name })).toHaveAttribute('aria-disabled', 'true');
-  await stepper(page).getByRole('button', { name: 'Simulate' }).hover();
+  for (const name of ['Simulation', 'Run']) await expect(stepper(page).getByRole('button', { name })).toHaveAttribute('aria-disabled', 'true');
+  await stepper(page).getByRole('button', { name: 'Simulation' }).hover();
   await expect(page.getByRole('tooltip')).toHaveText('Connect would refuse the recipe as it is: see the recipe in step 2.');
 
   // the token its steps do touch unlocks it
   await chooseToken(page, 'USDC');
   await expect(alertOf(page, 'Connect would refuse this recipe')).toHaveCount(0);
-  await stepper(page).getByRole('button', { name: 'Simulate' }).click();
-  await expect(page.getByRole('heading', { name: '3. Simulation and export' })).toBeVisible();
+  await stepper(page).getByRole('button', { name: 'Simulation' }).click();
+  await expect(page.getByRole('heading', { name: '3. Simulation' })).toBeVisible();
 });
 
 test('a handed-over recipe that cannot be read says why, and is dropped', async ({ page }) => {
@@ -480,7 +742,7 @@ test('a handed-over recipe that cannot be read says why, and is dropped', async 
   await expect(alertOf(page, 'The recipe handed to the builder could not be opened')).toContainText('It is not JSON.');
   expect(await handedOver(page)).toBeNull();
   // and the builder works as ever
-  await page.getByRole('button', { name: /^klend\b/ }).click();
+  await page.getByRole('button', { name: /^Kamino Lend\b/ }).click();
   await expect(page.getByRole('heading', { name: '2. Instruction' })).toBeVisible();
   await expect(alertOf(page, 'The recipe handed to the builder could not be opened')).toHaveCount(0);
 });
@@ -511,7 +773,7 @@ test('a link to a later step with nothing loaded opens the program, and says why
   // with the program and still no recipe, a later step is where the address says, and offers the way back
   await page.goto(`${BUILDER}?step=4`);
   await expect(page.getByRole('heading', { name: '4. Run' })).toBeVisible();
-  await expect(stepper(page).getByRole('button', { name: 'Simulate' })).not.toHaveAccessibleName(/done/);
+  await expect(stepper(page).getByRole('button', { name: 'Simulation' })).not.toHaveAccessibleName(/done/);
   await page.getByRole('button', { name: 'Add an instruction' }).click();
   await expect(page.getByRole('heading', { name: '2. Instruction' })).toBeVisible();
 });

@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import { useLocation } from 'wouter';
 import { toast } from '../ui/Toaster.tsx';
 import { ErrorBoundary } from './ErrorBoundary.tsx';
-import { PageSkeleton, PublicRoutes, useWalletPage, WalletRoutes } from './routes.tsx';
+import { PageSkeleton } from './PageSkeleton.tsx';
+import { PublicRoutes, useWalletPage, WalletRoutes } from './routes.tsx';
 import { Shell } from './Shell.tsx';
 import { WalletPlaceholder } from './WalletPlaceholder.tsx';
 
@@ -96,11 +97,11 @@ export function Root() {
   if (!needsWallet) page = <PublicRoutes />;
   else if (ready) page = null;
   else if (failure) page = <Failed error={failure} />;
-  else page = <PageSkeleton />;
+  else page = <PageSkeleton path={walletPage.path} />;
 
   return (
     <>
-      <Shell wallet={placeholder} walletSlot={setWalletSlot} pageSlot={setPageSlot}>
+      <Shell wallet={placeholder} walletSlot={setWalletSlot} pageSlot={setPageSlot} fills={walletPage?.fills}>
         {page}
       </Shell>
       {ready && (

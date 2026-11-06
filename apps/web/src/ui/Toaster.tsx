@@ -9,9 +9,10 @@ export function Toaster() {
   return (
     <Sonner
       theme="dark"
-      position="bottom-right"
-      offset={20}
-      mobileOffset={16}
+      // over the sticky header, where a toast hides no part of the page: --toast-right in styles/ui.css places it
+      position="top-right"
+      offset={{ top: 8, right: 'var(--toast-right)' }}
+      mobileOffset={{ top: 8, right: 8, left: 8 }}
       gap={8}
       duration={3500}
       containerAriaLabel="Notifications"

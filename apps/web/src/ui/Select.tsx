@@ -43,7 +43,7 @@ export const fieldButton = ({ size = 'md', invalid = false, disabled = false }: 
     'flex w-full min-w-0 items-center gap-2 rounded-md border text-left transition-[border-color,box-shadow,background-color] duration-120 ease-out focus-visible:outline-none',
     FIELD_SIZE[size],
     disabled
-      ? 'cursor-not-allowed border-border-control bg-surface text-muted opacity-60'
+      ? 'cursor-not-allowed border-border-strong bg-surface text-muted'
       : invalid
         ? 'border-danger/70 bg-surface-2 data-focus:border-danger data-focus:shadow-[0_0_0_4px_rgb(255_92_108/0.18)] data-open:border-danger'
         : 'border-border-control bg-surface-2 [&[data-hover]:not([data-focus],[data-open])]:border-border-control-hover data-focus:border-accent data-focus:shadow-glow data-open:border-accent',
@@ -62,7 +62,8 @@ export function Select<T>({ value, onChange, options, label, hint, error, placeh
       <Listbox value={value} onChange={onChange} by={by as never} name={name} invalid={!!error}>
         <ListboxButton aria-label={rest['aria-label']} className={cn(fieldButton({ size, invalid: !!error, disabled }), 'group')}>
           {selected?.icon && <span className="flex shrink-0 items-center [&>svg]:size-4">{selected.icon}</span>}
-          <span className={cn('min-w-0 flex-1 truncate', !selected && 'text-placeholder')}>{selected ? selected.label : placeholder}</span>
+          {/* what it asks for is read as words, not as an input's placeholder, so it keeps 4.5:1 */}
+          <span className={cn('min-w-0 flex-1 truncate', !selected && 'text-muted')}>{selected ? selected.label : placeholder}</span>
           <ChevronsUpDown className="size-4 shrink-0 text-muted group-data-open:text-text" aria-hidden />
         </ListboxButton>
         <ListboxOptions

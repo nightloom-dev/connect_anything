@@ -157,7 +157,7 @@ function PickerStates() {
 function FormStates() {
   return (
     <DemoGrid>
-      <Demo title={`klend ${REPAY}, as picked`}>
+      <Demo title={`Kamino Lend ${REPAY}, as picked`}>
         <Loading program={KLEND}>{idl => <InstructionForm idl={idl} ixName={REPAY} mint={USDC_MINT} symbol="USDC" onAdd={step => toast(`Would add ${step.ixName}`)} />}</Loading>
       </Demo>
       <Demo title="An instruction Connect cannot run: Orca open_position">
@@ -179,8 +179,8 @@ const ACCOUNTS: AccountView[] = [
   account('repay_accounts.lending_market', { group: 'input', shows: 'address', pubkey: '7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF', value: '7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF', editable: true }),
   account('repay_accounts.reserve_liquidity_mint', { group: 'input', shows: 'missing', editable: true }),
   account('repay_accounts.token_program', { group: 'input', shows: 'missing', editable: true }),
-  account('farms_accounts.obligation_farm_user_state', { group: 'optional', shows: 'left-out', optional: true, editable: true, placeholder: 'Blank leaves it out', pubkey: KLEND }),
-  account('farms_accounts.reserve_farm_state', { group: 'optional', shows: 'left-out', optional: true, editable: true, placeholder: 'Blank leaves it out', pubkey: KLEND }),
+  account('farms_accounts.obligation_farm_user_state', { group: 'optional', shows: 'left-out', optional: true, editable: true, placeholder: 'Optional', pubkey: KLEND }),
+  account('farms_accounts.reserve_farm_state', { group: 'optional', shows: 'left-out', optional: true, editable: true, placeholder: 'Optional', pubkey: KLEND }),
   account('repay_accounts.repay_reserve', { group: 'recipe', shows: 'address', pubkey: 'D6q6wuQSrifJKZYpR1M8R4YawnLDtDsMmWM1NbBmgJ59', isWritable: true }),
   account('repay_accounts.owner', { group: 'auto', shows: 'self', pubkey: STAND_IN, isSigner: true }),
   account('repay_accounts.user_source_liquidity', { group: 'auto', shows: 'follows', pubkey: 'E9yZFuPob5nB8ZnviNS7TrmAwE2sNgixNvHjPN6gcWYU', isWritable: true, editable: true, placeholder: 'Another address' }),
@@ -379,7 +379,7 @@ function ExportStates() {
 export const sections: DevSection[] = [
   { id: 'builder-program', title: 'Builder: program', description: 'Step 1: a program ID checked before any request, the drop zone, the examples that ship with the page, recent programs.', render: () => <ProgramStates /> },
   { id: 'builder-picker', title: 'Builder: instruction search', description: 'Step 2: the Combobox, with each instruction’s size and what Connect cannot run. Real IDLs.', render: () => <PickerStates /> },
-  { id: 'builder-form', title: 'Builder: instruction form', description: 'The real form on the real klend and Orca IDLs, as picked: accounts grouped, the checklist under it.', render: () => <FormStates /> },
+  { id: 'builder-form', title: 'Builder: instruction form', description: 'The real form on the real Kamino Lend and Orca Whirlpools IDLs, as picked: accounts grouped, the checklist under it.', render: () => <FormStates /> },
   { id: 'builder-accounts', title: 'Builder: account groups', description: 'Every way an account can show. Type into a field to fill it.', render: () => <AccountStates /> },
   { id: 'builder-readiness', title: 'Builder: readiness', description: 'What stands between the form and "Add to recipe", each a link to its field.', render: () => <ReadinessStates /> },
   { id: 'builder-tray', title: 'Builder: recipe tray', description: 'Beside the form: the token, the steps in order with their accounts on demand, what Connect would refuse, the way on.', render: () => <TrayStates /> },

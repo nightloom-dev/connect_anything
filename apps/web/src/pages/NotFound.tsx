@@ -12,7 +12,7 @@ export function NotFound() {
       </p>
       <div role="alert" className="mt-6">
         <h2 className="text-xl font-semibold text-text">There is no such page.</h2>
-        <p className="mt-2 text-muted">
+        <p className="mt-2 text-balance text-muted">
           The link may be cut short or mistyped. <Link href="/" className="link">Start here</Link>, or go straight to a task.
         </p>
       </div>

@@ -121,7 +121,15 @@ export function ProgramForm({ programId, onProgramId, idError, onSubmit, onFile,
             containerClassName="min-w-0 flex-1"
             aria-describedby={idError ? undefined : 'program-id-hint'}
           />
-          <Button type="submit" variant="primary" size="lg" icon={<ArrowRight />} loading={working && !exampleWorking} disabled={working || !programId.trim()} className="sm:min-w-28">
+          <Button
+            type="submit"
+            variant="primary"
+            size="lg"
+            icon={<ArrowRight />}
+            loading={working && !exampleWorking}
+            disabled={exampleWorking || (!working && !programId.trim())}
+            className="sm:min-w-28"
+          >
             Load
           </Button>
         </div>
@@ -186,10 +194,12 @@ export function Examples({ examples, onPick, loading, disabled = false }: Exampl
           <li key={program} className="min-w-0">
             <button
               type="button"
-              disabled={disabled}
+              // the one that loads keeps the focus, and takes no second click
+              disabled={disabled && loading !== program}
               aria-busy={loading === program || undefined}
-              onClick={() => onPick(program)}
-              className="group flex w-full min-w-0 items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-left transition-[border-color,background-color] duration-120 ease-out enabled:hover:border-border-control enabled:hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60"
+              aria-disabled={loading === program || undefined}
+              onClick={loading === program ? undefined : () => onPick(program)}
+              className="group flex w-full min-w-0 items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-left transition-[border-color,background-color] duration-120 ease-out enabled:hover:border-border-control enabled:hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60 aria-busy:cursor-progress"
             >
               <span aria-hidden className={cn('flex size-8 shrink-0 items-center justify-center rounded-md bg-linear-to-br text-sm font-semibold text-bg', TINT[index % TINT.length])}>
                 {loading === program ? <Spinner size="sm" /> : name[0].toUpperCase()}
@@ -217,10 +227,12 @@ type RecentProps = {
   onPick: (address: string) => void;
   onClear: () => void;
   disabled?: boolean;
+  /** The program being read again, whose chip keeps the focus meanwhile. */
+  loading?: string;
 };
 
 /** Programs this browser loaded before, read again from chain on a click. */
-export function RecentPrograms({ recent, onPick, onClear, disabled = false }: RecentProps) {
+export function RecentPrograms({ recent, onPick, onClear, disabled = false, loading }: RecentProps) {
   if (recent.length === 0) return null;
   return (
     <section aria-labelledby="recent-title" className="flex flex-col gap-3">
@@ -236,9 +248,12 @@ export function RecentPrograms({ recent, onPick, onClear, disabled = false }: Re
           <li key={address} className="min-w-0 max-w-full">
             <button
               type="button"
-              disabled={disabled}
-              onClick={() => onPick(address)}
-              className="inline-flex h-8 max-w-full items-center gap-2 rounded-full border border-border-strong bg-surface-2 px-3 text-sm text-text transition-colors duration-120 enabled:hover:border-border-control enabled:hover:bg-surface-3 disabled:cursor-not-allowed disabled:opacity-60"
+              // the one that loads keeps the focus, and takes no second click
+              disabled={disabled && loading !== address}
+              aria-busy={loading === address || undefined}
+              aria-disabled={loading === address || undefined}
+              onClick={loading === address ? undefined : () => onPick(address)}
+              className="inline-flex h-8 max-w-full items-center gap-2 rounded-full border border-border-strong bg-surface-2 px-3 text-sm text-text transition-colors duration-120 enabled:hover:border-border-control enabled:hover:bg-surface-3 disabled:cursor-not-allowed disabled:opacity-60 aria-busy:cursor-progress"
             >
               {name && <span className="truncate font-medium">{name}</span>}
               <span className="font-mono text-xs text-muted">{truncateMiddle(address)}</span>
@@ -253,7 +268,7 @@ export function RecentPrograms({ recent, onPick, onClear, disabled = false }: Re
 const FLOW: { title: string; text: ReactNode }[] = [
   { title: 'Program', text: 'Its IDL lists the instructions and the accounts each one takes.' },
   { title: 'Instruction', text: 'Pick one and fill in its arguments. Accounts the IDL can derive are filled in for you.' },
-  { title: 'Simulate', text: 'A run on a fork of mainnet: compute units, size and logs. Then share a link or export TypeScript.' },
+  { title: 'Simulation', text: 'A run on a fork of mainnet: compute units, size and logs. Then share a link or export TypeScript.' },
   { title: 'Run', text: 'Pay from Base, Arbitrum or Ethereum with one signature. Intents Connect runs the recipe on Solana.' },
 ];
 

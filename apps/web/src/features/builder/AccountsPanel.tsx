@@ -1,7 +1,8 @@
 import { Fragment, useState, type ReactNode } from 'react';
-import { CircleCheck, CircleDashed, CircleMinus, Pencil, RotateCcw } from 'lucide-react';
+import { BookMarked, CircleCheck, CircleDashed, CircleMinus, Pencil, RotateCcw, UserRound } from 'lucide-react';
 import { Address, Badge, Button, cn } from '../../ui/index.ts';
 import { AddressField } from './AddressField.tsx';
+import { breakable } from './breakable.tsx';
 import type { QuickPick } from './known.ts';
 
 /** Where an account's address comes from when nothing has been typed: what the person has to do about it. */
@@ -123,7 +124,7 @@ function AccountInputRow({ account, who, intermediary, known, onInput }: { accou
         ) : (
           <CircleDashed className="size-4 shrink-0 text-warning" aria-label="Needs an address" role="img" />
         )}
-        <span className="min-w-0 font-mono text-[13px] font-medium break-all text-text">{account.short}</span>
+        <span className="min-w-0 font-mono text-[13px] font-medium [overflow-wrap:anywhere] text-text">{breakable(account.short)}</span>
         <Flags account={account} />
         {(account.shows === 'self' || account.shows === 'follows' || account.shows === 'left-out') && (
           <span className="ml-auto text-xs">
@@ -149,6 +150,33 @@ function AccountInputRow({ account, who, intermediary, known, onInput }: { accou
   );
 }
 
+/** One of the two buttons beside an address field, drawn as it looks, for the key over the fields. */
+function KeyCap({ icon }: { icon: ReactNode }) {
+  return (
+    <span aria-hidden className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm border border-border-strong bg-surface-2 text-text [&>svg]:size-3">
+      {icon}
+    </span>
+  );
+}
+
+/** What the two icon buttons beside each address field do, said once over the fields; each says it again as a tooltip. */
+function FieldKey({ who }: { who: string }) {
+  return (
+    <p className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-muted">
+      <span className="sr-only">Beside each address field: </span>
+      <span className="inline-flex items-center gap-1.5">
+        <KeyCap icon={<UserRound />} />
+        Use {who}
+      </span>
+      <span className="sr-only">, or </span>
+      <span className="inline-flex items-center gap-1.5">
+        <KeyCap icon={<BookMarked />} />
+        Pick a known program or sysvar
+      </span>
+    </p>
+  );
+}
+
 function Section({ title, aside, description, children }: { title: string; aside?: ReactNode; description?: ReactNode; children: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-col gap-2.5">
@@ -171,9 +199,7 @@ function CompactRow({ account, who, intermediary, known, onInput }: { account: A
   return (
     <li id={anchorOf(account.name)} className="flex min-w-0 scroll-mt-24 flex-col gap-2 px-3 py-2">
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 sm:grid-cols-[minmax(0,13rem)_minmax(0,1fr)_auto]">
-        <span className="min-w-0 truncate font-mono text-[13px] text-text" title={account.name}>
-          {account.short}
-        </span>
+        <span className="min-w-0 font-mono text-[13px] [overflow-wrap:anywhere] text-text">{breakable(account.short)}</span>
         <span className="col-span-2 row-start-2 flex min-w-0 items-center sm:col-span-1 sm:row-start-auto">
           <Shown account={account} who={who} />
         </span>
@@ -257,6 +283,7 @@ export function AccountsPanel({ accounts, ...props }: AccountsPanelProps) {
           </Fragment>
         ))}
       </p>
+      {needs.length + optional.length > 0 && <FieldKey who={props.who} />}
       {needs.length > 0 && (
         <Section title="Needs your input" aside={`${filled} of ${needs.length} filled`}>
           <InputList accounts={needs} {...props} />

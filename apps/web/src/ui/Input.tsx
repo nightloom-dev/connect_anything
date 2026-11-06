@@ -61,8 +61,9 @@ export const fieldBox = ({ size = 'md', invalid = false, disabled = false, class
   cn(
     'flex w-full min-w-0 items-center gap-2 rounded-md border transition-[border-color,box-shadow,background-color] duration-120 ease-out',
     FIELD_SIZE[size],
+    // disabled: a flat, dim frame and muted words, all still 4.5:1 or more; opacity took the token and the words under it
     disabled
-      ? 'cursor-not-allowed border-border-control bg-surface opacity-60'
+      ? 'cursor-not-allowed border-border-strong bg-surface text-muted'
       : invalid
         ? 'border-danger/70 bg-surface-2 has-[input:focus]:border-danger has-[input:focus]:shadow-[0_0_0_4px_rgb(255_92_108/0.18)]'
         : 'border-border-control bg-surface-2 [&:hover:not(:has(input:focus))]:border-border-control-hover has-[input:focus]:border-accent has-[input:focus]:shadow-glow',
@@ -114,7 +115,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         aria-invalid={invalid || undefined}
         aria-describedby={describedBy}
         className={cn(
-          'h-full w-full min-w-0 flex-1 bg-transparent text-text outline-none placeholder:text-placeholder disabled:cursor-not-allowed',
+          'h-full w-full min-w-0 flex-1 bg-transparent text-text outline-none placeholder:text-placeholder disabled:cursor-not-allowed disabled:text-muted',
           mono && 'font-mono text-[0.9em] tracking-tight',
           className,
         )}

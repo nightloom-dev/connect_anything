@@ -99,7 +99,7 @@ test('/build from the keyboard: an example, the instruction search, its accounts
   const walk = await KeyboardWalk.on(page);
   await page.goto(BUILDER);
 
-  await walk.tabTo(page.getByRole('button', { name: /^klend\b/ }));
+  await walk.tabTo(page.getByRole('button', { name: /^Kamino Lend\b/ }));
   await walk.press('Enter');
   await expect(page.getByRole('heading', { name: '2. Instruction' })).toBeVisible();
 
@@ -157,7 +157,6 @@ test("AppKit's modal takes the focus when the run card opens it, and the page be
 });
 
 test('the sticky header never covers the focus as Shift+Tab goes back up the page', async ({ page }) => {
-  test.fixme(true, 'QA-05: Shift+Tab scrolls the target LTV field and slider under the sticky header: the page sets no scroll-padding-top');
   const walk = await backUp(page);
   expect(walk.covered()).toEqual([]);
 });

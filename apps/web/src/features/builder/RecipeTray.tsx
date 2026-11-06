@@ -1,7 +1,8 @@
-import { Fragment, useId, useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowRight, ArrowUp, ChevronRight, ListOrdered, Trash2 } from 'lucide-react';
 import type { Token } from '../../connect.ts';
-import { Address, Alert, Button, Card, IconButton, Select, Spinner, TokenIcon, cn, truncateMiddle } from '../../ui/index.ts';
+import { Address, Alert, Button, Card, IconButton, Select, Skeleton, Spinner, TokenIcon, cn, truncateMiddle } from '../../ui/index.ts';
+import { breakable } from './breakable.tsx';
 
 /** An account of a step as it resolves now, and where its address came from. */
 export type TrayAccount = {
@@ -36,6 +37,8 @@ type RecipeTrayProps = {
   onUp: (index: number) => void;
   onDown: (index: number) => void;
   onRemove: (index: number) => void;
+  /** The address lookup tables the recipe is sent with, which came with a recipe handed over. */
+  lookupTables?: string[];
   /** Why Connect would refuse the recipe as it stands. */
   destination?: string;
   /** Whether "Next: simulate" is off, as the builder decides it. */
@@ -52,15 +55,6 @@ const SOURCES: { source: TrayAccount['source']; title: string }[] = [
   { source: 'input', title: 'Typed in' },
 ];
 
-/** An account path that wraps after its dots and underscores before it breaks a word. */
-const breakable = (name: string) =>
-  name.split(/(?<=[._])/).map((part, index) => (
-    <Fragment key={index}>
-      {index > 0 && <wbr />}
-      {part}
-    </Fragment>
-  ));
-
 function Shown({ account }: { account: TrayAccount }) {
   switch (account.shows) {
     case 'missing':
@@ -76,11 +70,19 @@ function Shown({ account }: { account: TrayAccount }) {
   }
 }
 
-/** A step's accounts on demand, by where each came from: what a recipe handed over found shows as "from the recipe". */
-function StepAccounts({ step, number }: { step: TrayStep; number: number }) {
+/**
+ * A step's accounts on demand, by where each came from: what a recipe handed over found shows as "from the recipe".
+ * `pending`: the tokens are on their way, and the accounts with them, so their line is kept for them.
+ */
+function StepAccounts({ step, number, pending }: { step: TrayStep; number: number; pending: boolean }) {
   const [open, setOpen] = useState(false);
   const panel = useId();
-  if (!step.accounts && !step.problem) return null;
+  if (!step.accounts && !step.problem)
+    return pending ? (
+      <span aria-hidden className="ml-9 flex h-4 items-center">
+        <Skeleton className="h-2.5 w-36" />
+      </span>
+    ) : null;
   const accounts = step.accounts ?? [];
   const fromRecipe = accounts.filter(account => account.source === 'recipe').length;
   return (
@@ -131,7 +133,7 @@ function StepAccounts({ step, number }: { step: TrayStep; number: number }) {
 }
 
 /** The recipe so far, beside the form: the token it receives, its steps in order, and the way on to the simulation. */
-export function RecipeTray({ tokens, targets, token, onTarget, steps, onUp, onDown, onRemove, destination, nextDisabled, onNext, failure, className }: RecipeTrayProps) {
+export function RecipeTray({ tokens, targets, token, onTarget, steps, onUp, onDown, onRemove, lookupTables, destination, nextDisabled, onNext, failure, className }: RecipeTrayProps) {
   return (
     <Card as="aside" aria-labelledby="recipe-title" padding="none" className={cn('flex min-w-0 flex-col', className)}>
       <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
@@ -145,10 +147,17 @@ export function RecipeTray({ tokens, targets, token, onTarget, steps, onUp, onDo
       <div className="flex flex-col gap-5 px-4 py-4 sm:px-5">
         <div className="flex flex-col gap-2">
           {tokens.loading && (
-            <p role="status" className="flex items-center gap-2 text-sm text-muted">
-              <Spinner size="sm" />
-              Loading the tokens Intents Connect can deliver…
-            </p>
+            // as tall as the field that takes its place, so that the steps under it stay where they are
+            <div className="flex flex-col gap-1.5">
+              <p role="status" className="flex items-center gap-2 text-sm text-muted">
+                <Spinner size="sm" />
+                Loading the tokens Intents Connect can deliver…
+              </p>
+              <Skeleton className="h-10" />
+              <span className="flex h-5 items-center">
+                <Skeleton className="h-3 w-3/4" />
+              </span>
+            </div>
           )}
           {failure}
           {tokens.empty && <Alert kind="danger">Intents Connect lists no Solana token to deliver right now, so no recipe can be built.</Alert>}
@@ -181,14 +190,12 @@ export function RecipeTray({ tokens, targets, token, onTarget, steps, onUp, onDo
                     {index + 1}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-mono text-[13px] font-medium text-text" title={step.ixName}>
-                      {step.ixName}
-                    </p>
-                    <p className="mt-0.5 truncate text-xs text-muted">
-                      {step.programName}
+                    <p className="font-mono text-[13px] font-medium [overflow-wrap:anywhere] text-text">{breakable(step.ixName)}</p>
+                    <p className="mt-0.5 text-xs [overflow-wrap:anywhere] text-muted">
+                      {breakable(step.programName)}
                       <span aria-hidden> · </span>
                       <span className="sr-only">, </span>
-                      <span className="font-mono">{truncateMiddle(step.program)}</span>
+                      <span className="font-mono whitespace-nowrap">{truncateMiddle(step.program)}</span>
                     </p>
                     {step.amountArg && (
                       <p className="mt-1 text-xs break-words text-accent-hover">
@@ -202,10 +209,25 @@ export function RecipeTray({ tokens, targets, token, onTarget, steps, onUp, onDo
                     <IconButton label={`Remove ${step.ixName}`} icon={<Trash2 />} onClick={() => onRemove(index)} />
                   </div>
                 </div>
-                <StepAccounts step={step} number={index + 1} />
+                <StepAccounts step={step} number={index + 1} pending={tokens.loading} />
               </li>
             ))}
           </ol>
+        )}
+
+        {steps.length > 0 && !!lookupTables?.length && (
+          <div className="flex min-w-0 flex-col gap-1">
+            <p className="text-xs font-medium text-text">
+              {lookupTables.length === 1 ? 'Address lookup table' : 'Address lookup tables'} <span className="font-normal text-muted">from the recipe</span>
+            </p>
+            <ul aria-label="Address lookup tables" className="flex min-w-0 flex-wrap gap-x-4 gap-y-1">
+              {lookupTables.map(table => (
+                <li key={table} className="min-w-0">
+                  <Address value={table} />
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
 
         {destination && (

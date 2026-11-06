@@ -514,7 +514,7 @@ function Overlays() {
       <Demo title="Disclosure">
         <div className="flex flex-col gap-3">
           <Disclosure title="What will run">
-            <p className="text-sm text-muted">Two refresh steps, then repay_obligation_liquidity_v2 on klend.</p>
+            <p className="text-sm text-muted">Two refresh steps, then repay_obligation_liquidity_v2 on Kamino Lend.</p>
           </Disclosure>
           <Disclosure variant="card" title="Accounts found automatically" aside="5" defaultOpen>
             <p className="text-sm text-muted">The lending market, its authority, the reserve and its liquidity supply, the token program.</p>
@@ -678,7 +678,7 @@ function AfterDemo() {
 }
 
 const STEPS = (current: number, locked: number[] = []): StepItem[] =>
-  ['Program', 'Instruction', 'Simulate', 'Run'].map((title, index) => ({
+  ['Program', 'Instruction', 'Simulation', 'Run'].map((title, index) => ({
     id: title.toLowerCase(),
     title,
     state: locked.includes(index) ? 'locked' : index < current ? 'done' : index === current ? 'current' : 'upcoming',
@@ -714,7 +714,7 @@ function Progress() {
     <DemoGrid>
       <Demo title="Stepper (click a done or upcoming step)" wide>
         <Surface className="flex flex-col gap-6">
-          <Stepper steps={STEPS(step)} onSelect={id => setStep(['program', 'instruction', 'simulate', 'run'].indexOf(id))} />
+          <Stepper steps={STEPS(step)} onSelect={id => setStep(['program', 'instruction', 'simulation', 'run'].indexOf(id))} />
           <Stepper steps={STEPS(1, [2, 3])} onSelect={() => {}} label="Steps, two locked" />
           <Stepper steps={STEPS(4)} label="Steps, all done" />
         </Surface>

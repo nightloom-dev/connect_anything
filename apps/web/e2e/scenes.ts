@@ -34,7 +34,7 @@ const RESCUE = `${KAMINO}?wallet=${RECORDED_WALLET}&obligation=${HEALTHY.address
 /** Where another page, as /kamino, leaves a recipe for the builder. */
 const IMPORT = 'connect-anything:builder-import';
 
-const status = (page: Page, text: string) => page.getByRole('status').filter({ hasText: text });
+const status = (page: Page, text: string | RegExp) => page.getByRole('status').filter({ hasText: text });
 const alert = (page: Page, text: string) => page.getByRole('alert').filter({ hasText: text });
 
 /** /kamino on the healthy position, a wallet connected and a quote on the card. */
@@ -83,7 +83,7 @@ export const SCENES: Scene[] = [
     open: async ({ page }) => {
       await page.goto(BUILDER);
       await expect(page.getByRole('heading', { name: '1. Program' })).toBeVisible();
-      await expect(page.getByRole('button', { name: /^klend\b/ })).toBeVisible();
+      await expect(page.getByRole('button', { name: /^Kamino Lend\b/ })).toBeVisible();
     },
   },
   {
@@ -92,7 +92,7 @@ export const SCENES: Scene[] = [
     tablet: true,
     open: async ({ page }) => {
       await page.goto(BUILDER);
-      await page.getByRole('button', { name: /^klend\b/ }).click();
+      await page.getByRole('button', { name: /^Kamino Lend\b/ }).click();
       await expect(page.getByRole('heading', { name: '2. Instruction' })).toBeVisible();
       const search = page.getByRole('combobox', { name: 'Instruction' });
       await search.click();
@@ -194,6 +194,33 @@ export const SCENES: Scene[] = [
       await fixtures.page.getByRole('button', { name: SIGN }).click();
       await expect(alert(fixtures.page, 'The instructions failed on Solana, so the money stayed with your intermediary.')).toBeVisible();
       await expect(fixtures.page.getByText('Your intermediary holds 0.51 USDC.')).toBeVisible();
+    },
+  },
+  {
+    name: 'kamino-refund',
+    title: 'the Kamino rescue, the refund of a run that failed on Solana, ready to sign',
+    open: async fixtures => {
+      await quoted(fixtures);
+      fixtures.connect.scripts.push(['OPERATION_FAILED']);
+      fixtures.api.balance = '510000';
+      await fixtures.page.getByRole('button', { name: SIGN }).click();
+      await expect(fixtures.page.getByText('Your intermediary holds 0.51 USDC.')).toBeVisible();
+      await fixtures.page.getByRole('button', { name: 'Refund', exact: true }).click();
+      await expect(fixtures.page.getByRole('button', { name: 'Sign and refund', exact: true })).toBeVisible();
+    },
+  },
+  {
+    name: 'kamino-deposit',
+    title: 'the Kamino rescue, a run resumed after a reload, waiting for its deposit',
+    open: async fixtures => {
+      await quoted(fixtures);
+      await fixtures.wallet.rejectTransactions(1);
+      await fixtures.page.getByRole('button', { name: SIGN }).click();
+      await expect(status(fixtures.page, 'The deposit transfer did not go through.')).toBeVisible();
+      await fixtures.page.reload();
+      await fixtures.page.getByRole('button', { name: 'Resume it', exact: true }).click();
+      // the deposit box, in the words of this card or of the newer one, which says "Send exactly"
+      await expect(status(fixtures.page, /(Waiting for a deposit of|Send exactly)\s+800 USDC\s+on\s+Base\b/)).toBeVisible();
     },
   },
   {

@@ -39,7 +39,10 @@ export const buttonClass = ({ variant = 'secondary', size = 'md', block = false,
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
   size?: ButtonSize;
-  /** Shows a spinner in place of the icon, or over the label when there is none, so the width stays. Clicks do nothing meanwhile. */
+  /**
+   * Shows a spinner in place of the icon, or over the label when there is none, so the width stays. Clicks do nothing
+   * meanwhile, and the button keeps the focus: pass this, not `disabled`, to a button that works after a click.
+   */
   loading?: boolean;
   /** Before the label. */
   icon?: ReactNode;
@@ -83,7 +86,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       onClick={loading ? event => event.preventDefault() : onClick}
       className={buttonClass({ variant, size, block, className })}
     >
-      <span className={cn('inline-flex min-w-0 items-center justify-center gap-[inherit]', overlay && 'invisible')}>
+      {/* under the spinner the label is see-through, not hidden, so that it still names the button */}
+      <span className={cn('inline-flex min-w-0 items-center justify-center gap-[inherit]', overlay && 'opacity-0')}>
         {icon && slot(loading ? <Spinner /> : icon)}
         {children}
         {iconRight && slot(iconRight)}

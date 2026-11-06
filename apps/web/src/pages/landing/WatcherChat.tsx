@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { LogoMark } from '../../app/brand.tsx';
 import { Badge } from '../../ui/Badge.tsx';
 import { cn } from '../../ui/cn.ts';
+import { siteAddress } from './site.ts';
 
 // A chat with the Telegram watcher of apps/watch. The words are the bot's own (HELP, the /watch reply and alertText in
 // apps/watch); the wallet, the position and the figures are an example, and the chat says so. The bot has no fixed
@@ -12,6 +13,9 @@ const POSITION = 'Hx3m…9cQe';
 const LIQUIDATED_AT = 80;
 // the default line: 10 points under the liquidation LTV
 const LINE = LIQUIDATED_AT - 10;
+// The alert links to the site that runs the watcher. VITE_PUBLIC_URL names it, as PUBLIC_URL does for apps/watch, so that
+// a page opened on localhost shows the public address; without it, the page's own.
+const SITE = siteAddress(import.meta.env.VITE_PUBLIC_URL, location.origin);
 
 // one decimal, as the bot's percent() writes it
 const tenths = new Intl.NumberFormat('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -62,9 +66,8 @@ export function WatcherChat({ className }: { className?: string }) {
           It owes {usd.format(412.3)} against {usd.format(579.07)}.
           <br />
           Repay it from Base, Arbitrum or Ethereum with one signature, about 3 minutes to land:{' '}
-          {/* the alert links to the site that runs the watcher, this one */}
           <span className="text-accent underline decoration-accent/40 underline-offset-2 [overflow-wrap:anywhere]">
-            {location.origin}/kamino?wallet={WALLET}&amp;obligation={POSITION}
+            {SITE}/kamino?wallet={WALLET}&amp;obligation={POSITION}
           </span>
         </Bubble>
       </div>

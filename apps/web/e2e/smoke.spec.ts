@@ -1,6 +1,8 @@
+import { fileURLToPath } from 'node:url';
 import type { Page } from '@playwright/test';
 import { BUILDER, KAMINO, LANDING, NOT_FOUND, shared } from './paths.ts';
 import { RECIPES } from './mocks/api.ts';
+import { DEV_URL } from './servers.ts';
 import { expect, test } from './support.ts';
 
 // Every page renders, and says nothing in the console while it does. A message the old UI is known to log goes in
@@ -67,6 +69,30 @@ test('the landing page fits a 360 px screen without scrolling sideways', async (
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
 });
 
+// The example alert links to the site that runs the watcher: the one VITE_PUBLIC_URL names, so that a recording made on
+// localhost shows the public address, else the one the page is opened at. src/pages/landing/site.test.ts has the cases
+test('the example watcher alert links to the Kamino page of this site, or of the one VITE_PUBLIC_URL names', async ({ page, baseURL }) => {
+  // what Vite hands the page, from apps/web/.env or the environment, in the mode of the server: the dev server, or the
+  // build that vite preview serves; loaded here, for this test alone
+  const { loadEnv } = await import('vite');
+  const mode = baseURL === DEV_URL ? 'development' : 'production';
+  const configured = loadEnv(mode, fileURLToPath(new URL('..', import.meta.url)), 'VITE_').VITE_PUBLIC_URL;
+  const site = (configured || new URL(baseURL!).origin).replace(/\/+$/, '');
+  await page.goto(LANDING);
+  await expect(page.getByText(/\/kamino\?wallet=/)).toHaveText(`${site}/kamino?wallet=7xKX…gAsU&obligation=Hx3m…9cQe`);
+});
+
+// a crawler that asks for /robots.txt gets the file, not the app's index.html with a 200
+test('robots.txt is a text file that lets every page be crawled', async ({ request }) => {
+  const response = await request.get('/robots.txt');
+  expect(response.status()).toBe(200);
+  expect(response.headers()['content-type']).toMatch(/^text\/plain\b/);
+  const text = await response.text();
+  expect(text).toMatch(/^User-agent: \*$/m);
+  expect(text).toMatch(/^Allow: \/$/m);
+  expect(text).not.toMatch(/^Disallow: \/$/m);
+});
+
 // "Connecting…" is wider than "Connect", so on a narrow phone the button keeps its idle width and the header still fits
 test('the header fits a 360 px screen while a wallet connects', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 780 });
@@ -93,4 +119,61 @@ test('the header connects a wallet in one click, even before the wallet code is 
   // then, and a click can land on the row that has just moved under it, so the wallet is picked from the keyboard
   await page.getByRole('button', { name: /E2E Wallet/ }).press('Enter');
   await expect(page.getByRole('button', { name: /^Wallet 0x/ })).toBeVisible();
+});
+
+// While a page that pays loads its code, it shows its own shapes, about as tall as itself: on a phone the footer stays
+// below the first screen until the page comes, and then too, so that nothing on the screen jumps
+const LOADING = [
+  { path: BUILDER, module: /\/src\/features\/builder\/page\.tsx/, ready: (page: Page) => page.getByRole('heading', { name: '1. Program' }) },
+  { path: KAMINO, module: /\/src\/features\/kamino\/page\.tsx/, ready: (page: Page) => page.getByRole('heading', { name: 'Repay a Kamino debt' }) },
+  { path: shared(RECIPES.demo), module: /\/src\/features\/run\/shared-page\.tsx/, ready: (page: Page) => page.getByRole('heading', { name: 'A recipe someone shared with you' }) },
+];
+
+test('while a page that pays loads, its shapes keep the footer below the first screen of a phone, as the page does', async ({ page }) => {
+  // three loads of the dev page, seconds of CPU each
+  test.slow();
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const { path, module, ready } of LOADING) {
+    let release = () => {};
+    const held = new Promise<void>(resolve => (release = resolve));
+    await page.route(module, async route => {
+      await held;
+      await route.continue();
+    });
+    await page.goto(path);
+    await expect(page.getByRole('status').filter({ hasText: 'Loading the page…' })).toBeVisible();
+    await expect(page.getByRole('contentinfo')).not.toBeInViewport();
+    release();
+    await expect(ready(page)).toBeVisible();
+    await expect(page.getByRole('contentinfo')).not.toBeInViewport();
+  }
+});
+
+/** When the hero scheme's last animation ends, in seconds, and the words any animation hides at first. */
+const schemeTiming = (page: Page) =>
+  page.evaluate(() => {
+    const seconds = (value: string) => parseFloat(value) * (value.trim().endsWith('ms') ? 0.001 : 1);
+    let end = 0;
+    const hidden: string[] = [];
+    for (const element of document.querySelectorAll('svg.flow, svg.flow *')) {
+      const style = getComputedStyle(element);
+      if (style.animationName === 'none') continue;
+      end = Math.max(end, seconds(style.animationDelay) + seconds(style.animationDuration));
+      const texts = element.tagName === 'text' ? [element] : [...element.querySelectorAll('text')];
+      hidden.push(...texts.map(text => text.textContent ?? ''));
+    }
+    return { end, hidden };
+  });
+
+test('the hero scheme is whole at its first paint, its run is over in 1.2 s, and it holds still for reduced motion', async ({ page }) => {
+  await page.goto(LANDING);
+  await expect(page.getByRole('img', { name: /^One payment from Base, Arbitrum or Ethereum/ })).toBeVisible();
+  const { end, hidden } = await schemeTiming(page);
+  // the chains, Intents Connect, the program and its instructions draw at once: only the run itself plays
+  expect(hidden).toEqual([]);
+  expect(end).toBeGreaterThan(0);
+  expect(end).toBeLessThanOrEqual(1.2);
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  expect((await schemeTiming(page)).end).toBe(0);
 });

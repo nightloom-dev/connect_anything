@@ -1,5 +1,6 @@
 /* The hero scheme of the landing page (pages/landing/FlowScheme.tsx). Each element's own style is its final state and
-   the animation only says where it comes from, so with no animation at all the picture is complete. It plays once. */
+   the animation only says where it comes from, so with no animation at all the picture is complete. It plays once, and
+   is over 1.2 s after the first paint: the delays are in FlowScheme.tsx. */
 @layer components {
   .flow :is(.flow-in, .flow-pop) {
     transform-box: fill-box;
@@ -9,26 +10,26 @@
     animation: flow-in 450ms var(--ease-out) backwards;
   }
   .flow .flow-pop {
-    animation: flow-pop 380ms var(--ease-out) backwards;
+    animation: flow-pop 260ms var(--ease-out) backwards;
   }
   /* pathLength="1" on the path, so one unit is its whole length */
   .flow .flow-draw {
     stroke-dasharray: 1;
     stroke-dashoffset: 0;
-    animation: flow-draw 700ms var(--ease-out) backwards;
+    animation: flow-draw 450ms var(--ease-out) backwards;
   }
   /* a short light that runs along a line once, then is gone */
   .flow .flow-pulse {
     opacity: 0;
     stroke-dasharray: 0.12 1.4;
     filter: drop-shadow(0 0 3px rgb(255 255 255 / 0.8));
-    animation: flow-pulse 760ms cubic-bezier(0.45, 0, 0.55, 1) backwards;
+    animation: flow-pulse 600ms cubic-bezier(0.45, 0, 0.55, 1) backwards;
   }
   .flow .flow-ping {
     opacity: 0;
     transform-box: fill-box;
     transform-origin: center;
-    animation: flow-ping 900ms var(--ease-out) backwards;
+    animation: flow-ping 600ms var(--ease-out) backwards;
   }
 
   .flow.flow-still *,

@@ -2,7 +2,7 @@ import { lazy, Suspense, type ReactNode } from 'react';
 import { matchRoute, Route, Switch, useLocation, useRouter } from 'wouter';
 import { Landing } from '../pages/Landing.tsx';
 import { NotFound } from '../pages/NotFound.tsx';
-import { Skeleton } from '../ui/Skeleton.tsx';
+import { PageSkeleton } from './PageSkeleton.tsx';
 
 // each feature's page.tsx owns its title and layout, so a redesign of one page does not touch this file
 const loadBuilder = () => import('../features/builder/page.tsx');
@@ -17,39 +17,24 @@ const DevStates = import.meta.env.DEV ? lazy(loadDevStates) : null;
 // the 1200 × 630 picture that links unfurl into, rendered to public/og.png from here
 const OgImage = import.meta.env.DEV ? lazy(() => import('../pages/OgImage.tsx')) : null;
 
-// A status, so a screen reader hears that the page is on its way: a div with no role may not carry a label (axe:
-// aria-prohibited-attr), and aria-busy would keep the region quiet until it is gone.
-export function PageSkeleton() {
-  return (
-    <div role="status" className="mx-auto flex max-w-[52rem] flex-col gap-6">
-      <span className="sr-only">Loading the page…</span>
-      <Skeleton className="h-8 w-64" />
-      <Skeleton lines={2} className="max-w-xl" />
-      <div className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-5">
-        <Skeleton className="h-5 w-40" />
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-10 w-2/3" />
-      </div>
-      <div className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-5">
-        <Skeleton className="h-5 w-32" />
-        <Skeleton lines={3} />
-      </div>
-    </div>
-  );
-}
-
 type WalletPage = {
   path: string;
   /** Fetches the page's code, so that it can come alongside the wallet code instead of after it. */
   load: () => Promise<unknown>;
   render: (params: Record<string, string | undefined>) => ReactNode;
+  /**
+   * The page fills more than a screen once it is in, but passes through shorter states that cannot know how tall it
+   * will be: the footer starts below the first screen, so that it never jumps into view and out again.
+   */
+  fills?: true;
 };
 
 /** The pages that pay, or may: they render inside the wallet providers, once the wallet code has loaded (Root). */
 const WALLET_PAGES: WalletPage[] = [
   { path: '/build', load: loadBuilder, render: () => <BuilderPage /> },
   { path: '/kamino', load: loadKamino, render: () => <KaminoPage /> },
-  { path: '/r/:id', load: loadShared, render: ({ id }) => <SharedPage id={id!} /> },
+  // its skeleton, then the shared page's own while the recipe loads, then the recipe or a link that leads nowhere
+  { path: '/r/:id', load: loadShared, render: ({ id }) => <SharedPage id={id!} />, fills: true },
   // the gallery shows the screens of every feature, which may read the wallet
   ...(DevStates ? [{ path: '/dev/states', load: loadDevStates, render: () => <DevStates /> }] : []),
 ];
@@ -84,8 +69,9 @@ export function PublicRoutes() {
 
 /** The pages that need the wallet, inside its providers. Any other path renders nothing here. */
 export function WalletRoutes() {
+  const page = useWalletPage();
   return (
-    <Suspense fallback={<PageSkeleton />}>
+    <Suspense fallback={<PageSkeleton path={page?.path} />}>
       <Switch>
         {WALLET_PAGES.map(({ path, render }) => (
           <Route key={path} path={path}>

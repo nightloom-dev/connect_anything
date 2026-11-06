@@ -153,11 +153,7 @@ is never loosened. When the fix lands, remove the fixme in the same change.
 | ----- | ------------------------------------------------------------------------------------------------------- |
 | QA-01 | `keyboard.spec.ts`: AppKit's modal takes the focus when the run card opens it                           |
 | QA-02 | `keyboard.spec.ts`: the run card keeps the focus on its buttons while they work                         |
-| QA-03 | `layout.spec.ts`: the CLS of the scenes in `FOOTER_JUMPS`                                               |
-| QA-05 | `keyboard.spec.ts`: the sticky header never covers the focus as Shift+Tab goes back up the page         |
 | QA-09 | `wallet-network.spec.ts`: a wallet on Base stays on Base                                                |
-| QA-06 | `gallery.spec.ts`: axe on the gallery section `ui-buttons`                                              |
-| QA-07 | `gallery.spec.ts`: axe on the gallery section `ui-inputs`                                               |
 | QA-08 | `gallery.spec.ts`: axe on the gallery section `kamino-fork`                                             |
 
 ## What answers the page

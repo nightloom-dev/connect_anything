@@ -41,12 +41,6 @@ async function slowNetwork(page: Page) {
   await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 150, downloadThroughput: -1, uploadThroughput: -1 });
 }
 
-/** Where the footer still jumps as the page loads, measured 2026-11-06. */
-const FOOTER_JUMPS: Record<number, string[]> = {
-  1440: ['kamino-position', 'kamino-watcher', 'shared'],
-  390: ['build-program', 'kamino-empty', 'kamino-position', 'kamino-watcher', 'shared', 'shared-dead'],
-};
-
 for (const [width, use] of [
   [1440, { viewport: { width: 1440, height: 900 } }],
   [390, phone(390, 844)],
@@ -55,7 +49,6 @@ for (const [width, use] of [
     test.use(use);
     for (const scene of SCENES.filter(scene => scene.link)) {
       test(`${scene.title}: nothing moves as it loads`, async ({ page, api, connect, wallet }) => {
-        test.fixme(FOOTER_JUMPS[width].includes(scene.name), 'QA-03: the footer is on the first screen while the page loads, and jumps down when the content comes in');
         await slowNetwork(page);
         await watchShifts(page);
         await scene.open({ page, api, connect, wallet });

@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { ArrowLeftRight } from 'lucide-react';
 import { Address, Badge, Button, Combobox, cn } from '../../ui/index.ts';
+import { breakable } from './breakable.tsx';
 
 /** One instruction of the IDL, with what Connect would refuse about it, worked out once for the whole list. */
 export type InstructionOption = { name: string; args: number; accounts: number; docs?: string; issues: string[] };
@@ -75,7 +76,7 @@ export function InstructionRow({ option }: { option: InstructionOption }) {
   return (
     <span className="flex min-w-0 flex-col gap-0.5 py-0.5">
       <span className="flex min-w-0 items-center gap-2">
-        <span className={cn('truncate font-mono text-[13px]', option.issues.length ? 'text-muted' : 'text-text')}>{option.name}</span>
+        <span className={cn('min-w-0 font-mono text-[13px] [overflow-wrap:anywhere]', option.issues.length ? 'text-muted' : 'text-text')}>{breakable(option.name)}</span>
         {option.issues.length > 0 && (
           <Badge variant="bad" title={option.issues.join(' ')}>
             Not supported

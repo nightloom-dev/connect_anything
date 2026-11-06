@@ -8,8 +8,6 @@ import { expect, test } from './support.ts';
 
 /** Sections with a known serious violation, each in a test of its own until it is fixed. */
 const KNOWN: Record<string, string> = {
-  'ui-buttons': 'QA-06: a Button that is loading and has no icon hides its label with visibility: hidden, so it has no name (axe button-name, critical)',
-  'ui-inputs': 'QA-07: the text inside a disabled field (its token, its hint) is at 60% opacity, under 4.5:1 (axe color-contrast, serious)',
   'kamino-fork': 'QA-08: while the fork check runs again, its last figures stay at 50% opacity, under 4.5:1 (axe color-contrast, serious)',
 };
 
