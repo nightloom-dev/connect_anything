@@ -15,6 +15,8 @@ const RESCUE = `${KAMINO}?wallet=${RECORDED_WALLET}&obligation=${HEALTHY.address
 const QUOTE = 'Get exact amount and fee';
 const SIGN = 'Sign and run';
 const DONE = 'Done: the instructions ran on Solana.';
+/** A Refund that went through runs no instructions of the recipe, and says so. */
+const REFUND_DONE = 'Done: the Refund went through, and the money is sent back to your wallet.';
 const SETTLING = 'Waiting for the bridge and the execution. After the deposit, execution takes about 150 seconds plus the MPC signature.';
 const CONSENT = 'I have read what will run, and I accept that it was made by whoever shared this link.';
 const IN_FLIGHT = 'This wallet already has an execution in flight, and Connect runs one at a time per wallet and chain:';
@@ -705,7 +707,7 @@ test('state 23 the instructions failed on Solana: retry with what the intermedia
   await shows(page, WALLET);
   await expect(button(page, 'Sign and retry')).toHaveCount(0);
   await button(page, 'Sign and refund').click();
-  await expect(statusOf(page, DONE)).toBeVisible();
+  await expect(statusOf(page, REFUND_DONE)).toBeVisible();
   // a Refund deposits nothing: it runs its transfer on Solana, then crosses the bridge back
   await expect(stages(page)).toContainText(['Signature, done', 'Deposit, not needed', 'Execution, done', 'Bridge, done', 'Success, complete']);
   const refund = connect.list()[2];
@@ -733,7 +735,7 @@ test('state 24 the Refund failed too: the money is still with the intermediary',
   // and again, which goes through
   await button(page, 'Refund').click();
   await button(page, 'Sign and refund').click();
-  await expect(statusOf(page, DONE)).toBeVisible();
+  await expect(statusOf(page, REFUND_DONE)).toBeVisible();
   expect(connect.list().map(({ status }) => status)).toEqual(['OPERATION_FAILED', 'OPERATION_FAILED', 'SUCCESS']);
 });
 
@@ -745,7 +747,7 @@ test('state 25 what a run left with the intermediary is offered back', async ({ 
   await expect(button(page, 'Retry')).toHaveCount(0);
   await button(page, 'Refund').click();
   await button(page, 'Sign and refund').click();
-  await expect(statusOf(page, DONE)).toBeVisible();
+  await expect(statusOf(page, REFUND_DONE)).toBeVisible();
 });
 
 test('state 26 an execution in flight that is not this recipe is never signed, only deleted', async ({ page, connect, wallet }) => {

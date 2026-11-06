@@ -182,6 +182,22 @@ test("closing AppKit's modal gives the focus back to the button that opened it",
   await expectSeen(walk);
 });
 
+test("closing AppKit's modal opened from the run card is no error, and the card's button takes the focus again", async ({ page, wallet: _ }) => {
+  const walk = await KeyboardWalk.on(page);
+  await page.goto(`${KAMINO}?wallet=${RECORDED_WALLET}`);
+  await position(page);
+  // the card's connect() rejects with "cancelled" when the modal closes with no wallet picked: the card catches it, so
+  // no console error fails this test
+  const card = page.getByRole('main').getByRole('button', { name: 'Connect wallet' });
+  await walk.tabTo(card);
+  await walk.press('Enter');
+  await expect.poll(() => focusedTag(page)).toBe('w3m-modal');
+  await walk.press('Escape');
+  await expect(page.getByRole('button', { name: new RegExp(WALLET_NAME) })).toHaveCount(0);
+  await expect(card).toBeFocused();
+  await expect(card).toBeEnabled();
+});
+
 test('the sticky header never covers the focus as Shift+Tab goes back up the page', async ({ page }) => {
   const walk = await backUp(page);
   expect(walk.covered()).toEqual([]);

@@ -19,6 +19,9 @@ export const PHASE_TEXT: Partial<Record<UseExecutionResult['phase'], string>> = 
   cancelled: 'The execution was cancelled.',
 };
 
+/** The success of a Refund, whose steps send the intermediary's money back over the bridge and run nothing else. */
+export const REFUND_DONE = 'Done: the Refund went through, and the money is sent back to your wallet.';
+
 /** What each status of an execution means, in words. Its name as Connect writes it follows, small. */
 export const STATUS_WORDS: Record<ExecutionStatus, string> = {
   CREATED: 'Created, not signed yet',

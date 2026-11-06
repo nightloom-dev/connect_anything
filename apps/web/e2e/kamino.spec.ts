@@ -493,6 +493,10 @@ test('after a Refund that went through, the page says where the money went, and 
   api.balance = '0';
   await page.getByRole('button', { name: 'Sign and refund', exact: true }).click();
 
+  // the card says the Refund went through, not that the instructions ran
+  await expect(statusOf(page, 'Done: the Refund went through, and the money is sent back to your wallet.')).toBeVisible();
+  await expect(page.getByText('Done: the instructions ran on Solana.')).toHaveCount(0);
+
   const sent = page.getByRole('region', { name: 'Sent back' });
   await expect(sent.getByRole('status')).toHaveText(`0.51 USDC went back from your intermediary to ${WALLET.slice(0, 6)}…${WALLET.slice(-4)} on Base, less the bridge's fee. The position is as it was: a refund does not touch it.`);
   await expect(sent.getByRole('link', { name: 'Open in Basescan (new tab)' })).toHaveAttribute('href', new RegExp(`${WALLET}$`));

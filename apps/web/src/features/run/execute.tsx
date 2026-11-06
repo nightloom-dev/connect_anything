@@ -8,7 +8,7 @@ import { checkCompat, issueText } from '../../compat.ts';
 import { CHAINS, STAGE_OF, bridgeKeeps, bridgePlan, bySymbol, existingOffer, explain, fromAtomic, isQuoteMoved, legs, refundBody, retryPlan, stoppedFollowing, toAtomic, type Balance, type Token, type TokenList } from '../../connect.ts';
 import { STAND_IN, buildRecipe, destinationIssue, matchesPublished, runsRecipe, signsOnlyRecipe, takesAmount, type StoredRecipe } from '../../recipe.ts';
 import { Failure, Notice, short, useAct, useAsync, useJson } from '../../ui.tsx';
-import { Address, Alert, Button, ChainIcon, Checkbox, Skeleton, Spinner, Timeline, TokenIcon, TxLink, chainMeta, copyText, type StageState } from '../../ui/index.ts';
+import { Address, Alert, Button, ChainIcon, Checkbox, Skeleton, Spinner, Timeline, TokenIcon, TxLink, chainMeta, copyText, toast, type StageState } from '../../ui/index.ts';
 import {
   AMOUNT_INPUT,
   Actions,
@@ -57,7 +57,7 @@ import { boxFigures, quoteFigures } from './figures.ts';
 import { usePublishRunBusy } from './busy.ts';
 import { enter, flowOf, progressStages, type Entered } from './progress.ts';
 import { IdlCheck, Summary, TrustPanel } from './summary.tsx';
-import { BLOCKS_WALLET, BROKE_NOTE, CANCEL_NOTE, DOING, LATE_NOTE, PHASE_TEXT, QUOTING, REFUND_DOING, REFUSED_RESUME, STATUS_WORDS, TIME_NOTE } from './words.ts';
+import { BLOCKS_WALLET, BROKE_NOTE, CANCEL_NOTE, DOING, LATE_NOTE, PHASE_TEXT, QUOTING, REFUND_DOING, REFUND_DONE, REFUSED_RESUME, STATUS_WORDS, TIME_NOTE } from './words.ts';
 
 const SOLSCAN = 'https://solscan.io';
 // Known limit: these live in this browser, so another browser finds an execution only through the 409 of a second run.
@@ -96,9 +96,10 @@ const timeOf = (iso?: string) => {
 function Progress({ exec, chain, resumed, unfinished }: { exec: UseExecutionResult; chain: string; resumed: boolean; unfinished: boolean }) {
   const { status, phase, execution, executionId, depositTxHash } = exec;
   // a resume asks the wallet for the deposit only while the execution is CREATED: after that the address is shown instead
-  const text = exec.error || (resumed && phase === 'awaiting-deposit' && status !== 'CREATED') ? undefined : PHASE_TEXT[phase];
-  const stage = status ? STAGE_OF[status] : -1;
   const flow = flowOf(execution);
+  const text =
+    exec.error || (resumed && phase === 'awaiting-deposit' && status !== 'CREATED') ? undefined : phase === 'success' && flow === 'refund' ? REFUND_DONE : PHASE_TEXT[phase];
+  const stage = status ? STAGE_OF[status] : -1;
   // the EVM side of the execution, for its links: where a bridge-in comes from, and where a Refund goes
   const evmAsset = flow === 'refund' ? execution?.quote?.destinationAsset : execution?.quote?.originAsset;
   const evmChain = (evmAsset && parseOriginAsset(evmAsset)?.chain) || chain;
@@ -507,6 +508,15 @@ type ExecuteProps = {
 export function Execute({ exec, recipe, stored, shared = false, suggested, outcome, closed, restartable = true }: ExecuteProps) {
   const { api, wallet } = useIntentsConnect();
   const { connect, disconnect, isConnecting } = useIntentsConnectWallet();
+  // closing AppKit's list of wallets is an answer, not an error, as in the header; anything else is said in a toast
+  const connectWallet = async () => {
+    try {
+      await connect();
+    } catch (failure) {
+      const message = failure instanceof Error ? failure.message : String(failure);
+      if (!/cancel|reject|denied/i.test(message)) toast.error('Could not connect the wallet', { description: message });
+    }
+  };
   const address = wallet?.getAddress() ?? undefined;
   const isEvm = wallet?.signingStandard === 'erc191';
   const list = useJson<TokenList>('/api/tokens');
@@ -918,7 +928,7 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
 
               <div className="flex flex-col gap-2.5">
                 {!wallet ? (
-                  <Button variant="primary" size="lg" block icon={<Wallet />} disabled={isConnecting} onClick={() => connect()}>
+                  <Button variant="primary" size="lg" block icon={<Wallet />} disabled={isConnecting} onClick={connectWallet}>
                     {isConnecting ? 'Connecting…' : 'Connect wallet'}
                   </Button>
                 ) : !isEvm ? (
