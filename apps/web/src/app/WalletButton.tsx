@@ -1,8 +1,9 @@
-import { useContext, useEffect, useState } from 'react';
+import { useContext, useEffect, useId, useState } from 'react';
 import { ArrowUpRight, ChevronDown, Copy, LogOut, Wallet } from 'lucide-react';
 import type { Intermediary } from '@aurora-is-near/intents-connect';
 import { useIntentsConnect } from '@aurora-is-near/intents-connect/react';
 import { AppKitContext, useIntentsConnectWallet } from '@aurora-is-near/intents-connect-wallet/connect/appkit';
+import { RUN_BUSY_NOTE, useRunBusy } from '../features/run/busy.ts';
 import { Address, Button, ChainIcon, Popover, Skeleton, buttonClass, buttonLook, chainMeta, chainOfCaip, cn, copyText, toast, truncateMiddle } from '../ui/index.ts';
 import { ConnectingLabel, ConnectLabel } from './WalletPlaceholder.tsx';
 
@@ -82,6 +83,9 @@ export function WalletButton({ className, connectNow = false, onConnectStarted, 
   const { wallet } = useIntentsConnect();
   const { connect, disconnect, isConnecting, isConnected, address, caipAddress } = useIntentsConnectWallet();
   const appKit = useContext(AppKitContext)?.appKit;
+  // a run in flight is followed with this wallet, so it stays connected until the run ends
+  const running = useRunBusy();
+  const why = useId();
 
   const start = async () => {
     try {
@@ -162,6 +166,8 @@ export function WalletButton({ className, connectNow = false, onConnectStarted, 
               block
               icon={<LogOut />}
               className="justify-start"
+              disabled={running}
+              aria-describedby={running ? why : undefined}
               onClick={() => {
                 close();
                 void disconnect();
@@ -169,6 +175,11 @@ export function WalletButton({ className, connectNow = false, onConnectStarted, 
             >
               Disconnect
             </Button>
+            {running && (
+              <p id={why} className="px-2.5 pt-0.5 pb-1 text-xs leading-4 text-muted">
+                {RUN_BUSY_NOTE}
+              </p>
+            )}
           </div>
         </div>
       )}

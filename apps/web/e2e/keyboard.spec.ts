@@ -163,7 +163,6 @@ test('the sticky header never covers the focus as Shift+Tab goes back up the pag
 });
 
 test('the run card keeps the focus on its buttons while they work: after the quote, the next Tab reaches Sign and run', async ({ page, wallet }) => {
-  test.fixme(true, 'QA-02: a button that disables itself while it works drops the focus to the page, and the next Tab starts below the card');
   const walk = await KeyboardWalk.on(page);
   await page.goto(`${KAMINO}?wallet=${RECORDED_WALLET}`);
   await position(page);

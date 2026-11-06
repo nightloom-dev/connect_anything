@@ -1,8 +1,10 @@
-import { useEffect, useId, useState, type ReactNode, type SelectHTMLAttributes } from 'react';
-import { ArrowDown, ArrowUpRight, ChevronDown, CircleCheck, CircleMinus, HandCoins, Info, OctagonAlert, TriangleAlert, Wallet } from 'lucide-react';
+import { useEffect, useId, useRef, useState, type ReactNode, type SelectHTMLAttributes } from 'react';
+import { ArrowDown, ArrowUpRight, ChevronDown, CircleCheck, CircleMinus, HandCoins, Info, OctagonAlert, Plus, TriangleAlert, Wallet } from 'lucide-react';
 import { BACKEND_PLACEHOLDERS, type ExecutionStep } from '@aurora-is-near/intents-connect';
+import type { ExecutionStatus } from '@aurora-is-near/intents-connect';
 import type { UseExecutionResult } from '@aurora-is-near/intents-connect/react';
-import { Address, Card, ChainIcon, Spinner, TokenIcon, cn, toast } from '../../ui/index.ts';
+import { Address, Alert, Button, Card, ChainIcon, CopyButton, Spinner, TokenIcon, cn, toast } from '../../ui/index.ts';
+import { INTERMEDIARY_NOTE, SIGNED_WAITING, STATUS_WORDS } from './words.ts';
 
 // The run card's presentational parts. Each takes ready values and works nothing out: the conditions, the figures and the
 // money stay in execute.tsx, which composes these, and the /dev/states gallery composes them the same way on fake values.
@@ -21,6 +23,41 @@ export function RunCard({ children, className }: { children: ReactNode; classNam
     </Card>
   );
 }
+
+// The header is 56px tall, and the column keeps 24px under it and as much over the bottom edge.
+const TOP = 80;
+const BOTTOM = 24;
+
+/**
+ * On a shared link from 1200px, the payment beside what will run. It stays in view while that scrolls, as long as all of it
+ * fits on the screen: a column taller than the screen would hide its own end, so then it scrolls with the page.
+ */
+export function PayColumn({ children }: { children: ReactNode }) {
+  const column = useRef<HTMLDivElement>(null);
+  const [fits, setFits] = useState(true);
+  useEffect(() => {
+    const element = column.current;
+    if (!element) return;
+    const measure = () => setFits(element.offsetHeight + TOP + BOTTOM <= window.innerHeight);
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, []);
+  return (
+    <div ref={column} className={cn('flex min-w-0 flex-col gap-4 lg:col-start-2 lg:row-start-1', fits && 'lg:sticky lg:top-20')}>
+      {children}
+    </div>
+  );
+}
+
+/** On a shared link: what will run on the left and the payment on the right from 1200px, one under the other before. */
+export const SHARED_COLUMNS = 'grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,var(--container-run))] lg:items-start lg:gap-x-8';
+/** The left column of SHARED_COLUMNS. */
+export const SHARED_LEFT = 'flex min-w-0 flex-col gap-4 lg:col-start-1 lg:row-start-1';
 
 type PanelProps = {
   /** "You pay", "You get". */
@@ -63,17 +100,66 @@ export function Panel({ label, htmlFor, aside, children, footer, idle = false }:
 export function PaidFrom({ address, children }: { address?: string; children?: ReactNode }) {
   return (
     <div className="flex min-w-0 items-center justify-between gap-3">
-      <span className="flex min-w-0 items-baseline gap-1">
+      <span className="flex min-w-0 items-center gap-1">
         <span className="shrink-0">From </span>
         {address && (
-          <span title={address} className="flex min-w-0 font-mono text-[0.8125rem] leading-5 tracking-tight text-text">
-            <span className="truncate">{address.slice(0, -4)}</span>
-            <span className="shrink-0">{address.slice(-4)}</span>
-          </span>
+          <>
+            <span title={address} className="flex min-w-0 font-mono text-[0.8125rem] leading-5 tracking-tight text-text">
+              <span className="truncate">{address.slice(0, -4)}</span>
+              <span className="shrink-0">{address.slice(-4)}</span>
+            </span>
+            <CopyButton value={address} label="Copy the address you pay from" message="Address copied" className="shrink-0" />
+          </>
         )}
       </span>
       {children}
     </div>
+  );
+}
+
+const TERM =
+  'cursor-pointer rounded-sm underline decoration-dotted decoration-1 underline-offset-[3px] transition-colors duration-120 hover:text-text aria-expanded:text-text';
+
+/**
+ * The intermediary, where the card first names it: the word is new to most who pay, so it says what it is on a click, in
+ * place, where a screen reader reads on to it. `open` starts it open, for the gallery.
+ */
+export function IntermediaryLine({ address, open: initial = false }: { address: string; open?: boolean }) {
+  const [open, setOpen] = useState(initial);
+  const note = useId();
+  return (
+    <>
+      <p className="min-w-0">
+        Your{' '}
+        <button type="button" aria-expanded={open} aria-controls={note} onClick={() => setOpen(now => !now)} className={TERM}>
+          intermediary
+        </button>{' '}
+        on Solana: <Address value={address} full className="text-balance" />
+      </p>
+      <p id={note} hidden={!open} className="border-l-2 border-accent/45 pl-2.5 text-pretty text-text/85">
+        {INTERMEDIARY_NOTE}
+      </p>
+    </>
+  );
+}
+
+const PLAIN = new Intl.NumberFormat('en-US', { maximumFractionDigits: 20 });
+/** A decimal as it is, in en-US: 1,234.5. The string goes in as the exact decimal it writes (the getter's function is bound). */
+const writeDecimal = PLAIN.format as unknown as (value: string) => string;
+
+/**
+ * Paying with another token than the one the page worked its figure out in. The figure does not carry over to that token,
+ * so this says what it was and what to enter instead.
+ */
+export function OtherToken({ figure, target, source }: { figure: string; target: string; source: string }) {
+  return (
+    <Alert kind="warning">
+      This page worked out{' '}
+      <span className="nums">
+        {writeDecimal(figure)} {target}
+      </span>
+      . To pay with {source}, enter what that is worth.
+    </Alert>
   );
 }
 
@@ -154,6 +240,8 @@ export function SelectPill({ label, display, compact = false, className, ...sele
 }
 
 const share = new Intl.NumberFormat('en-US', { style: 'percent', maximumFractionDigits: 0 });
+// under 1% a whole percent would say 0%, of a bridge that keeps something
+const smallShare = new Intl.NumberFormat('en-US', { style: 'percent', maximumSignificantDigits: 2 });
 
 /**
  * What arrives, at least: one sentence for the page's text and a screen reader, "at least 776.16 USDC, after the bridge's
@@ -177,7 +265,7 @@ export function Arrives({ amount, symbol, kept }: { amount: ReactNode; symbol: R
           <span className="sr-only">:</span>
           <span className={cn('mt-0.5 flex items-center gap-1 text-xs', notable ? 'font-medium text-warning' : 'text-muted')}>
             {notable && <TriangleAlert aria-hidden className="size-3.5 shrink-0" />}
-            <span className="first-letter:uppercase"> the bridge keeps {share.format(kept)} of what you pay</span>
+            <span className="first-letter:uppercase"> the bridge keeps {(kept < 0.01 ? smallShare : share).format(kept)} of what you pay</span>
           </span>
         </>
       )}
@@ -302,22 +390,23 @@ export function ConsentBox({ given, children }: { given: boolean; children: Reac
   return <div className={cn('rounded-lg border px-3.5 py-3 transition-colors duration-200', given ? 'border-border bg-surface-2/40' : 'border-warning/45 bg-warning/[0.07]')}>{children}</div>;
 }
 
-export function WorkingLine() {
+/** What the card waits for, under the quote button. */
+export function WorkingLine({ children = 'Working…' }: { children?: ReactNode }) {
   return (
     <p role="status" className="flex items-center gap-2 text-sm text-muted">
       <Spinner size="sm" />
-      Working…
+      {children}
     </p>
   );
 }
 
-/** That an execution was deleted, here and in a toast. */
+/** That an execution was deleted, here and in a toast. The toast is what a screen reader hears, once. */
 export function DeletedLine({ id }: { id: string }) {
   useEffect(() => {
     toast.success('Execution deleted', { id: `deleted-${id}` });
   }, [id]);
   return (
-    <div role="status" className="flex items-start gap-2 text-sm text-muted">
+    <div className="flex items-start gap-2 text-sm text-muted">
       <CircleCheck aria-hidden className="mt-0.5 size-4 shrink-0 text-success" />
       <p className="min-w-0 break-words">
         Execution <code className="font-mono text-[0.8125rem] break-all text-text">{id}</code> was deleted, so a new run can start.
@@ -344,7 +433,8 @@ export function ExplorerLink({ href, label, explorer }: { href: string; label: R
 
 type Phase = UseExecutionResult['phase'];
 
-const WALLET_PHASES: Phase[] = ['awaiting-signature', 'awaiting-deposit'];
+/** The phases in which the wallet asks the person for something. */
+export const WALLET_PHASES: Phase[] = ['awaiting-signature', 'awaiting-deposit'];
 
 /** Time since `since`, m:ss or h:mm:ss, every second. */
 export function Elapsed({ since }: { since?: string }) {
@@ -422,6 +512,32 @@ export function MetaLine({ children }: { children: ReactNode }) {
   return <p className="min-w-0 text-xs leading-5 break-words text-muted [&_code]:font-mono [&_code]:break-all [&_code]:text-text/80">{children}</p>;
 }
 
+/** A status as Connect names it, after its words: small, for whoever reads Connect's own. */
+export function StatusName({ status }: { status: string }) {
+  return <span className="font-mono text-[0.6875rem] tracking-tight text-muted">{status}</span>;
+}
+
+/** The line under the stages: the status in words, the execution, and the status as Connect names it. A stale one is only words. */
+export function StatusLine({ status, stale = false, id }: { status?: ExecutionStatus; stale?: boolean; id?: string }) {
+  const words = stale ? SIGNED_WAITING : status && (STATUS_WORDS[status] ?? status);
+  return (
+    <MetaLine>
+      {words && `${words}. `}
+      {id && (
+        <>
+          Execution <code>{id}</code>
+        </>
+      )}
+      {status && !stale && (
+        <>
+          {id && ' · '}
+          <StatusName status={status} />
+        </>
+      )}
+    </MetaLine>
+  );
+}
+
 /** An execution this page did not just create, with what can be done about it. */
 export function ExistingFrame({ title, children }: { title: ReactNode; children: ReactNode }) {
   return (
@@ -495,6 +611,17 @@ export function DepositBox({ children, actions }: { children: ReactNode; actions
 /** A part of the card under a rule: the run's progress, the way out of a failed one. */
 export function Block({ children, tight = false }: { children: ReactNode; tight?: boolean }) {
   return <div className={cn('flex min-w-0 flex-col border-t border-border pt-4', tight ? 'gap-3' : 'gap-4')}>{children}</div>;
+}
+
+/** Once a run has ended, the way to another payment: quiet, under what the run left to read or to do. */
+export function NewPayment({ onClick }: { onClick?: () => void }) {
+  return (
+    <div className="flex justify-center border-t border-border pt-3">
+      <Button variant="ghost" size="sm" icon={<Plus />} onClick={onClick}>
+        Start a new payment
+      </Button>
+    </div>
+  );
 }
 
 /** What the intermediary holds, as a figure: "Your intermediary holds 0.51 USDC." */

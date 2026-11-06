@@ -21,6 +21,8 @@ test('a shared recipe says who made it, and opens what will run', { tag: '@mobil
   await expect(page.getByText('What will run: 4 instructions on 1 program')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Instructions, in this order' })).toBeVisible();
   await expect(page.getByRole('link', { name: KLEND })).toBeVisible();
+  // the address a reader checks, whole, and ready to copy
+  await expect(page.getByRole('button', { name: 'Copy the program address' }).first()).toBeVisible();
   await expect(page.getByText('calls itself kamino_lending')).toBeVisible();
   await expect(page.getByRole('main')).toContainText(/refresh_reserve[\s\S]*refresh_reserve[\s\S]*refresh_obligation[\s\S]*repay_obligation_liquidity_v2/);
   // the amount is the quote's, and nobody knows it yet

@@ -4,7 +4,7 @@ import type { ExecutionStatus, Phase } from '@aurora-is-near/intents-connect';
 import { STAGE_OF } from '../../connect.ts';
 import { BASE_USDC, SOLANA_USDC } from '../../kamino.ts';
 import type { StageState } from '../../ui/Timeline.tsx';
-import { flowOf, progressStages, type Flow } from './progress.ts';
+import { enter, flowOf, progressStages, type Entered, type Flow } from './progress.ts';
 
 const drawn = (status: ExecutionStatus | undefined, now: StageState, phase: Phase, flow?: Flow, at = status ? STAGE_OF[status] : -1) =>
   progressStages({ at, now, status, phase, flow, note: 'the note' });
@@ -71,4 +71,54 @@ test('the flow comes from what the execution records', () => {
   assert.equal(flowOf({ metadata: { intentsConnectFlow: 'steps-only' }, quote: {} }), 'steps-only');
   assert.equal(flowOf({ executionMode: 'quote_with_steps', quote: { originAsset: BASE_USDC.assetId, destinationAsset: SOLANA_USDC } }), 'bridge-in');
   assert.equal(flowOf({ executionMode: 'quote_with_steps', quote: { originAsset: SOLANA_USDC, destinationAsset: BASE_USDC.assetId } }), 'refund');
+});
+
+/** What the page has seen after reading the execution at each of these statuses, one read a second from 4:54:00. */
+const follow = (statuses: ExecutionStatus[], flow: Flow = 'bridge-in', id = 'exec-1', from: Entered = { last: -1, times: [] }) =>
+  statuses.reduce((seen, status, read) => enter(seen, id, STAGE_OF[status], flow, () => `4:54:0${read}`), from);
+
+test('each stage has the time the page saw the run move into it, and a stage passed between two reads the time it saw it past', () => {
+  const seen = follow(['CREATED', 'DEPOSIT_PENDING', 'DEPOSIT_PROCESSING', 'OPERATION_PROCESSING', 'SUCCESS']);
+  assert.deepEqual(seen.times, [undefined, '4:54:01', '4:54:02', '4:54:03', '4:54:04']);
+  // the Bridge went by between two reads
+  assert.deepEqual(follow(['CREATED', 'DEPOSIT_PENDING', 'OPERATION_PENDING']).times, [undefined, '4:54:01', '4:54:02', '4:54:02']);
+  // a read at the same stage, or behind it, changes nothing
+  const twice = follow(['CREATED', 'DEPOSIT_PENDING']);
+  assert.equal(enter(twice, 'exec-1', STAGE_OF.EXPIRED, 'bridge-in', () => 'later'), twice);
+  assert.equal(enter(twice, 'exec-1', STAGE_OF.CREATED, 'bridge-in', () => 'later'), twice);
+});
+
+test('a run the page found under way, as after a resume, has no time on the stages it found done, only on those it saw', () => {
+  assert.deepEqual(follow(['DEPOSIT_PROCESSING']).times, []);
+  assert.deepEqual(follow(['DEPOSIT_PROCESSING', 'OPERATION_PENDING', 'SUCCESS']).times, [undefined, undefined, undefined, '4:54:01', '4:54:02']);
+  // another execution starts over
+  const other = follow(['CREATED'], 'bridge-in', 'exec-2', follow(['CREATED', 'DEPOSIT_PENDING']));
+  assert.deepEqual(other, { id: 'exec-2', last: 0, times: [] });
+});
+
+test('the times follow the order of the flow, and a stage the flow has no use for gets none it shows', () => {
+  // a Refund runs its transfer before it crosses the bridge
+  const refund = follow(['CREATED', 'OPERATION_PENDING', 'SUCCESS'], 'refund');
+  assert.equal(refund.times[STAGE_OF.OPERATION_PENDING], '4:54:01');
+  assert.equal(refund.times[STAGE_OF.DEPOSIT_PROCESSING], '4:54:02');
+  // the stage a run of steps is shown at after its signature is the execution, so that is when it entered it
+  const steps = follow(['CREATED', 'DEPOSIT_PENDING', 'OPERATION_PROCESSING'], 'steps-only');
+  assert.equal(steps.times[STAGE_OF.OPERATION_PROCESSING], '4:54:01');
+  const shown = progressStages({ at: 3, now: 'active', status: 'OPERATION_PROCESSING', phase: 'settling', flow: 'steps-only', times: steps.times });
+  assert.deepEqual(shown.map(({ time }) => time), [undefined, undefined, undefined, '4:54:01', undefined]);
+});
+
+test('a time shows on a stage the run reached, never on one it did not, and the Signature has the time it started', () => {
+  const times = [undefined, '4:54:31', '4:55:02', '4:55:20', '4:56:05'];
+  const timed = (status: ExecutionStatus, now: StageState, phase: Phase) => progressStages({ at: STAGE_OF[status], now, status, phase, time: '4:54:12', times }).map(({ time }) => time);
+  assert.deepEqual(timed('DEPOSIT_PROCESSING', 'active', 'settling'), ['4:54:12', '4:54:31', '4:55:02', undefined, undefined]);
+  assert.deepEqual(timed('SUCCESS', 'success', 'success'), ['4:54:12', '4:54:31', '4:55:02', '4:55:20', '4:56:05']);
+  // after a failed deposit the stages after it are not reached, though the page saw the run end there
+  assert.deepEqual(timed('DEPOSIT_FAILED', 'failed', 'failed'), ['4:54:12', '4:54:31', undefined, undefined, undefined]);
+  // after failed instructions the Result waits on the person, from when the page saw them fail
+  assert.deepEqual(timed('OPERATION_FAILED', 'failed', 'failed'), ['4:54:12', '4:54:31', '4:55:02', '4:55:20', '4:56:05']);
+  assert.deepEqual(
+    progressStages({ at: 1, now: 'cancelled', phase: 'cancelled', time: '4:54:12', times }).map(({ time }) => time),
+    ['4:54:12', '4:54:31', undefined, undefined, undefined],
+  );
 });

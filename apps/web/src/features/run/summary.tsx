@@ -1,27 +1,30 @@
-import type { ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { ArrowUpRight, ChevronDown, ListOrdered, LoaderCircle, ShieldAlert, ShieldCheck, ShieldQuestion, ShieldX } from 'lucide-react';
 import type { StoredRecipe, buildRecipe } from '../../recipe.ts';
 import { AccountList, short } from '../../ui.tsx';
-import { Address, cn } from '../../ui/index.ts';
+import { Address, CopyButton, cn } from '../../ui/index.ts';
 
 // What a recipe runs, and on a shared link who stands behind it. Presentational: execute.tsx builds the steps and checks
 // each program's published IDL, and passes the results in.
 
 const SOLSCAN = 'https://solscan.io';
 
-/** An account on Solscan, in a new tab: the whole address, since it is what a reader checks. */
+/** An account on Solscan, in a new tab, and Copy: the whole address, since it is what a reader checks. */
 function ProgramLink({ program }: { program: string }) {
   return (
-    <a
-      href={`${SOLSCAN}/account/${program}`}
-      target="_blank"
-      rel="noreferrer"
-      className="inline-flex max-w-full items-start gap-1 rounded-xs font-mono text-[0.8125rem] leading-5 tracking-tight break-all text-accent underline decoration-accent/40 underline-offset-[3px] transition-colors hover:text-accent-hover hover:decoration-current"
-    >
-      <span className="min-w-0 text-balance">{program}</span>
-      <ArrowUpRight className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-      <span className="sr-only"> on Solscan, opens in a new tab</span>
-    </a>
+    <span className="inline-flex max-w-full items-start gap-1">
+      <a
+        href={`${SOLSCAN}/account/${program}`}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex max-w-full items-start gap-1 rounded-xs font-mono text-[0.8125rem] leading-5 tracking-tight break-all text-accent underline decoration-accent/40 underline-offset-[3px] transition-colors hover:text-accent-hover hover:decoration-current"
+      >
+        <span className="min-w-0 text-balance">{program}</span>
+        <ArrowUpRight className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+        <span className="sr-only"> on Solscan, opens in a new tab</span>
+      </a>
+      <CopyButton value={program} label="Copy the program address" message="Program address copied" className="-mt-0.5 shrink-0" />
+    </span>
   );
 }
 
@@ -107,6 +110,34 @@ type SummaryProps = {
 
 const H4 = 'text-xs font-medium tracking-wide text-muted uppercase';
 
+/** Lists longer than this wait behind their count below 1200px, so that the steps of a recipe read one after another. */
+const FOLD_OVER = 4;
+
+/** The accounts of one instruction: in full from 1200px, and below that behind their count when there are many. */
+function Accounts({ count, children }: { count: number; children: ReactNode }) {
+  const [shown, setShown] = useState(false);
+  const id = useId();
+  if (count <= FOLD_OVER) return children;
+  return (
+    <div className="flex min-w-0 flex-col gap-2">
+      <button
+        type="button"
+        aria-expanded={shown}
+        aria-controls={id}
+        onClick={() => setShown(!shown)}
+        className="group/accounts flex min-h-11 w-full items-center gap-2 rounded-lg border border-border bg-surface px-3.5 py-2 text-left text-sm font-medium text-text transition-colors duration-120 hover:bg-white/3 lg:hidden"
+      >
+        <span className="min-w-0 flex-1">{count} accounts</span>
+        <span className="text-xs font-normal text-muted">{shown ? 'Hide' : 'Show'}</span>
+        <ChevronDown aria-hidden className="size-4 shrink-0 text-muted transition-transform duration-200 group-aria-expanded/accounts:rotate-180" />
+      </button>
+      <div id={id} className={cn('min-w-0', !shown && 'max-lg:hidden')}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 /** What will run: the programs, then each instruction with its arguments, data and accounts. Open from the start on a shared link. */
 export function Summary({ stored, steps, intermediary, real, amountKnown, shared, open = shared }: SummaryProps) {
   const programs = [...new Set(stored.steps.map(({ program }) => program))];
@@ -154,7 +185,9 @@ export function Summary({ stored, steps, intermediary, real, amountKnown, shared
                     Data sent: <code className="font-mono break-all text-text/85">{step.instruction.data.toString('hex')}</code>
                     {step.amountArg !== undefined && !amountKnown && ' (0 in place of the amount)'}
                   </p>
-                  <AccountList accounts={step.accounts} program={step.program} intermediary={intermediary} real={real} inputLabel={shared ? 'typed by whoever made the link' : undefined} />
+                  <Accounts count={step.accounts.length}>
+                    <AccountList accounts={step.accounts} program={step.program} intermediary={intermediary} real={real} inputLabel={shared ? 'typed by whoever made the link' : undefined} />
+                  </Accounts>
                 </div>
               </li>
             ))}

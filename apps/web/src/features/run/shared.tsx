@@ -6,6 +6,7 @@ import { parseStored, toSolanaRecipe } from '../../recipe.ts';
 import { Failure, FetchError, useJson } from '../../ui.tsx';
 import { EmptyState, Skeleton, Spinner, buttonClass } from '../../ui/index.ts';
 import { Execute } from './execute.tsx';
+import { SHARED_COLUMNS, SHARED_LEFT } from './parts.tsx';
 
 /** A link that leads nowhere that can run: what is wrong, what to do about it, and the two ways on, as on the 404 page. */
 export function Dead({ icon, title, children }: { icon: ReactNode; title: string; children?: ReactNode }) {
@@ -34,7 +35,7 @@ export function Dead({ icon, title, children }: { icon: ReactNode; title: string
   );
 }
 
-/** The recipe on its way: the trust panel, what will run and the card, as grey shapes. */
+/** The recipe on its way: the trust panel, what will run and the card, as grey shapes where they will stand. */
 export function Loading() {
   return (
     <div aria-busy className="flex flex-col gap-4">
@@ -42,9 +43,13 @@ export function Loading() {
         <Spinner size="sm" />
         Loading the recipe…
       </p>
-      <Skeleton className="h-36 rounded-xl" />
-      <Skeleton className="h-12 rounded-xl" />
-      <Skeleton className="h-80 rounded-xl" />
+      <div className={SHARED_COLUMNS}>
+        <div className={SHARED_LEFT}>
+          <Skeleton className="h-36 rounded-xl" />
+          <Skeleton className="h-12 rounded-xl" />
+        </div>
+        <Skeleton className="h-80 rounded-xl lg:col-start-2 lg:row-start-1" />
+      </div>
     </div>
   );
 }
@@ -75,7 +80,7 @@ export function SharedRecipe({ id }: { id: string }) {
   const missing = found.error instanceof FetchError && (found.error.status === 404 || found.error.status === 400);
 
   return (
-    <section className="mx-auto flex w-full max-w-run min-w-0 flex-col gap-5">
+    <section className="mx-auto flex w-full max-w-run min-w-0 flex-col gap-5 lg:max-w-none">
       <SharedHeader />
       {found.loading && <Loading />}
       {missing && <Dead icon={<Link2Off />} title="This link does not lead to a recipe." />}

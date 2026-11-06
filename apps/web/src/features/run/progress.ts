@@ -29,6 +29,9 @@ const ORDER: Record<Flow, number[]> = {
 /** The stages a flow has no use for. */
 const UNUSED: Record<Flow, number[]> = { 'bridge-in': [], 'steps-only': [DEPOSIT, BRIDGE], refund: [DEPOSIT] };
 
+/** The states of a stage the run got to, which can carry the time it got there. */
+const REACHED: StageState[] = ['active', 'paused', 'done', 'failed', 'success', 'cancelled'];
+
 /** Where a failure broke the run. STAGE_OF puts both on the Result, where the run ended, which is not where it went wrong. */
 const BROKE: Partial<Record<ExecutionStatus, number>> = { DEPOSIT_FAILED: DEPOSIT, OPERATION_FAILED: EXECUTION };
 
@@ -38,6 +41,32 @@ type Recorded = { executionMode?: string; metadata?: Record<string, unknown>; qu
 export function flowOf(execution?: Recorded): Flow {
   if (execution?.executionMode === 'steps_only' || execution?.metadata?.intentsConnectFlow === 'steps-only') return 'steps-only';
   return legs(execution?.quote).isRefund ? 'refund' : 'bridge-in';
+}
+
+/** The place in the flow's order where the timeline shows a run at this stage: one the flow has no use for passes to the next. */
+function shownAt(flow: Flow, index: number) {
+  const order = ORDER[flow];
+  let place = order.indexOf(index);
+  while (place >= 0 && UNUSED[flow].includes(order[place])) place++;
+  return place;
+}
+
+/** What this page saw of an execution: the place in its flow it last saw it at, and when it saw it move into each stage. */
+export type Entered = { id?: string; last: number; times: string[] };
+
+/**
+ * What the page has seen once it sees execution `id` at stage `at`, by its place in STAGES. Each stage the run moved into
+ * since the last read is entered `now()`, one it passed between two reads too. The first read of an execution enters none,
+ * as after a resume: the page did not see it get there. When nothing changes, this is `seen` itself.
+ */
+export function enter(seen: Entered, id: string, at: number, flow: Flow, now: () => string): Entered {
+  const place = shownAt(flow, at);
+  if (seen.id !== id) return { id, last: place, times: [] };
+  if (place <= seen.last) return seen;
+  const times = [...seen.times];
+  const time = now();
+  for (let next = seen.last + 1; next <= place; next++) times[ORDER[flow][next]] = time;
+  return { id, last: place, times };
 }
 
 type Where = {
@@ -52,6 +81,8 @@ type Where = {
   note?: ReactNode;
   /** When it started, by the first stage. */
   time?: ReactNode;
+  /** When the page saw the run move into each later stage, by its place in STAGES (see `enter`). Shown only on a stage the run reached. */
+  times?: (ReactNode | undefined)[];
   /** What each stage produced, by its place in STAGES. A Refund's transaction on the EVM chain is the bridge's. */
   links?: ReactNode[];
 };
@@ -62,14 +93,13 @@ type Where = {
  * instructions that failed the Result says where the money is, waiting on the person. A stage the flow has no use for is
  * not needed from the start.
  */
-export function progressStages({ at, now, status, phase, flow = 'bridge-in', note, time, links = [] }: Where): TimelineStage[] {
+export function progressStages({ at, now, status, phase, flow = 'bridge-in', note, time, times = [], links = [] }: Where): TimelineStage[] {
   const order = ORDER[flow];
   const unused = UNUSED[flow];
   const over = phase === 'cancelled' || status === 'SUCCESS' || (!!status && status in BROKE);
   const held = status === 'OPERATION_FAILED';
-  // the place of the stage the run is at, or broke at, in this flow: one it has no use for passes to the next
-  let current = order.indexOf((status && BROKE[status]) ?? at);
-  while (current >= 0 && unused.includes(order[current])) current++;
+  // the place of the stage the run is at, or broke at, in this flow
+  const current = shownAt(flow, (status && BROKE[status]) ?? at);
 
   return order.map((index, place): TimelineStage => {
     const result = index === RESULT;
@@ -90,7 +120,7 @@ export function progressStages({ at, now, status, phase, flow = 'bridge-in', not
       title: result && status === 'SUCCESS' ? 'Success' : STAGES[index],
       state,
       description: place === current ? note : result && held ? HELD_NOTE[flow === 'refund' ? 'refund' : 'run'] : undefined,
-      time: index === 0 ? time : undefined,
+      time: index === 0 ? time : REACHED.includes(state) ? times[index] : undefined,
       link: state === 'skipped' || state === 'unreached' ? undefined : link || undefined,
     };
   });

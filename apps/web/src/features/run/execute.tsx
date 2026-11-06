@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ArrowLeftRight, Calculator, Clock, Copy, PenLine, RefreshCw, RotateCcw, Undo2, Wallet } from 'lucide-react';
 import { TERMINAL_STATUSES, guards, parseOriginAsset, signIntentsConnectPayload, type Execution, type ExecutionPreview, type ExecutionStep, type SolanaRecipe, type StepsPreview } from '@aurora-is-near/intents-connect';
 import { useIntentsConnect, type UseExecutionResult } from '@aurora-is-near/intents-connect/react';
@@ -8,7 +8,7 @@ import { checkCompat, issueText } from '../../compat.ts';
 import { CHAINS, STAGE_OF, bridgeKeeps, bridgePlan, bySymbol, existingOffer, explain, fromAtomic, isQuoteMoved, legs, refundBody, retryPlan, stoppedFollowing, toAtomic, type Balance, type Token, type TokenList } from '../../connect.ts';
 import { STAND_IN, buildRecipe, destinationIssue, matchesPublished, runsRecipe, signsOnlyRecipe, takesAmount, type StoredRecipe } from '../../recipe.ts';
 import { Failure, Notice, short, useAct, useAsync, useJson } from '../../ui.tsx';
-import { Address, Alert, Button, ChainIcon, Checkbox, Skeleton, Spinner, Timeline, TokenIcon, chainMeta, copyText, type StageState } from '../../ui/index.ts';
+import { Address, Alert, Button, ChainIcon, Checkbox, Skeleton, Spinner, Timeline, TokenIcon, TxLink, chainMeta, copyText, type StageState } from '../../ui/index.ts';
 import {
   AMOUNT_INPUT,
   Actions,
@@ -28,26 +28,36 @@ import {
   FigureRow,
   Figures,
   Held,
+  IntermediaryLine,
   LONG_LABEL,
-  MetaLine,
+  NewPayment,
   NoFigure,
   OptionTile,
+  OtherToken,
   PaidFrom,
   Panel,
   PanelArrow,
+  PayColumn,
   PhaseCallout,
   QuoteBox,
   Reason,
   RunCard,
+  SHARED_COLUMNS,
+  SHARED_LEFT,
   SelectPill,
   SpendsRow,
+  StatusLine,
+  StatusName,
   Swap,
   TokenTag,
+  WALLET_PHASES,
   WorkingLine,
 } from './parts.tsx';
-import { flowOf, progressStages } from './progress.ts';
+import { boxFigures, quoteFigures } from './figures.ts';
+import { usePublishRunBusy } from './busy.ts';
+import { enter, flowOf, progressStages, type Entered } from './progress.ts';
 import { IdlCheck, Summary, TrustPanel } from './summary.tsx';
-import { BROKE_NOTE, CANCEL_NOTE, DOING, LATE_NOTE, PHASE_TEXT, REFUND_DOING, TIME_NOTE } from './words.ts';
+import { BLOCKS_WALLET, BROKE_NOTE, CANCEL_NOTE, DOING, LATE_NOTE, PHASE_TEXT, QUOTING, REFUND_DOING, REFUSED_RESUME, STATUS_WORDS, TIME_NOTE } from './words.ts';
 
 const SOLSCAN = 'https://solscan.io';
 // Known limit: these live in this browser, so another browser finds an execution only through the 409 of a second run.
@@ -77,10 +87,10 @@ function PublishedCheck({ stored, program }: { stored: StoredRecipe; program: st
   return matchesPublished(stored, program, published.data.idl) ? <IdlCheck state="match" /> : <IdlCheck state="differs" />;
 }
 
-const clock = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
+const clock = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' });
 const timeOf = (iso?: string) => {
   const at = iso ? new Date(iso) : undefined;
-  return at && Number.isFinite(at.getTime()) ? clock.format(at) : undefined;
+  return at && Number.isFinite(at.getTime()) ? <time dateTime={at.toISOString()}>{clock.format(at)}</time> : undefined;
 };
 
 function Progress({ exec, chain, resumed, unfinished }: { exec: UseExecutionResult; chain: string; resumed: boolean; unfinished: boolean }) {
@@ -104,6 +114,12 @@ function Progress({ exec, chain, resumed, unfinished }: { exec: UseExecutionResu
   const [seen, setSeen] = useState<{ id?: string; at: number }>({ at: -1 });
   if (at >= 0 && (seen.at !== at || seen.id !== executionId)) setSeen({ id: executionId, at });
   const where = at < 0 && phase === 'cancelled' && seen.id === executionId ? seen.at : at;
+  // when this page saw the run move into each stage: none where it found it, as after a resume. The Signature has the execution's own.
+  const [entered, setEntered] = useState<Entered>({ last: -1, times: [] });
+  if (executionId && at >= 0) {
+    const next = enter(entered, executionId, at, flow, () => new Date().toISOString());
+    if (next !== entered) setEntered(next);
+  }
   // Past its window the runner still polls for a late deposit, so it stays busy: that wait is on the person (paused), and
   // so is what stopped otherwise. What did not go through is failed.
   const now: StageState =
@@ -137,23 +153,28 @@ function Progress({ exec, chain, resumed, unfinished }: { exec: UseExecutionResu
     solanaTxHash && <ExplorerLink href={`${SOLSCAN}/tx/${solanaTxHash}`} label={short(solanaTxHash)} explorer="Solscan" />,
     undefined,
   ];
-  const stages = progressStages({ at: where, now, status, phase, flow, note, time: timeOf(execution?.createdAt), links });
+  const stages = progressStages({ at: where, now, status, phase, flow, note, time: timeOf(execution?.createdAt), times: entered.id === executionId ? entered.times.map(timeOf) : [], links });
+
+  // When the wallet asks for something, what to do and the stages come into view: they sit under the button that started
+  // the run, which can be at the foot of the screen. Only as far as it takes, and at once for whoever asks for less motion.
+  // The focus, if it dropped to the page as the form folded away after the signature, waits there too.
+  const prompt = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!WALLET_PHASES.includes(phase)) return;
+    const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (document.activeElement === document.body) prompt.current?.focus({ preventScroll: true });
+    prompt.current?.scrollIntoView({ block: 'nearest', behavior: still ? 'auto' : 'smooth' });
+  }, [phase]);
 
   return (
     <Block>
-      {text && <PhaseCallout phase={phase} text={text} since={execution?.createdAt} />}
-      {/* the callout says each phase as it changes, so the stages stay quiet. A cancel this page did not see has no stage to stop at. */}
-      {(where >= 0 || phase !== 'cancelled') && <Timeline stages={stages} label="Progress" announce="" />}
-      {(status || executionId) && (
-        <MetaLine>
-          {status && !stale && `${status}. `}
-          {executionId && (
-            <>
-              Execution <code>{executionId}</code>
-            </>
-          )}
-        </MetaLine>
-      )}
+      {/* the wallet's prompt and the stages under it, kept in view together, clear of the sticky header and of a bar at the foot */}
+      <div ref={prompt} tabIndex={-1} className="flex scroll-my-20 flex-col gap-4 outline-none empty:hidden">
+        {text && <PhaseCallout phase={phase} text={text} since={execution?.createdAt} />}
+        {/* the callout says each phase as it changes, so the stages stay quiet. A cancel this page did not see has no stage to stop at. */}
+        {(where >= 0 || phase !== 'cancelled') && <Timeline stages={stages} label="Progress" announce="" />}
+      </div>
+      {(status || executionId) && <StatusLine status={status} stale={stale} id={executionId} />}
     </Block>
   );
 }
@@ -240,6 +261,10 @@ function Recover({ exec, execution, unsigned, act, locked, recipe, stored, gate,
   const symbol = token?.symbol ?? 'tokens';
   const amount = (atomic?: string) => (atomic && token ? `${fromAtomic(atomic, token.decimals)} ${symbol}` : '–');
 
+  // each box at the one precision its figures need, as the payment's quote
+  const [retryFee, retrySpends] = boxFigures([{ atomic: retry?.networkFee, token }, { atomic: retry?.spendable, token }]);
+  const [refundGets, refundFee] = boxFigures([{ atomic: refund?.quote.minAmountOut, token: backTo }, { atomic: refund?.details.networkFee, token }]);
+
   if (!execution && (!held || held.amount === '0')) return null;
 
   return (
@@ -289,8 +314,8 @@ function Recover({ exec, execution, unsigned, act, locked, recipe, stored, gate,
           {retry && (
             <QuoteBox title="Retry">
               <Figures>
-                <FigureRow term="Fee">{amount(retry.networkFee)}</FigureRow>
-                <Spends stored={stored} figure={amount(retry.spendable)} />
+                <FigureRow term="Fee">{retryFee}</FigureRow>
+                <Spends stored={stored} figure={retrySpends} />
               </Figures>
               {moved && <Notice kind="warn">The fee moved before you signed. These are the new numbers, and nothing was charged.</Notice>}
               {unsigned && <Notice kind="warn">Your wallet will first ask you to sign the deletion of the earlier attempt. That moves no money.</Notice>}
@@ -303,10 +328,10 @@ function Recover({ exec, execution, unsigned, act, locked, recipe, stored, gate,
             <QuoteBox title="Refund">
               <Figures>
                 <FigureRow term="You get at least">
-                  {fromAtomic(refund.quote.minAmountOut, backTo.decimals)} {backTo.symbol} on {CHAINS.find(({ id }) => id === backTo.blockchain)?.name}
+                  {refundGets} on {CHAINS.find(({ id }) => id === backTo.blockchain)?.name}
                 </FigureRow>
                 <FigureRow term="Sent to">{address && <Address value={address} chain={backTo.blockchain} full />}</FigureRow>
-                <FigureRow term="Fee">{amount(refund.details.networkFee)}</FigureRow>
+                <FigureRow term="Fee">{refundFee}</FigureRow>
               </Figures>
               <Caption>Figures from a test run: the real one can differ by what the price does in the seconds before you sign.</Caption>
               {unsigned && <Notice kind="warn">Your wallet will first ask you to sign the deletion of the earlier attempt. That moves no money.</Notice>}
@@ -404,7 +429,10 @@ function Existing({ id, head, address, intermediary, stored, list, gate, locked,
       <Facts>
         <dt>Status</dt>
         <dd>
-          {status}, {needsSignature ? 'and it still needs your signature' : 'signed'}
+          <span>
+            {status === 'CREATED' ? 'Created' : (STATUS_WORDS[status] ?? status)}, {needsSignature ? 'and it still needs your signature' : 'signed'}
+          </span>{' '}
+          <StatusName status={status} />
         </dd>
         {quote?.depositAddress && (
           <>
@@ -423,7 +451,7 @@ function Existing({ id, head, address, intermediary, stored, list, gate, locked,
           </>
         )}
         <dt>Deposit hash</dt>
-        <dd>{transaction?.evmTxHash ? <code>{transaction.evmTxHash}</code> : 'none seen yet'}</dd>
+        <dd>{!transaction?.evmTxHash ? 'none seen yet' : on(quote?.originAsset) ? <TxLink hash={transaction.evmTxHash} chain={on(quote?.originAsset)!} /> : <code>{transaction.evmTxHash}</code>}</dd>
       </Facts>
       <Details
         open={asksWallet || other}
@@ -483,6 +511,8 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
   const lookup = useAsync(address && isEvm ? () => api.getIntermediary(address) : null, [address, isEvm]);
   const intermediary = lookup.data?.solana;
   const { working, error, act } = useAct();
+  // the wallet menu in the header keeps the wallet connected while a run is in flight
+  usePublishRunBusy(exec.isBusy);
 
   const [chain, setChain] = useState(CHAINS[0].id);
   const [pick, setPick] = useState('');
@@ -494,6 +524,22 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
   const [hidden, setHidden] = useState<string[]>([]);
   const [deleted, setDeleted] = useState<string>();
   const [failed, setFailed] = useState<Execution>();
+  // Display only: a new payment opened while the card shows how the last run ended, because the person asked for one, or
+  // because the page gave the card a new amount, as Repay more does on /kamino. Only the first takes the focus: the page
+  // that gave the amount keeps it.
+  const [opened, setOpened] = useState<'asked' | 'amount'>();
+  const [given, setGiven] = useState(suggested);
+  if (given !== suggested) {
+    setGiven(suggested);
+    if (suggested !== undefined) setOpened(now => now ?? 'amount');
+  }
+  const amountField = useRef<HTMLInputElement>(null);
+  // display only: what the last click in the card asked for, so that the line under the quote button says what it waits for
+  const [asked, setAsked] = useState<string>();
+  // The card's main button (connect, quote, sign: one element that changes its label) and the quote's own Get exact
+  // amount and fee, for the focus while a quote is worked out.
+  const main = useRef<HTMLButtonElement>(null);
+  const refresh = useRef<HTMLButtonElement>(null);
 
   const sources = useMemo(() => (list.data?.sources ?? []).filter(token => token.blockchain === chain).sort(bySymbol), [list.data, chain]);
   const source = sources.find(token => token.assetId === pick) ?? sources.find(token => token.symbol === 'USDC') ?? sources[0];
@@ -561,6 +607,9 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
   // A flow that fails after the real create, on a moved quote or a declined signature, leaves an execution holding this wallet's one in-flight slot.
   const unsigned = exec.phase === 'failed' && !exec.recovery && !exec.hasSubmittedSignature && exec.status === 'CREATED' ? exec.executionId : undefined;
   const unfinished = !unsigned && stoppedFollowing(exec);
+  // Display only: a resume the SDK refused for an execution it cannot check, as one made outside this app. Resuming again
+  // cannot fix that, so deleting it is the way on.
+  const refusal = resumed && unsigned && isQuoteMoved(exec.error) ? (typeof exec.execution?.metadata?.intentsConnectSpendable === 'string' ? 'moved' : 'elsewhere') : undefined;
 
   // What keeps this recipe from running at all, so nothing on this page asks the wallet to sign for it.
   const refused =
@@ -574,7 +623,7 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
           : lookup.error
             ? ''
             : intermediary === null
-              ? 'Solana is not enabled for this Connect key yet.'
+              ? 'Payments to Solana are not switched on for this site yet.'
               : !list.data
                 ? 'Waiting for the token list.'
                 : !target
@@ -642,305 +691,381 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
   // the network a deposit has to be sent on: the same address on another one never reaches Connect
   const depositChain = CHAINS.find(({ id }) => id === depositToken?.blockchain);
   const depositWhat = depositToken && `${depositToken.symbol}${depositChain ? ` on ${depositChain.name}` : ''}`;
+  // what has to arrive at the deposit address, as the card of an execution offered again reads it
+  const depositSent = (deposit?.swapType === 'EXACT_OUTPUT' ? deposit.amountIn : undefined) ?? deposit?.amount;
   const existing = { address: address!, intermediary, stored, list: list.data, gate: refused, locked, act, resume, drop: dropAndSay };
 
   // the person reads what will run before they consent to it on a shared link, and finds it under the card elsewhere
   const summary = built.steps && <Summary stored={stored} steps={built.steps} intermediary={intermediary ?? STAND_IN} real={!!intermediary} amountKnown={!!preview} shared={shared} />;
   const quoted = preview && source && target;
+  // display only: the quote's figures at one precision, with what the SDK holds back named, so that they add up
+  const figures = quoted
+    ? quoteFigures({
+        paid: { atomic: preview.execution.quote.amount, decimals: source.decimals },
+        samePaid: source.symbol === target.symbol,
+        delivered: preview.execution.quote.minAmountOut,
+        fee: preview.execution.details.networkFee,
+        spendable: takesAmount(stored) ? preview.spendable : undefined,
+        decimals: target.decimals,
+      })
+    : undefined;
+
+  // Display only, from here. Once a run has something to read or to resolve, that leads the card and a new payment waits
+  // behind a quiet button. What has to be resolved first leads even then, and the run leads again once it is signed.
+  const resolveFirst = !!exec.recovery || unfinished || exec.phase === 'expired' || (exec.isBusy && (exec.hasSubmittedSignature || resumed));
+  const ended = exec.status === 'SUCCESS' || exec.status === 'DEPOSIT_FAILED' || !!failed || (!!address && !exec.executionId && !exec.recovery && !!last) || (resumed && !!unsigned);
+  const leads = resolveFirst || (ended && !opened);
+  const restart = leads && !resolveFirst && !locked;
+  useEffect(() => {
+    if (exec.hasSubmittedSignature) setOpened(undefined);
+  }, [exec.hasSubmittedSignature]);
+  useEffect(() => setOpened(undefined), [address]);
+  useEffect(() => {
+    if (opened === 'asked') amountField.current?.focus();
+  }, [opened]);
+  // A quote asked from the keyboard: the main button kept the focus while it worked and is now Sign and run. The focus
+  // goes up to the quote's own Get exact amount and fee, over the figures, so that the next Tab reaches Sign and run.
+  // Once for each quote, when the buttons are free again; never from anywhere else.
+  const handed = useRef<unknown>(null);
+  useLayoutEffect(() => {
+    if (!preview || locked || handed.current === preview) return;
+    handed.current = preview;
+    if (main.current && document.activeElement === main.current) refresh.current?.focus();
+  }, [preview, locked]);
+  // on a shared link, the payment stands beside what will run
+  const Pay = shared ? PayColumn : Fragment;
 
   return (
-    <div data-ui="run" className="mx-auto flex w-full max-w-run min-w-0 flex-col gap-4">
-      {shared && <TrustPanel stored={stored} instructions={stored.steps.length} check={program => <PublishedCheck stored={stored} program={program} />} />}
-      {shared && summary}
-      {built.problem && <Notice kind="error">This recipe cannot be built: {built.problem}</Notice>}
-      {issues.length > 0 && (
-        <Notice kind="error">
-          Connect cannot run this recipe:
-          <ul className="mt-1.5 flex list-disc flex-col gap-1 pl-5">
-            {issues.map(issue => (
-              <li key={issueText(issue)}>{issueText(issue)}</li>
-            ))}
-          </ul>
-        </Notice>
+    <div
+      data-ui="run"
+      className={shared ? SHARED_COLUMNS : 'mx-auto flex w-full max-w-run min-w-0 flex-col gap-4'}
+      onClickCapture={event => {
+        const asker = (event.target as Element).closest<HTMLElement>('[data-asks]');
+        setAsked(asker?.dataset.asks);
+        // the quote's own button goes away with its figures, so the main button, busy meanwhile, holds the focus
+        if (asker && asker === refresh.current && document.activeElement === asker) main.current?.focus();
+      }}
+    >
+      {shared && (
+        <div className={SHARED_LEFT}>
+          <TrustPanel stored={stored} instructions={stored.steps.length} check={program => <PublishedCheck stored={stored} program={program} />} />
+          {summary}
+        </div>
       )}
+      <Pay>
+        {built.problem && <Notice kind="error">This recipe cannot be built: {built.problem}</Notice>}
+        {issues.length > 0 && (
+          <Notice kind="error">
+            Connect cannot run this recipe:
+            <ul className="mt-1.5 flex list-disc flex-col gap-1 pl-5">
+              {issues.map(issue => (
+                <li key={issueText(issue)}>{issueText(issue)}</li>
+              ))}
+            </ul>
+          </Notice>
+        )}
 
-      <RunCard>
-        <Swap>
-          <Panel
-            label="You pay"
-            idle={!wallet}
-            aside={
-              list.data && (
-                <SelectPill
-                  label="Chain"
-                  compact
-                  value={chain}
-                  disabled={locked}
-                  onChange={event => clearing(setChain)(event.target.value)}
-                  display={
-                    <>
-                      <ChainIcon chain={chain} size={18} />
-                      {CHAINS.find(({ id }) => id === chain)?.name}
-                    </>
+        <RunCard>
+          {!leads && (
+            <>
+              <Swap>
+                <Panel
+                  label="You pay"
+                  idle={!wallet}
+                  aside={
+                    list.data && (
+                      <SelectPill
+                        label="Chain"
+                        compact
+                        value={chain}
+                        disabled={locked}
+                        onChange={event => clearing(setChain)(event.target.value)}
+                        display={
+                          <>
+                            <ChainIcon chain={chain} size={18} />
+                            {CHAINS.find(({ id }) => id === chain)?.name}
+                          </>
+                        }
+                      >
+                        {CHAINS.map(({ id, name }) => (
+                          <option key={id} value={id}>
+                            {name}
+                          </option>
+                        ))}
+                      </SelectPill>
+                    )
                   }
-                >
-                  {CHAINS.map(({ id, name }) => (
-                    <option key={id} value={id}>
-                      {name}
-                    </option>
-                  ))}
-                </SelectPill>
-              )
-            }
-            footer={
-              <>
-                {wallet ? (
-                  <PaidFrom address={address}>
-                    <Button variant="ghost" size="xs" disabled={locked} onClick={() => disconnect()}>
-                      Disconnect
-                    </Button>
-                  </PaidFrom>
-                ) : (
-                  <span>No wallet connected yet.</span>
-                )}
-                {suggested && source && target && source.symbol !== target.symbol && (
-                  <span className="text-warning">
-                    The amount above is worked out in {target.symbol}. For {source.symbol}, enter what it is worth.
-                  </span>
-                )}
-              </>
-            }
-          >
-            {list.loading && (
-              <span role="status" className="flex flex-1 items-center gap-2 text-sm text-muted">
-                <Spinner size="sm" />
-                Loading tokens…
-              </span>
-            )}
-            {list.loading && <Skeleton className="h-9 w-28 rounded-full" />}
-            {list.data && (
-              <>
-                <input aria-label="Amount you pay" inputMode="decimal" autoComplete="off" placeholder="0.00" value={amount} disabled={locked} onChange={event => clearing(setTyped)(event.target.value)} className={AMOUNT_INPUT} />
-                <SelectPill
-                  label="Token"
-                  value={source?.assetId ?? ''}
-                  disabled={locked || !source}
-                  onChange={event => clearing(setPick)(event.target.value)}
-                  display={
-                    source ? (
-                      <>
-                        <TokenIcon symbol={source.symbol} size={22} />
-                        {source.symbol}
-                      </>
+                  footer={
+                    wallet ? (
+                      <PaidFrom address={address}>
+                        <Button variant="ghost" size="xs" disabled={locked} onClick={() => disconnect()}>
+                          Disconnect
+                        </Button>
+                      </PaidFrom>
                     ) : (
-                      'None'
+                      <span>No wallet connected yet.</span>
                     )
                   }
                 >
-                  {sources.map(token => (
-                    <option key={token.assetId} value={token.assetId}>
-                      {token.symbol} {token.contractAddress ? `(${short(token.contractAddress)})` : '(native)'}
-                    </option>
-                  ))}
-                </SelectPill>
-              </>
-            )}
-          </Panel>
-          <PanelArrow />
-          <Panel
-            label="You get"
-            idle={!wallet}
-            aside={<ChainTag chain="sol" name="Solana" />}
-            footer={
-              (target || lookup.loading || intermediary) && (
-                <>
-                  {target && <span>It arrives on Solana as {target.symbol}.</span>}
-                  {lookup.loading && <Skeleton className="h-4 w-4/5" />}
-                  {intermediary && (
-                    <p className="min-w-0">
-                      Your intermediary on Solana: <Address value={intermediary} full className="text-balance" />
-                    </p>
+                  {list.loading && (
+                    <span role="status" className="flex flex-1 items-center gap-2 text-sm text-muted">
+                      <Spinner size="sm" />
+                      Loading tokens…
+                    </span>
                   )}
-                </>
-              )
-            }
-          >
-            <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
-              {quoted ? <Arrives amount={fromAtomic(preview.execution.quote.minAmountOut, target.decimals)} symbol={target.symbol} kept={kept} /> : <NoFigure />}
-              {target && <TokenTag symbol={target.symbol} />}
-            </div>
-          </Panel>
-        </Swap>
-
-        {lookup.error && <Failure error={new Error(`Could not look up your intermediary: ${explain(lookup.error)}`)} retry={lookup.retry} />}
-        {list.error && <Failure error={list.error} retry={list.retry} />}
-
-        {preview && source && target && (
-          <QuoteBox
-            title="Exact amounts"
-            action={
-              <Button variant="ghost" size="xs" icon={<RefreshCw />} disabled={!canQuote} onClick={askQuote}>
-                Get exact amount and fee
-              </Button>
-            }
-          >
-            <Figures>
-              <FigureRow term="You pay">
-                <Figure
-                  value={
+                  {list.loading && <Skeleton className="h-9 w-28 rounded-full" />}
+                  {list.data && (
                     <>
-                      {fromAtomic(preview.execution.quote.amount, source.decimals)} {source.symbol} on {CHAINS.find(({ id }) => id === source.blockchain)?.name}
+                      <input ref={amountField} aria-label="Amount you pay" inputMode="decimal" autoComplete="off" placeholder="0.00" value={amount} disabled={locked} onChange={event => clearing(setTyped)(event.target.value)} className={AMOUNT_INPUT} />
+                      <SelectPill
+                        label="Token"
+                        value={source?.assetId ?? ''}
+                        disabled={locked || !source}
+                        onChange={event => clearing(setPick)(event.target.value)}
+                        display={
+                          source ? (
+                            <>
+                              <TokenIcon symbol={source.symbol} size={22} />
+                              {source.symbol}
+                            </>
+                          ) : (
+                            'None'
+                          )
+                        }
+                      >
+                        {sources.map(token => (
+                          <option key={token.assetId} value={token.assetId}>
+                            {token.symbol} {token.contractAddress ? `(${short(token.contractAddress)})` : '(native)'}
+                          </option>
+                        ))}
+                      </SelectPill>
                     </>
+                  )}
+                </Panel>
+                <PanelArrow />
+                <Panel
+                  label="You get"
+                  idle={!wallet}
+                  aside={<ChainTag chain="sol" name="Solana" />}
+                  footer={
+                    (target || lookup.loading || intermediary) && (
+                      <>
+                        {target && <span>It arrives on Solana as {target.symbol}.</span>}
+                        {lookup.loading && <Skeleton className="h-4 w-4/5" />}
+                        {intermediary && <IntermediaryLine address={intermediary} />}
+                      </>
+                    )
                   }
-                  note="plus the gas of the deposit"
-                />
-              </FigureRow>
-              <FigureRow term="Network fee">
-                <Figure
-                  value={preview.execution.details.networkFee ? `${fromAtomic(preview.execution.details.networkFee, target.decimals)} ${target.symbol}` : 'none stated'}
-                  note="taken out of what is delivered"
-                />
-              </FigureRow>
-              <Spends stored={stored} figure={preview.spendable ? `${fromAtomic(preview.spendable, target.decimals)} ${target.symbol}` : '–'} />
-            </Figures>
-            <Figures className="border-t border-border pt-2.5 empty:hidden">{preview.spendable && outcome?.(preview.spendable)}</Figures>
-            {moved && <Notice kind="warn">The quote moved before you signed. These are the new numbers, and nothing was charged.</Notice>}
-            {unsigned && <Notice kind="warn">Your wallet will first ask you to sign the deletion of the earlier attempt. That moves no money.</Notice>}
-          </QuoteBox>
-        )}
-        {working && !preview && !exec.isBusy && <WorkingLine />}
+                >
+                  <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
+                    {quoted && figures ? <Arrives amount={figures.delivered} symbol={target.symbol} kept={kept} /> : <NoFigure />}
+                    {target && <TokenTag symbol={target.symbol} />}
+                  </div>
+                </Panel>
+              </Swap>
 
-        {shared && (
-          <ConsentBox given={understood}>
-            <Checkbox checked={understood} onChange={setUnderstood} label="I have read what will run, and I accept that it was made by whoever shared this link." />
-          </ConsentBox>
-        )}
+              {suggested && source && target && source.symbol !== target.symbol && <OtherToken figure={suggested} target={target.symbol} source={source.symbol} />}
+              {lookup.error && <Failure error={new Error(`Could not look up your intermediary: ${explain(lookup.error)}`)} retry={lookup.retry} />}
+              {list.error && <Failure error={list.error} retry={list.retry} />}
 
-        <div className="flex flex-col gap-2.5">
-          {!wallet ? (
-            <Button variant="primary" size="lg" block icon={<Wallet />} disabled={isConnecting} onClick={() => connect()}>
-              {isConnecting ? 'Connecting…' : 'Connect EVM wallet'}
-            </Button>
-          ) : !isEvm ? (
-            <Button
-              variant="primary"
-              size="lg"
-              block
-              icon={<ArrowLeftRight />}
-              disabled={locked}
-              onClick={async () => {
-                try {
-                  await disconnect();
-                  await connect();
-                } catch {
-                  // closing the list of wallets is no error, and the button stays for another try
-                }
-              }}
+              {quoted && figures && (
+                <QuoteBox
+                  title="Exact amounts"
+                  action={
+                    <Button ref={refresh} variant="ghost" size="xs" icon={<RefreshCw />} disabled={!canQuote} onClick={askQuote} data-asks="quote">
+                      Get exact amount and fee
+                    </Button>
+                  }
+                >
+                  <Figures>
+                    <FigureRow term="You pay">
+                      <Figure
+                        value={
+                          <>
+                            {figures.paid} {source.symbol} on {CHAINS.find(({ id }) => id === source.blockchain)?.name}
+                          </>
+                        }
+                        note="plus the gas of the deposit"
+                      />
+                    </FigureRow>
+                    <FigureRow term="Network fee">
+                      <Figure
+                        value={figures.fee ? `${figures.fee} ${target.symbol}` : 'none stated'}
+                        note="taken out of what is delivered"
+                      />
+                    </FigureRow>
+                    {figures.held && (
+                      <FigureRow term="Held back for price moves" note="It stays with your intermediary, and Refund takes it back.">
+                        {figures.held} {target.symbol}
+                      </FigureRow>
+                    )}
+                    <Spends stored={stored} figure={figures.spends ? `${figures.spends} ${target.symbol}` : '–'} />
+                  </Figures>
+                  <Figures className="border-t border-border pt-2.5 empty:hidden">{preview.spendable && outcome?.(preview.spendable)}</Figures>
+                  {moved && <Notice kind="warn">The quote moved before you signed. These are the new numbers, and nothing was charged.</Notice>}
+                  {unsigned && <Notice kind="warn">Your wallet will first ask you to sign the deletion of the earlier attempt. That moves no money.</Notice>}
+                </QuoteBox>
+              )}
+              {working && !preview && !exec.isBusy && <WorkingLine>{asked === 'quote' ? QUOTING : undefined}</WorkingLine>}
+
+              {shared && (
+                <ConsentBox given={understood}>
+                  <Checkbox checked={understood} onChange={setUnderstood} label="I have read what will run, and I accept that it was made by whoever shared this link." />
+                </ConsentBox>
+              )}
+
+              <div className="flex flex-col gap-2.5">
+                {!wallet ? (
+                  <Button variant="primary" size="lg" block icon={<Wallet />} disabled={isConnecting} onClick={() => connect()}>
+                    {isConnecting ? 'Connecting…' : 'Connect EVM wallet'}
+                  </Button>
+                ) : !isEvm ? (
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    block
+                    icon={<ArrowLeftRight />}
+                    disabled={locked}
+                    onClick={async () => {
+                      try {
+                        await disconnect();
+                        await connect();
+                      } catch {
+                        // closing the list of wallets is no error, and the button stays for another try
+                      }
+                    }}
+                  >
+                    Switch wallet
+                  </Button>
+                ) : quoted ? (
+                  <Button ref={main} variant="primary" size="lg" block icon={<PenLine />} loading={exec.isBusy || (working && asked === 'sign')} disabled={locked || !!exec.recovery || !!blocked || unfinished} onClick={sign} data-asks="sign">
+                    Sign and run
+                  </Button>
+                ) : (
+                  <Button ref={main} variant="primary" size="lg" block icon={<Calculator />} loading={working && asked === 'quote'} disabled={!canQuote} onClick={askQuote} data-asks="quote">
+                    Get exact amount and fee
+                  </Button>
+                )}
+                <div aria-live="polite">
+                  {blocked && <Reason tone={wallet && !isEvm ? 'warning' : intermediary === null || (list.data && !target) ? 'danger' : 'muted'}>{blocked}</Reason>}
+                </div>
+                {preview && source && target && (
+                  <Caption icon={<PenLine />}>Your wallet asks for one signature, then for the deposit, switching to {CHAINS.find(({ id }) => id === source.blockchain)?.name} if it is on another network.</Caption>
+                )}
+                <Caption icon={<Clock />}>{TIME_NOTE}</Caption>
+              </div>
+            </>
+          )}
+
+          {/* the card of a 409 already says what it means, and so does the warning of a refused resume, but not that a deletion from either failed */}
+          {error && !((exec.recovery?.kind === 'resume-or-cancel' || refusal) && error === explain(exec.error)) && <Notice kind="error">{error}</Notice>}
+          {deleted && exec.phase !== 'cancelled' && <DeletedLine id={deleted} />}
+          {unsigned && (!preview || refusal) && (
+            <Alert
+              kind="warning"
+              title={refusal && 'This execution cannot be resumed here.'}
+              actions={
+                <Button variant={refusal ? 'primary' : 'secondary'} size="sm" disabled={locked} onClick={cancel(unsigned)} className={LONG_LABEL}>
+                  Delete it (a signature that moves no money)
+                </Button>
+              }
             >
-              Switch wallet
-            </Button>
-          ) : quoted ? (
-            <Button variant="primary" size="lg" block icon={<PenLine />} loading={exec.isBusy} disabled={locked || !!exec.recovery || !!blocked || unfinished} onClick={sign}>
-              Sign and run
-            </Button>
-          ) : (
-            <Button variant={exec.status && atRest ? 'secondary' : 'primary'} size="lg" block icon={<Calculator />} disabled={!canQuote} onClick={askQuote}>
-              Get exact amount and fee
-            </Button>
+              {refusal ? `${REFUSED_RESUME[refusal]} ${BLOCKS_WALLET}` : `An attempt was created and never signed. ${BLOCKS_WALLET}`}
+            </Alert>
           )}
-          <div aria-live="polite">
-            {blocked && <Reason tone={wallet && !isEvm ? 'warning' : intermediary === null || (list.data && !target) ? 'danger' : 'muted'}>{blocked}</Reason>}
-          </div>
-          {preview && source && target && (
-            <Caption icon={<PenLine />}>Your wallet asks for one signature, then for the deposit, switching to {CHAINS.find(({ id }) => id === source.blockchain)?.name} if it is on another network.</Caption>
+          {address && exec.recovery?.kind === 'resume-or-cancel' && <Existing key={exec.recovery.executionId} id={exec.recovery.executionId} head="This wallet already has an execution in flight, and Connect runs one at a time per wallet and chain:" {...existing} />}
+
+          {(exec.status || exec.isBusy || exec.phase === 'cancelled') && <Progress exec={exec} chain={chain} resumed={resumed} unfinished={unfinished} />}
+          {exec.recovery?.kind === 'retry-transfer' && (
+            <Alert
+              kind="warning"
+              title="The deposit transfer did not go through."
+              actions={
+                <>
+                  <Button variant="primary" size="sm" disabled={locked} onClick={act(() => exec.retryDeposit())}>
+                    Send the deposit again
+                  </Button>
+                  <Button size="sm" disabled={locked} onClick={cancel(exec.recovery.executionId)}>
+                    Cancel the execution
+                  </Button>
+                </>
+              }
+            >
+              {CANCEL_NOTE}
+            </Alert>
           )}
-          <Caption icon={<Clock />}>{TIME_NOTE}</Caption>
-        </div>
-
-        {/* the card above already says what a 409 means, but not that a deletion from it failed */}
-        {error && (exec.recovery?.kind !== 'resume-or-cancel' || error !== explain(exec.error)) && <Notice kind="error">{error}</Notice>}
-        {deleted && exec.phase !== 'cancelled' && <DeletedLine id={deleted} />}
-        {unsigned && !preview && (
-          <Alert
-            kind="warning"
-            actions={
-              <Button size="sm" disabled={locked} onClick={cancel(unsigned)} className={LONG_LABEL}>
-                Delete it (a signature that moves no money)
-              </Button>
-            }
-          >
-            An attempt was created and never signed, and it holds this wallet's one in-flight slot.
-          </Alert>
-        )}
-        {address && exec.recovery?.kind === 'resume-or-cancel' && <Existing key={exec.recovery.executionId} id={exec.recovery.executionId} head="This wallet already has an execution in flight, and Connect runs one at a time per wallet and chain:" {...existing} />}
-
-        {(exec.status || exec.isBusy || exec.phase === 'cancelled') && <Progress exec={exec} chain={chain} resumed={resumed} unfinished={unfinished} />}
-        {exec.recovery?.kind === 'retry-transfer' && (
-          <Alert
-            kind="warning"
-            title="The deposit transfer did not go through."
-            actions={
-              <>
-                <Button variant="primary" size="sm" disabled={locked} onClick={act(() => exec.retryDeposit())}>
-                  Send the deposit again
+          {unfinished && (
+            <Alert
+              kind="warning"
+              actions={
+                <Button variant="primary" size="sm" icon={<RotateCcw />} disabled={locked} onClick={resume(exec.executionId!)}>
+                  Resume
                 </Button>
-                <Button size="sm" disabled={locked} onClick={cancel(exec.recovery.executionId)}>
-                  Cancel
+              }
+            >
+              This execution has not finished, and this page stopped following it. Do not pay again before you know how it ended.
+            </Alert>
+          )}
+          {resumed && deposit?.depositAddress && !exec.depositTxHash && !exec.execution?.transaction?.evmTxHash && (exec.status === 'DEPOSIT_PENDING' || exec.status === 'EXPIRED') && (
+            <DepositBox
+              actions={
+                <>
+                  <Button size="sm" icon={<Copy />} onClick={() => copyText(deposit.depositAddress, depositWhat ? `Deposit address copied. Send only ${depositWhat} to it.` : 'Deposit address copied')}>
+                    Copy the address
+                  </Button>
+                  <Button size="sm" variant="ghost" disabled={exec.isCancelling} onClick={cancel(exec.executionId!)}>
+                    Cancel, I will not send it
+                  </Button>
+                </>
+              }
+            >
+              {/* one sentence for a screen reader: "Send exactly 800 USDC on Base (contract 0x8335…2913) to 0x…" */}
+              <p className="flex min-w-0 flex-col gap-2">
+                <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
+                  <span className="text-muted">Send exactly</span>{' '}
+                  <strong className="font-semibold text-text nums">{depositToken ? `${fromAtomic(depositSent!, depositToken.decimals)} ${depositToken.symbol}` : `${depositSent} atomic units`}</strong>
+                  {depositChain && (
+                    <>
+                      {' '}
+                      <span className="inline-flex items-center gap-1">
+                        on <ChainIcon chain={depositChain.id} size={16} /> <span className="font-medium text-text">{depositChain.name}</span>
+                      </span>
+                    </>
+                  )}
+                  {depositToken?.contractAddress && (
+                    <>
+                      {' '}
+                      <span className="min-w-0 text-muted">
+                        (contract <Address value={depositToken.contractAddress} chain={depositToken.blockchain} kind="token" copy={false} />)
+                      </span>
+                    </>
+                  )}{' '}
+                  <span className="text-muted">to</span>
+                </span>{' '}
+                <Address value={deposit.depositAddress} chain={depositChain?.id} explorer={!!depositChain} copy={false} full className="w-full justify-between gap-2 rounded-md border border-border bg-bg/60 px-3 py-2" />
+              </p>
+              <p className="mt-3">If you already sent it, wait: sending it again would pay twice. If you have not, send it from any wallet and this page will follow it.</p>
+              <p className="mt-2 text-xs text-muted">{CANCEL_NOTE}</p>
+            </DepositBox>
+          )}
+          {exec.phase === 'expired' && !resumed && (
+            <Alert
+              kind="warning"
+              actions={
+                <Button size="sm" disabled={exec.isCancelling} onClick={cancel(exec.executionId!)}>
+                  Cancel the execution
                 </Button>
-              </>
-            }
-          >
-            {CANCEL_NOTE}
-          </Alert>
-        )}
-        {unfinished && (
-          <Alert
-            kind="warning"
-            actions={
-              <Button variant="primary" size="sm" icon={<RotateCcw />} disabled={locked} onClick={resume(exec.executionId!)}>
-                Resume
-              </Button>
-            }
-          >
-            This execution has not finished, and this page stopped following it. Do not pay again before you know how it ended.
-          </Alert>
-        )}
-        {resumed && deposit?.depositAddress && !exec.depositTxHash && !exec.execution?.transaction?.evmTxHash && (exec.status === 'DEPOSIT_PENDING' || exec.status === 'EXPIRED') && (
-          <DepositBox
-            actions={
-              <>
-                <Button size="sm" icon={<Copy />} onClick={() => copyText(deposit.depositAddress, depositWhat ? `Deposit address copied. Send only ${depositWhat} to it.` : 'Deposit address copied')}>
-                  Copy the address
-                </Button>
-                <Button size="sm" variant="ghost" disabled={exec.isCancelling} onClick={cancel(exec.executionId!)}>
-                  Cancel, I will not send it
-                </Button>
-              </>
-            }
-          >
-            <p>
-              Waiting for a deposit of <strong>{depositToken ? `${fromAtomic(deposit.amount, depositToken.decimals)} ${depositWhat}` : `${deposit.amount} atomic units`}</strong> to <code>{deposit.depositAddress}</code>. If you already sent it, wait: sending it again would pay
-              twice. If you have not, send it from any wallet and this page will follow it.
-            </p>
-            <p className="mt-2 text-xs text-muted">{CANCEL_NOTE}</p>
-          </DepositBox>
-        )}
-        {exec.phase === 'expired' && !resumed && (
-          <Alert
-            kind="warning"
-            actions={
-              <Button size="sm" disabled={exec.isCancelling} onClick={cancel(exec.executionId!)}>
-                Cancel the execution
-              </Button>
-            }
-          >
-            {CANCEL_NOTE}
-          </Alert>
-        )}
-        {exec.status === 'DEPOSIT_FAILED' && <Notice kind="error">The deposit failed, for example on an invalid amount, so nothing ran on Solana. What was transferred is refunded.</Notice>}
-        {address && !exec.executionId && !locked && !exec.recovery && last && <Existing key={last} id={last} head="You started an execution from this browser:" onHide={() => setHidden([...hidden, last])} {...existing} />}
-        {list.data && (failed || atRest) && <Recover key={failed?.id} exec={exec} execution={failed} unsigned={unsigned} act={act} locked={locked || !!exec.recovery || unfinished} recipe={recipe} stored={stored} gate={refused} list={list.data} intermediary={intermediary} source={source} />}
-      </RunCard>
+              }
+            >
+              {CANCEL_NOTE}
+            </Alert>
+          )}
+          {exec.status === 'DEPOSIT_FAILED' && <Notice kind="error">The deposit failed, for example on an invalid amount, so nothing ran on Solana. What was transferred is refunded.</Notice>}
+          {address && !exec.executionId && !locked && !exec.recovery && last && <Existing key={last} id={last} head="You started an execution from this browser:" onHide={() => setHidden([...hidden, last])} {...existing} />}
+          {list.data && (failed || atRest) && <Recover key={failed?.id} exec={exec} execution={failed} unsigned={unsigned} act={act} locked={locked || !!exec.recovery || unfinished} recipe={recipe} stored={stored} gate={refused} list={list.data} intermediary={intermediary} source={source} />}
+          {restart && <NewPayment onClick={() => setOpened('asked')} />}
+        </RunCard>
+      </Pay>
 
       {!shared && summary}
     </div>

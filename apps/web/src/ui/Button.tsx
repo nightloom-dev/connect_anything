@@ -1,4 +1,4 @@
-import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { forwardRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { cn } from './cn.ts';
 import { Spinner } from './Spinner.tsx';
 
@@ -54,6 +54,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   ref,
 ) {
   const overlay = loading && !icon;
+  // A busy button that has the focus keeps it: the disabled attribute would drop it to the page, and the next Tab would
+  // start somewhere else. Meanwhile it is disabled for assistive tech and takes no click, as any busy button.
+  const [focused, setFocused] = useState(false);
   const slot = (node: ReactNode) => (
     <span className={cn('inline-flex shrink-0 items-center justify-center [&>svg]:size-full', ICON[size])} aria-hidden>
       {node}
@@ -64,6 +67,15 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {...rest}
       ref={ref}
       type={type}
+      disabled={rest.disabled && !(loading && focused)}
+      onFocus={event => {
+        setFocused(true);
+        rest.onFocus?.(event);
+      }}
+      onBlur={event => {
+        setFocused(false);
+        rest.onBlur?.(event);
+      }}
       data-ui="button"
       data-variant={variant}
       aria-busy={loading || undefined}
