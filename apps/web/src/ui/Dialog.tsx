@@ -26,7 +26,7 @@ const SIZE = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-2xl' };
 export function Dialog({ open, onClose, title, description, children, footer, icon, tone = 'default', size = 'md', className }: DialogProps) {
   return (
     <HeadlessDialog open={open} onClose={onClose} className="relative z-50">
-      <DialogBackdrop transition className="fixed inset-0 bg-[#05060a]/70 backdrop-blur-[2px] transition-opacity duration-200 ease-out data-closed:opacity-0" />
+      <DialogBackdrop transition className="fixed inset-0 bg-[#0e1a2b]/35 transition-opacity duration-200 ease-out data-closed:opacity-0" />
       <div className="fixed inset-0 flex w-screen items-end justify-center overflow-y-auto p-3 sm:items-center sm:p-6">
         <DialogPanel
           data-ui="dialog"

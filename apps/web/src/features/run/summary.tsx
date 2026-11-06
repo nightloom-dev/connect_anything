@@ -125,7 +125,7 @@ function Accounts({ count, children }: { count: number; children: ReactNode }) {
         aria-expanded={shown}
         aria-controls={id}
         onClick={() => setShown(!shown)}
-        className="group/accounts flex min-h-11 w-full items-center gap-2 rounded-lg border border-border bg-surface px-3.5 py-2 text-left text-sm font-medium text-text transition-colors duration-120 hover:bg-white/3 lg:hidden"
+        className="group/accounts flex min-h-11 w-full items-center gap-2 rounded-lg border border-border bg-surface px-3.5 py-2 text-left text-sm font-medium text-text transition-colors duration-120 hover:bg-surface-2 lg:hidden"
       >
         <span className="min-w-0 flex-1">{count} accounts</span>
         <span className="text-xs font-normal text-muted">{shown ? 'Hide' : 'Show'}</span>
@@ -143,7 +143,7 @@ export function Summary({ stored, steps, intermediary, real, amountKnown, shared
   const programs = [...new Set(stored.steps.map(({ program }) => program))];
   return (
     <details open={open} className="group/summary min-w-0 rounded-xl border border-border bg-surface">
-      <summary className="flex min-h-12 cursor-pointer list-none items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-text transition-colors duration-120 select-none hover:bg-white/3 [&::-webkit-details-marker]:hidden">
+      <summary className="flex min-h-12 cursor-pointer list-none items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-text transition-colors duration-120 select-none hover:bg-surface-2 [&::-webkit-details-marker]:hidden">
         <ListOrdered aria-hidden className="size-4 shrink-0 text-muted" />
         <span className="min-w-0 flex-1">
           What will run: {steps.length} {steps.length === 1 ? 'instruction' : 'instructions'} on {programs.length} {programs.length === 1 ? 'program' : 'programs'}

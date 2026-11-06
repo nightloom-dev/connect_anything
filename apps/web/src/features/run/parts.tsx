@@ -87,7 +87,7 @@ export function Panel({ label, htmlFor, aside, children, footer, idle = false }:
         </Label>
         {aside}
       </div>
-      <div className="flex min-h-13 min-w-0 items-center gap-3 px-3.5 pt-1 pb-3 group-data-idle/panel:opacity-60">{children}</div>
+      <div className="flex min-h-13 min-w-0 items-center gap-3 px-3.5 pt-1 pb-3 group-data-idle/panel:[&_img]:opacity-55">{children}</div>
       {footer && <div className="flex min-w-0 flex-col gap-1.5 border-t border-border/70 px-3.5 py-2.5 text-xs leading-5 text-muted">{footer}</div>}
     </div>
   );
@@ -561,7 +561,7 @@ export function Facts({ children }: { children: ReactNode }) {
 export function Details({ open, summary, children, className }: { open?: boolean; summary: ReactNode; children: ReactNode; className?: string }) {
   return (
     <details open={open} className={cn('group/details min-w-0 rounded-lg border border-border bg-surface', className)}>
-      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-lg px-3.5 py-2.5 text-sm font-medium text-text transition-colors duration-120 select-none hover:bg-white/3 [&::-webkit-details-marker]:hidden">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-lg px-3.5 py-2.5 text-sm font-medium text-text transition-colors duration-120 select-none hover:bg-surface-2 [&::-webkit-details-marker]:hidden">
         <span className="min-w-0 flex-1">{summary}</span>
         <ChevronDown aria-hidden className="size-4 shrink-0 text-muted transition-transform duration-200 group-open/details:rotate-180" />
       </summary>

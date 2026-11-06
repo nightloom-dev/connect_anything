@@ -99,7 +99,7 @@ export function Tooltip({ content, children, side = 'top', delay = 300, describe
             onPointerLeave={() => hide()}
             style={{ top: place?.top ?? 0, left: place?.left ?? 0, visibility: place ? 'visible' : 'hidden' }}
             className={cn(
-              'pointer-events-auto fixed z-70 rounded-md border border-border-strong bg-surface-3 px-2.5 py-1.5 text-xs leading-snug font-medium text-text shadow-popover animate-fade-in',
+              'pointer-events-auto fixed z-70 rounded-md border border-border-strong bg-surface px-2.5 py-1.5 text-xs leading-snug font-medium text-text shadow-popover animate-fade-in',
               wide ? 'max-w-[min(25rem,calc(100vw_-_16px))]' : 'max-w-[min(20rem,calc(100vw_-_16px))]',
               className,
             )}

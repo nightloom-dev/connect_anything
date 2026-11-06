@@ -8,7 +8,7 @@ export { toast };
 export function Toaster() {
   return (
     <Sonner
-      theme="dark"
+      theme="light"
       // over the sticky header, where a toast hides no part of the page: --toast-right in styles/ui.css places it
       position="top-right"
       offset={{ top: 8, right: 'var(--toast-right)' }}

@@ -47,11 +47,11 @@ const NEVER: Partial<Record<StageState, string>> = { unreached: 'Not reached', s
 
 const NODE: Record<StageState, string> = {
   pending: 'border-border-strong bg-surface',
-  active: 'border-accent bg-accent/14 text-accent shadow-[0_0_0_4px_rgb(110_123_255/0.14)]',
+  active: 'border-accent bg-accent/8 text-accent shadow-glow',
   paused: 'border-warning/50 bg-warning/14 text-warning',
   done: 'border-success/40 bg-success/12 text-success',
   failed: 'border-danger/50 bg-danger/14 text-danger-text',
-  success: 'border-success bg-success text-[#062012]',
+  success: 'border-success bg-success text-white',
   cancelled: 'border-border-strong bg-surface-3 text-muted',
   unreached: 'border-dashed border-border-strong',
   skipped: 'border-dashed border-border-strong',

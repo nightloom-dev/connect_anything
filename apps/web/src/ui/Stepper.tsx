@@ -22,8 +22,8 @@ type StepperProps = {
 };
 
 const CIRCLE: Record<StepState, string> = {
-  done: 'border-accent/40 bg-accent/14 text-accent',
-  current: 'border-accent-solid bg-accent-solid text-white shadow-[0_0_0_4px_rgb(110_123_255/0.18)]',
+  done: 'border-accent/40 bg-accent/8 text-accent',
+  current: 'border-accent-solid bg-accent-solid text-white shadow-glow',
   upcoming: 'border-border-strong bg-surface text-muted',
   locked: 'border-border bg-surface text-muted',
 };

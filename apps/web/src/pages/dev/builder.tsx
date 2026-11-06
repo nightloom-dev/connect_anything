@@ -139,7 +139,7 @@ function PickerStates() {
               {optionsOf(idl)
                 .filter(({ name }) => ['swap', 'open_position', 'initialize_pool', 'collect_fees'].includes(name))
                 .map(option => (
-                  <div key={option.name} className="rounded-md px-3 py-2 hover:bg-white/5">
+                  <div key={option.name} className="rounded-md px-3 py-2 hover:bg-text/5">
                     <InstructionRow option={option} />
                   </div>
                 ))}

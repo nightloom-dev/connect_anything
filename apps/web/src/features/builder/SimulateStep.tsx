@@ -48,7 +48,7 @@ export function SimulationError({ error }: { error: SimError }) {
         <dl className="mt-2.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-xs">
           {rows.map(([label, value]) => (
             <div key={label} className="contents">
-              <dt className="text-text/60">{label}</dt>
+              <dt className="text-text/70">{label}</dt>
               <dd className="min-w-0 text-text">{value}</dd>
             </div>
           ))}
@@ -115,7 +115,7 @@ export function SimulatorOffline({ reason }: { reason: string }) {
   return (
     <Alert kind="warning" icon={<CloudOff strokeWidth={2.1} />} title={<>Not simulated: simulator offline. </>}>
       You can still export and run.
-      <span className="mt-1 block text-xs text-text/60">{reason}</span>
+      <span className="mt-1 block text-xs text-text/70">{reason}</span>
     </Alert>
   );
 }

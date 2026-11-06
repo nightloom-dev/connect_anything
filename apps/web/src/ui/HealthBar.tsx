@@ -70,11 +70,11 @@ export function HealthBar({ value, liquidation, caution, target, after, max, for
       {size === 'md' && (
         <>
           {/* now */}
-          <span aria-hidden className="absolute -inset-y-1.5 w-1 -translate-x-1/2 rounded-full bg-white shadow-[0_0_0_2px_var(--color-surface)]" style={{ left: at(value) }} />
+          <span aria-hidden className="absolute -inset-y-1.5 w-1 -translate-x-1/2 rounded-full bg-text shadow-[0_0_0_2px_var(--color-surface)]" style={{ left: at(value) }} />
           {/* after */}
           <span
             aria-hidden
-            className={cn('absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white', MOVE, FILL[zone(landed)], after != null ? 'opacity-100' : 'opacity-0')}
+            className={cn('absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-surface shadow-[0_0_0_1px_var(--color-text)]', MOVE, FILL[zone(landed)], after != null ? 'opacity-100' : 'opacity-0')}
             style={{ left: at(landed) }}
           />
           {/* target */}
@@ -109,12 +109,12 @@ export function HealthBar({ value, liquidation, caution, target, after, max, for
       <div className="mt-3 mb-5">{bar}</div>
       <ul className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted" aria-hidden>
         <li className="flex items-center gap-1.5">
-          <span className="h-3 w-1 rounded-full bg-white" />
+          <span className="h-3 w-1 rounded-full bg-text" />
           Now <span className="text-text nums">{format(value)}</span>
         </li>
         {after != null && (
           <li className="flex items-center gap-1.5">
-            <span className={cn('size-2.5 rounded-full border-2 border-white', FILL[zone(after)])} />
+            <span className={cn('size-2.5 rounded-full border-2 border-surface shadow-[0_0_0_1px_var(--color-text)]', FILL[zone(after)])} />
             After <span className="text-text nums">{format(after)}</span>
           </li>
         )}

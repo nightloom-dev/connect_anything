@@ -22,7 +22,7 @@ export function Disclosure({ title, aside, children, defaultOpen = false, varian
   if (variant === 'card') {
     return (
       <HeadlessDisclosure as="div" data-ui="disclosure" defaultOpen={defaultOpen} className={cn('rounded-lg border border-border bg-surface', className)}>
-        <DisclosureButton className="group flex min-h-11 w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left text-sm font-medium text-text transition-colors duration-120 hover:bg-white/3">
+        <DisclosureButton className="group flex min-h-11 w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left text-sm font-medium text-text transition-colors duration-120 hover:bg-surface-2">
           <span className="min-w-0 flex-1">{title}</span>
           {aside && <span className="shrink-0 text-xs text-muted">{aside}</span>}
           <ChevronDown className="size-4 shrink-0 text-muted transition-transform duration-200 group-data-open:rotate-180" aria-hidden />

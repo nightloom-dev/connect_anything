@@ -1,6 +1,6 @@
 @layer base {
   html {
-    color-scheme: dark;
+    color-scheme: light;
     background: var(--color-bg);
     -webkit-text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
@@ -14,8 +14,6 @@
     font-feature-settings: var(--font-sans--font-feature-settings);
     font-size: var(--text-md);
     line-height: 1.6;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     overflow-wrap: break-word;
   }
@@ -26,7 +24,7 @@
   h4 {
     color: var(--color-text);
     font-weight: 600;
-    letter-spacing: -0.011em;
+    letter-spacing: -0.01em;
     text-wrap: balance;
   }
 
@@ -54,7 +52,7 @@
   }
 
   ::selection {
-    background: color-mix(in srgb, var(--color-accent) 38%, transparent);
+    background: color-mix(in srgb, var(--color-accent) 22%, transparent);
     color: var(--color-text);
   }
 
@@ -102,17 +100,25 @@
 /* figures that line up in columns and do not jump while they change; Tailwind's own tabular-nums does the same */
 @utility nums {
   font-variant-numeric: tabular-nums;
-  font-feature-settings: 'tnum', 'cv02', 'cv03', 'cv04', 'cv11';
+  font-feature-settings: 'tnum';
 }
 
-/* the identity gradient, for the mark and the hero only */
-@utility bg-brand {
-  background-image: linear-gradient(135deg, var(--color-brand-from), var(--color-brand-to));
+/* the drawing grid of the landing page: fine lines every 20 px, stronger ones every 100 */
+@utility bg-grid {
+  background-color: var(--color-bg);
+  background-image:
+    linear-gradient(var(--color-grid) 1px, transparent 1px), linear-gradient(90deg, var(--color-grid) 1px, transparent 1px),
+    linear-gradient(var(--color-grid-fine) 1px, transparent 1px), linear-gradient(90deg, var(--color-grid-fine) 1px, transparent 1px);
+  background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+  background-position: -1px -1px;
 }
 
-@utility text-brand {
-  background-image: linear-gradient(100deg, var(--color-brand-from), var(--color-brand-to));
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
+/* a small label in capitals, as a drawing writes them: column heads, sheet numbers, the title block */
+@utility label-caps {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }

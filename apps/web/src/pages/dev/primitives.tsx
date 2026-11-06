@@ -492,7 +492,7 @@ function Overlays() {
               <div className="flex flex-col gap-1 p-1.5 text-sm">
                 <p className="px-1.5 pb-1 text-xs text-muted">Slippage tolerance</p>
                 {['0.5%', '1%', '2%'].map(value => (
-                  <button key={value} type="button" onClick={close} className="rounded-md px-2.5 py-2 text-left hover:bg-white/6">
+                  <button key={value} type="button" onClick={close} className="rounded-md px-2.5 py-2 text-left hover:bg-text/6">
                     {value}
                   </button>
                 ))}

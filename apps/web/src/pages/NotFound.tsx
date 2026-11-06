@@ -7,7 +7,7 @@ export function NotFound() {
   usePageTitle('Not found');
   return (
     <div className="mx-auto flex max-w-md flex-col items-center py-12 text-center sm:py-20">
-      <p aria-hidden className="text-brand text-[4.5rem] leading-none font-semibold tracking-tighter nums sm:text-[6rem]">
+      <p aria-hidden className="font-mono text-[4.5rem] leading-none font-medium tracking-tight text-accent nums sm:text-[6rem]">
         404
       </p>
       <div role="alert" className="mt-6">

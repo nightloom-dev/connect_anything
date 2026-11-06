@@ -1,24 +1,17 @@
-import { useId } from 'react';
-
 export const REPO_URL = 'https://github.com/nightloom-dev/connect_anything';
 export const DOCS_URL = `${REPO_URL}#readme`;
 
-/** Two chains and the path between them, in the identity gradient. */
+/**
+ * The mark: a route drawn on a cobalt sheet. A filled node is the chain you sign on, the square is the program on
+ * Solana, and the bus between them turns at right angles, as the lines of the drawings on the landing page do.
+ */
 export function LogoMark({ size = 28, className }: { size?: number; className?: string }) {
-  const id = `mark${useId().replace(/:/g, '')}`;
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden className={className}>
-      <defs>
-        <linearGradient id={id} x1="2" y1="30" x2="30" y2="2" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#6E7BFF" />
-          <stop offset="1" stopColor="#3DD6D0" />
-        </linearGradient>
-      </defs>
-      <rect width="32" height="32" rx="9" fill={`url(#${id})`} />
-      <rect x="0.5" y="0.5" width="31" height="31" rx="8.5" stroke="#fff" strokeOpacity="0.18" />
-      <path d="M10 21.5c0-5.5 12-5.5 12-11" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" />
-      <circle cx="10" cy="22" r="3.4" fill="#fff" />
-      <circle cx="22" cy="10" r="3.2" fill="#262c6e" stroke="#fff" strokeWidth="2.2" />
+      <rect width="32" height="32" rx="3" fill="#1F3FD1" />
+      <path d="M9.5 22.5V16h13V12" stroke="#fff" strokeWidth="2.2" strokeLinejoin="miter" />
+      <circle cx="9.5" cy="22.5" r="3.2" fill="#fff" />
+      <rect x="18.6" y="6.1" width="7.8" height="7.8" fill="#1F3FD1" stroke="#fff" strokeWidth="2.2" />
     </svg>
   );
 }

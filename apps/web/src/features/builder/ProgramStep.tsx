@@ -177,7 +177,6 @@ type ExamplesProps = {
   disabled?: boolean;
 };
 
-const TINT = ['from-[#6e7bff] to-[#3dd6d0]', 'from-[#3dd6d0] to-[#5aa9ff]', 'from-[#f5b544] to-[#ff7eb6]', 'from-[#a78bfa] to-[#6e7bff]'];
 
 /** Programs whose IDL ships with the page: one click and the instructions are on screen, with no request. */
 export function Examples({ examples, onPick, loading, disabled = false }: ExamplesProps) {
@@ -190,7 +189,7 @@ export function Examples({ examples, onPick, loading, disabled = false }: Exampl
         <p className="text-xs text-muted">The IDL ships with this page, so nothing is fetched.</p>
       </div>
       <ul className="grid gap-2 sm:grid-cols-2">
-        {examples.map(({ name, kind, program }, index) => (
+        {examples.map(({ name, kind, program }) => (
           <li key={program} className="min-w-0">
             <button
               type="button"
@@ -201,7 +200,7 @@ export function Examples({ examples, onPick, loading, disabled = false }: Exampl
               onClick={loading === program ? undefined : () => onPick(program)}
               className="group flex w-full min-w-0 items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-left transition-[border-color,background-color] duration-120 ease-out enabled:hover:border-border-control enabled:hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60 aria-busy:cursor-progress"
             >
-              <span aria-hidden className={cn('flex size-8 shrink-0 items-center justify-center rounded-md bg-linear-to-br text-sm font-semibold text-bg', TINT[index % TINT.length])}>
+              <span aria-hidden className="flex size-8 shrink-0 items-center justify-center rounded-md border border-accent/40 bg-accent/8 font-mono text-sm font-semibold text-accent">
                 {loading === program ? <Spinner size="sm" /> : name[0].toUpperCase()}
               </span>
               <span className="flex min-w-0 flex-1 flex-col">

@@ -329,7 +329,7 @@ function PhoneBar({ status }: { status?: Bar['status'] }) {
   return (
     <div className="mx-auto w-full max-w-[390px] overflow-hidden rounded-lg border border-border">
       <div className="h-16 bg-bg/60" aria-hidden />
-      <div className="border-t border-border-strong bg-surface/95 px-4 py-3 shadow-[0_-12px_32px_-16px_rgb(0_0_0/0.7)]">
+      <div className="border-t border-border-strong bg-surface/95 px-4 py-3 shadow-[0_-8px_24px_-16px_rgb(14_26_43/0.25)]">
         <PayStrip amount="800" symbol="USDC" status={status} onGo={nowhere} />
       </div>
     </div>

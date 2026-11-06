@@ -23,7 +23,7 @@ function NavLink({ href, children }: { href: string; children: ReactNode }) {
       aria-current={active ? 'page' : undefined}
       className={cn(
         'relative flex h-8 items-center rounded-md px-3 text-sm font-medium transition-colors duration-120',
-        active ? 'text-text after:absolute after:inset-x-3 after:-bottom-[13px] after:h-0.5 after:rounded-full after:bg-accent' : 'text-muted hover:bg-white/5 hover:text-text',
+        active ? 'text-text after:absolute after:inset-x-3 after:-bottom-[13px] after:h-0.5 after:bg-accent' : 'text-muted hover:bg-text/5 hover:text-text',
       )}
     >
       {children}
@@ -31,7 +31,7 @@ function NavLink({ href, children }: { href: string; children: ReactNode }) {
   );
 }
 
-const external = 'flex h-8 items-center gap-1 rounded-md px-3 text-sm font-medium text-muted transition-colors duration-120 hover:bg-white/5 hover:text-text';
+const external = 'flex h-8 items-center gap-1 rounded-md px-3 text-sm font-medium text-muted transition-colors duration-120 hover:bg-text/5 hover:text-text';
 
 function MobileMenu() {
   const [location] = useLocation();
@@ -57,19 +57,19 @@ function MobileMenu() {
                 href={href}
                 onClick={close}
                 aria-current={active ? 'page' : undefined}
-                className={cn('flex h-10 items-center rounded-lg px-3 text-[15px] font-medium', active ? 'bg-accent/14 text-text' : 'text-muted hover:bg-white/5 hover:text-text')}
+                className={cn('flex h-10 items-center rounded-lg px-3 text-[15px] font-medium', active ? 'bg-accent/8 text-text' : 'text-muted hover:bg-text/5 hover:text-text')}
               >
                 {label}
               </Link>
             );
           })}
           <div className="my-1 border-t border-border" />
-          <a href={DOCS_URL} target="_blank" rel="noreferrer" className="flex h-10 items-center justify-between rounded-lg px-3 text-[15px] font-medium text-muted hover:bg-white/5 hover:text-text">
+          <a href={DOCS_URL} target="_blank" rel="noreferrer" className="flex h-10 items-center justify-between rounded-lg px-3 text-[15px] font-medium text-muted hover:bg-text/5 hover:text-text">
             Docs
             <ArrowUpRight className="size-4" aria-hidden />
             <span className="sr-only"> (opens in a new tab)</span>
           </a>
-          <a href={REPO_URL} target="_blank" rel="noreferrer" className="flex h-10 items-center justify-between rounded-lg px-3 text-[15px] font-medium text-muted hover:bg-white/5 hover:text-text">
+          <a href={REPO_URL} target="_blank" rel="noreferrer" className="flex h-10 items-center justify-between rounded-lg px-3 text-[15px] font-medium text-muted hover:bg-text/5 hover:text-text">
             GitHub
             <ArrowUpRight className="size-4" aria-hidden />
             <span className="sr-only"> (opens in a new tab)</span>
@@ -88,7 +88,7 @@ type HeaderProps = {
 
 export function Header({ wallet, walletSlot }: HeaderProps) {
   return (
-    <header className="group/header sticky top-0 z-40 border-b border-border bg-bg/75 backdrop-blur-lg backdrop-saturate-150">
+    <header className="group/header sticky top-0 z-40 border-b border-border bg-bg/90 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-content items-center gap-2 px-4 sm:px-6">
         {/* not a heading: each page's own title is its h1 */}
         <div className="mr-2 shrink-0 text-[15px] leading-none font-semibold tracking-tight sm:mr-4">

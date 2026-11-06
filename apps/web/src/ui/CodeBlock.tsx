@@ -48,7 +48,7 @@ export function CodeBlock({ code, language = 'ts', title, download, copy = true,
   const lines = useMemo(() => highlight(code, language), [code, language]);
   const label = typeof title === 'string' ? title : NAME[language];
   return (
-    <div data-ui="code-block" className={cn('min-w-0 overflow-hidden rounded-lg border border-border bg-[#0d1016]', className)}>
+    <div data-ui="code-block" className={cn('min-w-0 overflow-hidden rounded-lg border border-border bg-surface-2', className)}>
       <div className="flex h-10 items-center justify-between gap-2 border-b border-border bg-surface/70 pr-1.5 pl-3.5">
         <span className="truncate font-mono text-xs text-muted">{title ?? NAME[language]}</span>
         <div className="flex shrink-0 items-center gap-0.5">

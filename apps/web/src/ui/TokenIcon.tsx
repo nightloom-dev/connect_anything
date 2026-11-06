@@ -12,7 +12,7 @@ const TOKENS: Record<string, string> = {
 };
 
 // for the letter of a token without an icon: picked by the symbol, so a token keeps its color
-const FALLBACK = ['#6e7bff', '#3dd6d0', '#f5b544', '#ff7eb6', '#5aa9ff', '#a78bfa', '#3bd67f', '#ff8a5c'];
+const FALLBACK = ['#1f3fd1', '#0b6b4a', '#8a5300', '#a3305a', '#0b5cad', '#6f3aa8', '#0f6e6e', '#9a3d12'];
 
 const tint = (symbol: string) => FALLBACK[[...symbol].reduce((sum, char) => sum + char.charCodeAt(0), 0) % FALLBACK.length];
 
@@ -30,7 +30,7 @@ export function TokenIcon({ symbol, size = 20, className }: TokenIconProps) {
     <span
       data-ui="token-icon"
       aria-hidden
-      className={cn('inline-grid shrink-0 place-items-center rounded-full font-semibold text-bg', className)}
+      className={cn('inline-grid shrink-0 place-items-center rounded-full font-semibold text-white', className)}
       style={{ width: size, height: size, fontSize: Math.max(8, Math.round(size * 0.48)), background: tint(key) }}
     >
       {key.slice(0, 1) || '?'}

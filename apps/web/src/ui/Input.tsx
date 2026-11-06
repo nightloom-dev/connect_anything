@@ -65,8 +65,8 @@ export const fieldBox = ({ size = 'md', invalid = false, disabled = false, class
     disabled
       ? 'cursor-not-allowed border-border-strong bg-surface text-muted'
       : invalid
-        ? 'border-danger/70 bg-surface-2 has-[input:focus]:border-danger has-[input:focus]:shadow-[0_0_0_4px_rgb(255_92_108/0.18)]'
-        : 'border-border-control bg-surface-2 [&:hover:not(:has(input:focus))]:border-border-control-hover has-[input:focus]:border-accent has-[input:focus]:shadow-glow',
+        ? 'border-danger/70 bg-surface has-[input:focus]:border-danger has-[input:focus]:shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-danger)_16%,transparent)]'
+        : 'border-border-control bg-surface [&:hover:not(:has(input:focus))]:border-border-control-hover has-[input:focus]:border-accent has-[input:focus]:shadow-glow',
     className,
   );
 
@@ -81,7 +81,7 @@ export type InputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'size'> & {
   /** Inside the frame, after the text: a unit, buttons. */
   trailing?: ReactNode;
   size?: InputSize;
-  /** JetBrains Mono, for addresses, ids and hex. */
+  /** IBM Plex Mono, for addresses, ids and hex. */
   mono?: boolean;
   /** Classes for the Field around it. */
   containerClassName?: string;

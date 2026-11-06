@@ -38,7 +38,7 @@ export function Switch({ checked, onChange, label, description, disabled, size =
         />
         <span
           aria-hidden
-          className={cn('pointer-events-none absolute top-1/2 left-0.5 -translate-y-1/2 rounded-full bg-white shadow-[0_1px_2px_rgb(0_0_0/0.4)] transition-transform duration-200 ease-out peer-disabled:opacity-70', THUMB[size])}
+          className={cn('pointer-events-none absolute top-1/2 left-0.5 -translate-y-1/2 rounded-full bg-white shadow-[0_0_0_1px_var(--color-border-control),0_1px_2px_rgb(14_26_43/0.2)] peer-checked:shadow-[0_1px_2px_rgb(14_26_43/0.3)] transition-[transform,box-shadow] duration-200 ease-out peer-disabled:opacity-70', THUMB[size])}
         />
       </span>
       <span className="flex min-w-0 flex-col gap-0.5">
