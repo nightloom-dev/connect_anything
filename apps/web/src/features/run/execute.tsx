@@ -500,9 +500,11 @@ type ExecuteProps = {
   outcome?: (spendable: string) => ReactNode;
   /** Why nothing can run now. What this page offers for money already sent stays open. */
   closed?: string;
+  /** False while the page offers its own way to pay again after a run, as /kamino's Repay more: the card then draws no Start a new payment. */
+  restartable?: boolean;
 };
 
-export function Execute({ exec, recipe, stored, shared = false, suggested, outcome, closed }: ExecuteProps) {
+export function Execute({ exec, recipe, stored, shared = false, suggested, outcome, closed, restartable = true }: ExecuteProps) {
   const { api, wallet } = useIntentsConnect();
   const { connect, disconnect, isConnecting } = useIntentsConnectWallet();
   const address = wallet?.getAddress() ?? undefined;
@@ -1064,7 +1066,7 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
           {exec.status === 'DEPOSIT_FAILED' && <Notice kind="error">The deposit failed, for example on an invalid amount, so nothing ran on Solana. What was transferred is refunded.</Notice>}
           {address && !exec.executionId && !locked && !exec.recovery && last && <Existing key={last} id={last} head="You started an execution from this browser:" onHide={() => setHidden([...hidden, last])} {...existing} />}
           {list.data && (failed || atRest) && <Recover key={failed?.id} exec={exec} execution={failed} unsigned={unsigned} act={act} locked={locked || !!exec.recovery || unfinished} recipe={recipe} stored={stored} gate={refused} list={list.data} intermediary={intermediary} source={source} />}
-          {restart && <NewPayment onClick={() => setOpened('asked')} />}
+          {restart && restartable && <NewPayment onClick={() => setOpened('asked')} />}
         </RunCard>
       </Pay>
 

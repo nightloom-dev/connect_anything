@@ -6,12 +6,12 @@ import type { SimResult } from '@connect-anything/core';
 /** What a fork of mainnet says about the repay: nothing asked yet, asking, its answer, or why there is none. */
 export type ForkCheck =
   | { kind: 'idle' }
-  | { kind: 'checking'; /** The answer for the amount before, shown dimmed meanwhile. */ last?: SimResult }
+  | { kind: 'checking'; /** The answer for the amount before, shown greyed meanwhile. */ last?: SimResult }
   | { kind: 'done'; result: SimResult }
   | { kind: 'offline'; message: string }
   | { kind: 'failed'; message: string };
 
-/** The last answer the check has, to show dimmed while it asks again. */
+/** The last answer the check has, to show greyed while it asks again. */
 export const lastOf = (check: ForkCheck) => (check.kind === 'done' ? check.result : check.kind === 'checking' ? check.last : undefined);
 
 /** Why POST /api/simulate gave no answer, from the server's status if it answered: 503 is the simulator switched off. */

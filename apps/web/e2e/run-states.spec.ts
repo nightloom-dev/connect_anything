@@ -382,14 +382,13 @@ test('state 14 the run goes through its phases, and the form stays locked meanwh
   await expect(statusOf(page, DONE)).toBeVisible();
   await shows(page, /^Done\. Execution \S+ · SUCCESS$/);
 
-  // the run that ended still leads, and a new payment waits behind a quiet button
+  // the run that ended still leads. After a repay the page folds its target away behind Repay more, which is the one
+  // way to start again: the card draws no Start a new payment beside it
   await expect(page.getByLabel('Amount you pay')).toHaveCount(0);
-  await button(page, NEW_PAYMENT).click();
-  await expect(page.getByLabel('Amount you pay')).toBeFocused();
-  // after a repay the page folds its target away and gives no amount, so the new payment waits for one
-  await shows(page, 'Enter an amount of USDC.');
-  await expect(button(page, QUOTE)).toBeDisabled();
-  await page.getByLabel('Amount you pay').fill('100');
+  await expect(button(page, NEW_PAYMENT)).toHaveCount(0);
+  // the position read again is where it was, so its target asks for 800 USDC again, and the card opens a new payment with it
+  await button(page, 'Repay more').click();
+  await expect(page.getByLabel('Amount you pay')).toHaveValue('800');
   await expect(button(page, QUOTE)).toBeEnabled();
   await expect(statusOf(page, DONE)).toBeVisible();
 });
@@ -620,9 +619,10 @@ test('state 21 the deposit failed', async ({ page, connect, wallet }) => {
   await expect(stages(page)).toContainText(['Signature, done', 'Deposit, failed', 'Bridge, not reached', 'Execution, not reached', 'Result, not reached']);
   await expect(stages(page).nth(1)).toContainText('The deposit failed, so nothing ran');
   await expect(button(page, 'Refund')).toHaveCount(0);
-  // nothing is left to resolve: a new payment waits behind a quiet button
+  // nothing is left to resolve: a new payment waits behind a quiet button, which opens it at the amount
   await expect(button(page, QUOTE)).toHaveCount(0);
   await button(page, NEW_PAYMENT).click();
+  await expect(page.getByLabel('Amount you pay')).toBeFocused();
   await expect(button(page, QUOTE)).toBeEnabled();
 });
 
@@ -656,7 +656,8 @@ test('state 22 after a success, a new amount from the page opens a new payment w
   // the position read again is at the target: the page has no amount for the card, and the run leads it
   await expect(statusOf(page, 'After the run the debt is $3,600.00, from $4,400.00, and the LTV is 45.00%, from 55.00%.')).toBeVisible();
   await expect(button(page, QUOTE)).toHaveCount(0);
-  await expect(button(page, NEW_PAYMENT)).toBeVisible();
+  // and Repay more is the one way to start again: the card draws no Start a new payment beside it
+  await expect(button(page, NEW_PAYMENT)).toHaveCount(0);
 
   // a lower target asks for 800 USDC more: Repay more opens the target the page folded away after the repay
   await page.getByRole('button', { name: 'Repay more' }).click();

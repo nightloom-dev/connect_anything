@@ -154,7 +154,6 @@ is never loosened. When the fix lands, remove the fixme in the same change.
 | ----- | ------------------------------------------------------------------------------------------------------- |
 | QA-02 | `keyboard.spec.ts`: the run card keeps the focus on its buttons while they work                         |
 | QA-09 | `wallet-network.spec.ts`: a wallet on Base stays on Base                                                |
-| QA-08 | `gallery.spec.ts`: axe on the gallery section `kamino-fork`                                             |
 
 ## What answers the page
 

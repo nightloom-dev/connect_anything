@@ -8,9 +8,7 @@ import { expect, test } from './support.ts';
 // prints its warnings, which support.ts turns into failures as for any page.
 
 /** Sections with a known serious violation, each in a test of its own until it is fixed. */
-const KNOWN: Record<string, string> = {
-  'kamino-fork': 'QA-08: while the fork check runs again, its last figures stay at 50% opacity, under 4.5:1 (axe color-contrast, serious)',
-};
+const KNOWN: Record<string, string> = {};
 
 test('every section of the gallery is in a group the specs walk', async ({ page }) => {
   await page.goto(GALLERY);

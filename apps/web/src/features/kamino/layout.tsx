@@ -53,11 +53,11 @@ export function RunPlaceholder({ kind }: { kind: 'choose' | 'closed' }) {
   return (
     <div className="rounded-xl border border-dashed border-border-strong bg-surface/40">
       {kind === 'choose' ? (
-        <EmptyState compact icon={<MousePointerClick />} title="Choose a position" className="py-10">
+        <EmptyState compact level={2} icon={<MousePointerClick />} title="Choose a position" className="py-10">
           The payment for it opens here.
         </EmptyState>
       ) : (
-        <EmptyState compact icon={<LifeBuoy />} title="No payment for this position" className="py-10">
+        <EmptyState compact level={2} icon={<LifeBuoy />} title="No payment for this position" className="py-10">
           This page cannot repay it, so there is nothing to pay.
         </EmptyState>
       )}
@@ -119,6 +119,7 @@ export function NoPositions({ field }: { field?: string }) {
   return (
     <Card padding="none" role="status">
       <EmptyState
+        level={2}
         icon={<Inbox />}
         title="No open positions"
         action={

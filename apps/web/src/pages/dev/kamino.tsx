@@ -2,14 +2,14 @@ import { useState } from 'react';
 import { Blocks } from 'lucide-react';
 import type { SimResult } from '@connect-anything/core';
 import { targetFrom, type Obligation, type ObligationRow } from '@connect-anything/kamino-rescue';
-import { BeforeAfter, ReadingAgain, RepayMore } from '../../features/kamino/BeforeAfter.tsx';
+import { BeforeAfter, ReadingAgain, RepayMore, SentBack } from '../../features/kamino/BeforeAfter.tsx';
 import { BeforeYouPay } from '../../features/kamino/BeforeYouPay.tsx';
 import { ForkCheckCard } from '../../features/kamino/ForkCheck.tsx';
 import type { ForkCheck } from '../../features/kamino/fork.ts';
 import { besideRetry } from '../../features/kamino/format.ts';
 import { HowItWorks, NoPositions, ReadingPositions, RunPlaceholder, WatcherBanner } from '../../features/kamino/layout.tsx';
 import { ReplaceRecipe } from '../../features/kamino/OpenInBuilder.tsx';
-import { PayStrip } from '../../features/kamino/PayBar.tsx';
+import { PayStrip, type Bar } from '../../features/kamino/PayBar.tsx';
 import { PositionCard } from '../../features/kamino/PositionCard.tsx';
 import { PositionList } from '../../features/kamino/PositionList.tsx';
 import { targetPresets } from '../../features/kamino/presets.ts';
@@ -233,7 +233,8 @@ function Fork() {
       <Demo title="Failed">{card({ kind: 'done', result: FAIL })}</Demo>
       <Demo title="Simulator offline (503)">{card({ kind: 'offline', message: 'The simulator is offline: SIM_URL is not set' })}</Demo>
       <Demo title="Checking, the first time">{card({ kind: 'checking' })}</Demo>
-      <Demo title="Checking a new amount, the last answer dimmed">{card({ kind: 'checking', last: OK }, '400 USDC')}</Demo>
+      <Demo title="Checking a new amount: the last figures stay, greyed, until it answers">{card({ kind: 'checking', last: OK }, '400 USDC')}</Demo>
+      <Demo title="Checking again after a warning: greyed too">{card({ kind: 'checking', last: WARN }, '1200 USDC')}</Demo>
       <Demo title="No answer">{card({ kind: 'failed', message: 'The server could not be reached. Check your connection and try again.' })}</Demo>
       <Demo title="Nothing to simulate">{card({ kind: 'idle' })}</Demo>
     </DemoGrid>
@@ -291,6 +292,12 @@ function After() {
       <Demo title="Nothing changed yet">
         <BeforeAfter before={SAFE} after={SAFE} onReadAgain={nowhere} />
       </Demo>
+      <Demo title="After a Refund: where the money went, and no before and after">
+        <SentBack amount="0.51 USDC" to="0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed" chain={{ id: 'base', name: 'Base' }} />
+      </Demo>
+      <Demo title="After a Refund the page knows less of">
+        <SentBack />
+      </Demo>
     </DemoGrid>
   );
 }
@@ -318,12 +325,12 @@ function Empty() {
 }
 
 /** The bar a phone shows at the bottom of the screen while the payment is further down, as it sits there. */
-function PhoneBar({ busy = false }: { busy?: boolean }) {
+function PhoneBar({ status }: { status?: Bar['status'] }) {
   return (
     <div className="mx-auto w-full max-w-[390px] overflow-hidden rounded-lg border border-border">
       <div className="h-16 bg-bg/60" aria-hidden />
       <div className="border-t border-border-strong bg-surface/95 px-4 py-3 shadow-[0_-12px_32px_-16px_rgb(0_0_0/0.7)]">
-        <PayStrip amount="800" symbol="USDC" busy={busy} onGo={nowhere} />
+        <PayStrip amount="800" symbol="USDC" status={status} onGo={nowhere} />
       </div>
     </div>
   );
@@ -351,7 +358,13 @@ function Phone() {
         <PhoneBar />
       </Demo>
       <Demo title="A run in flight">
-        <PhoneBar busy />
+        <PhoneBar status={{ text: 'Payment in progress', tone: 'busy' }} />
+      </Demo>
+      <Demo title="The run waits for its deposit: nothing to pay, View">
+        <PhoneBar status={{ text: 'Waiting for your deposit', tone: 'waiting' }} />
+      </Demo>
+      <Demo title="The run failed, and the card offers Retry and Refund">
+        <PhoneBar status={{ text: 'Payment failed', tone: 'failed' }} />
       </Demo>
       <Demo title="Open in builder, with a recipe in the builder: it asks first">
         <ReplaceDemo />
@@ -382,11 +395,11 @@ export const sections: DevSection[] = [
   { id: 'kamino-warnings', title: 'Kamino: warnings', description: 'One alert each, a short title over the exact words.', render: () => <Warnings /> },
   { id: 'kamino-deeplink', title: 'Kamino: watcher deep link', description: '/kamino?wallet=…&obligation=… from a Telegram alert.', render: () => <DeepLink /> },
   { id: 'kamino-fork', title: 'Kamino: checked on a fork', description: 'POST /api/simulate of the repay. It never holds up the payment.', render: () => <Fork /> },
-  { id: 'kamino-after', title: 'Kamino: after the run', description: 'The target folds into Repay more, so nothing reads as a second payment.', render: () => <After /> },
+  { id: 'kamino-after', title: 'Kamino: after the run', description: 'The target folds into Repay more, so nothing reads as a second payment. A Refund says where the money went.', render: () => <After /> },
   {
     id: 'kamino-phone',
     title: 'Kamino: the pay bar and the builder',
-    description: 'Under 960px a bar leads down to the payment while it is further down the page. Open in builder asks before it replaces a recipe.',
+    description: 'Under 960px a bar leads down to the payment while it is further down the page. It offers to pay only while a new payment is the way on. Open in builder asks before it replaces a recipe.',
     render: () => <Phone />,
   },
   { id: 'kamino-empty', title: 'Kamino: empty and loading', render: () => <Empty /> },

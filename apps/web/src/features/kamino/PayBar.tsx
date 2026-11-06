@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
-import { ArrowDown } from 'lucide-react';
+import { ArrowDown, CircleAlert, Hourglass } from 'lucide-react';
 import { Button, Spinner, TokenIcon, cn } from '../../ui/index.ts';
 
-/** What the bar says: the amount to pay, or that a run is in flight. */
-export type Bar = { amount: string; symbol: string; busy: boolean };
+/**
+ * What the bar says: the amount to pay while a new payment is the way on, or else where the payment is, in place of the
+ * amount, and View. `busy`: a run is in flight; `waiting`: it waits on the person or on Connect; `failed`: it failed, and
+ * the card says what can be done with the money.
+ */
+export type Bar = { amount?: string; symbol: string; status?: { text: string; tone: 'busy' | 'waiting' | 'failed' } };
 
 const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
@@ -25,14 +29,20 @@ export function goTo(id: string) {
   card.focus({ preventScroll: true });
 }
 
+const TONE = {
+  busy: <Spinner size="sm" className="text-muted" />,
+  waiting: <Hourglass className="size-4 shrink-0 text-warning" aria-hidden />,
+  failed: <CircleAlert className="size-4 shrink-0 text-danger" aria-hidden />,
+};
+
 /** The bar's words and its button, without the bar: the page draws it in PayBar, the gallery on its own. */
-export function PayStrip({ amount, symbol, busy, onGo }: Bar & { onGo: () => void }) {
+export function PayStrip({ amount, symbol, status, onGo }: Bar & { onGo: () => void }) {
   return (
     <div className="flex min-w-0 items-center gap-3">
-      {busy ? (
+      {status ? (
         <p className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium text-text">
-          <Spinner size="sm" className="text-muted" />
-          <span className="truncate">Payment in progress</span>
+          {TONE[status.tone]}
+          <span className="truncate">{status.text}</span>
         </p>
       ) : (
         <p className="flex min-w-0 flex-1 items-center gap-2 text-sm text-muted">
@@ -46,8 +56,8 @@ export function PayStrip({ amount, symbol, busy, onGo }: Bar & { onGo: () => voi
           </span>
         </p>
       )}
-      <Button variant={busy ? 'secondary' : 'primary'} iconRight={<ArrowDown />} aria-label={busy ? 'View the payment' : 'Pay, in the payment card below'} onClick={onGo}>
-        {busy ? 'View' : 'Pay'}
+      <Button variant={status ? 'secondary' : 'primary'} iconRight={<ArrowDown />} aria-label={status ? 'View the payment' : 'Pay, in the payment card below'} onClick={onGo}>
+        {status ? 'View' : 'Pay'}
       </Button>
     </div>
   );
@@ -61,7 +71,7 @@ type PayBarProps = Bar & {
 /**
  * Below 960px the payment comes after the position, a long way down on a phone, so this bar at the bottom of the screen
  * leads down to it. It shows while the card is under the screen, not while it is in view or once it has been scrolled
- * past, and the page leaves it out while there is nothing to pay.
+ * past, and the page leaves it out while there is nothing to pay and nothing to look at there.
  * It is sticky at the end of the page, not fixed: where the page ends it sits in its own place, so it never covers the
  * last of the page or the footer. The wallet's modal and the dialogs open above it.
  */

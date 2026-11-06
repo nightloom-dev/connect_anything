@@ -8,9 +8,9 @@ function Holdings({ title, total, rows, empty }: { title: string; total: number;
   return (
     <div role="group" aria-labelledby={id} className="flex min-w-0 flex-col rounded-lg border border-border bg-surface-2/40 p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-        <h4 id={id} className="text-xs font-medium tracking-wide text-muted uppercase">
+        <h3 id={id} className="text-xs font-medium tracking-wide text-muted uppercase">
           {title}
-        </h4>
+        </h3>
         <span className="text-lg font-semibold text-text nums">{dollars(total)}</span>
       </div>
       {rows.length ? (
@@ -53,9 +53,9 @@ export function PositionCard({ position, target, after, children }: PositionCard
   return (
     <Card as="section" aria-labelledby={id} padding="lg" className="@container flex min-w-0 flex-col gap-6">
       <header className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <h3 id={id} className="text-base font-semibold text-text">
+        <h2 id={id} className="text-base font-semibold text-text">
           Position
-        </h3>
+        </h2>
         <Address value={position.address} />
         <Badge variant={zone.variant} dot size="md" className="ml-auto">
           {zone.text}

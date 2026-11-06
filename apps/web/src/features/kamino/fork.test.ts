@@ -8,7 +8,7 @@ import { lastOf, shownCheck, unanswered, type ForkCheck } from './fork.ts';
 const OK: SimResult = { verdict: 'ok', computeUnits: 115_948, txBytes: 934, logs: [], warnings: [] };
 const WARN: SimResult = { verdict: 'warn', computeUnits: 250_028, txBytes: 1134, logs: [], warnings: ['CU 250.0k > 200k'] };
 
-test('the last answer is kept to show dimmed while the check asks again', () => {
+test('the last answer is kept to show greyed while the check asks again', () => {
   assert.equal(lastOf({ kind: 'done', result: OK }), OK);
   assert.equal(lastOf({ kind: 'checking', last: WARN }), WARN);
   assert.equal(lastOf({ kind: 'checking' }), undefined);
@@ -42,6 +42,6 @@ test('while a new amount waits to hold still, the check shows as asking, over th
   assert.equal(shownCheck({ check: done, atomic: '800000000', settled: '800000000', recipe: true }), done);
   const failed: ForkCheck = { kind: 'failed', message: 'no answer' };
   assert.equal(shownCheck({ check: failed, atomic: '800000000', settled: '800000000', recipe: true }), failed);
-  // a first amount has nothing to show dimmed
+  // a first amount has nothing to show greyed
   assert.deepEqual(shownCheck({ check: { kind: 'idle' }, atomic: '800000000', settled: undefined, recipe: true }), { kind: 'checking', last: undefined });
 });

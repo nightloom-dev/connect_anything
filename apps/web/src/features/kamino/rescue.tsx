@@ -1,14 +1,15 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
-import type { SolanaRecipe } from '@aurora-is-near/intents-connect';
+import { parseOriginAsset, type SolanaRecipe } from '@aurora-is-near/intents-connect';
 import { useExecution } from '@aurora-is-near/intents-connect/react';
 import { CU_LIMIT, estimateCu, ltvAfter, rescuable, rescueAmount, rescueRecipe, targetFrom, type Obligation } from '@connect-anything/kamino-rescue';
-import { fromAtomic, legs } from '../../connect.ts';
+import { CHAINS, fromAtomic, legs, stoppedFollowing } from '../../connect.ts';
 import { Execute } from '../run/execute.tsx';
+import { sharedPlaces, writeAmount } from '../run/figures.ts';
 import { FigureRow } from '../run/parts.tsx';
 import { toSolanaRecipe, type StoredRecipe } from '../../recipe.ts';
 import { Failure, FetchError, useJson } from '../../ui.tsx';
 import { AddressInput, Button, Card, ChainIcon, cn } from '../../ui/index.ts';
-import { BeforeAfter, ReadingAgain, RepayMore } from './BeforeAfter.tsx';
+import { BeforeAfter, ReadingAgain, RepayMore, SentBack } from './BeforeAfter.tsx';
 import { BeforeYouPay } from './BeforeYouPay.tsx';
 import { ForkCheckCard } from './ForkCheck.tsx';
 import { besideRetry, dollars, listed, ltvOf, percent, risk, targetPercent } from './format.ts';
@@ -23,6 +24,11 @@ import { RepaySummary, TargetLtv } from './TargetLtv.tsx';
 import { AtLiquidation, NoCollateral, NotRepayable, NothingToRepay, OtherDebts, OverComputeLimit, ShortOfTarget, TargetPastLiquidation } from './warnings.tsx';
 
 type Positions = { obligations: Obligation[] };
+
+// While the pay bar shows on a phone it covers the bottom of the screen, so the focus keeps clear of it: the browser
+// scrolls a focused element that comes this close to the bottom edge up into view, as the header's clearance does at the
+// top. Not the bar's own button, which stays where it is.
+const CLEAR_OF_BAR = 'max-md:[&>:not([data-ui=pay-bar])_:focus]:scroll-mb-[calc(5rem+env(safe-area-inset-bottom))]';
 
 /** Renders nothing: it hands the position the amount a quote delivers, so that the HealthBar shows where the LTV lands. */
 function Quoted({ spendable, onQuote }: { spendable: string; onQuote: (spendable: string | undefined) => void }) {
@@ -82,10 +88,32 @@ function Position({ obligation, url, payment, onBusy, onBar }: PositionProps) {
 
   // For the screen only as well: once a repay succeeded, the page shows what it did, and the target folds away behind
   // Repay more, so that nothing on it reads as a second payment to make. With no target on the screen the run card is
-  // suggested no amount either. Repay more opens the target for this run; the next repay that succeeds folds it again.
+  // suggested no amount either, and draws no Start a new payment: Repay more is the one way to start again. It opens the
+  // target for this run, and the card a new payment with its amount; the next repay that succeeds folds it again.
   // A Refund that went through repaid nothing, so the target stays open after one.
   const [reopened, setReopened] = useState<string>();
   const done = exec.status === 'SUCCESS' && !legs(exec.execution?.quote).isRefund && reopened !== exec.executionId;
+
+  // For the screen only too: a Refund that went through sent money back and did nothing on Kamino, so the page says where
+  // the money went, and shows no before and after. What a repay did stays on the screen once one has gone through.
+  const refund = legs(exec.execution?.quote);
+  const refunded = exec.status === 'SUCCESS' && refund.isRefund;
+  const [repaid, setRepaid] = useState(false);
+  useEffect(() => {
+    if (exec.status === 'SUCCESS' && !refund.isRefund) setRepaid(true);
+  }, [exec.status, refund.isRefund]);
+  const sent = (() => {
+    if (!refunded) return undefined;
+    const { quote } = exec.execution!;
+    // what left the intermediary is the token the recipe delivers there, which the position owed
+    const token = refund.held === ready.current?.stored.destination.assetId ? obligation.borrows.find(({ mint }) => mint === ready.current?.stored.destination.tokenAddress) : undefined;
+    const back = refund.back ? parseOriginAsset(refund.back) : undefined;
+    return {
+      amount: token && `${fromAtomic(quote.amount, token.decimals)} ${token.symbol}`,
+      to: quote.recipient,
+      chain: CHAINS.find(({ id }) => id === back?.chain),
+    };
+  })();
   const field = useRef<HTMLInputElement>(null);
   const repayMore = () => {
     setReopened(exec.executionId);
@@ -97,9 +125,29 @@ function Position({ obligation, url, payment, onBusy, onBar }: PositionProps) {
     if (reopened) field.current?.focus();
   }, [reopened]);
 
-  // On a phone the payment is a long way down, and Rescue draws a bar at the bottom of the screen that leads to it.
-  const bar: Bar | undefined = debt && ready.current && !done && suggested ? { amount: suggested, symbol: debt.symbol, busy: exec.isBusy } : undefined;
-  useEffect(() => onBar(bar), [bar?.amount, bar?.symbol, bar?.busy]);
+  // On a phone the payment is a long way down, and Rescue draws a bar at the bottom of the screen that leads to it. It
+  // offers to pay only while a new payment is the way on: while the card has something else to do first, a run in
+  // flight, a deposit to send, money to retry or refund, it says that and leads there with View. Display only, from
+  // what the run says of itself.
+  const { isRefund } = refund;
+  const status: Bar['status'] =
+    exec.recovery?.kind === 'retry-transfer'
+      ? { text: 'Deposit not sent', tone: 'failed' }
+      : exec.recovery
+        ? { text: 'Another payment in flight', tone: 'waiting' }
+        : exec.phase === 'awaiting-deposit'
+          ? { text: 'Waiting for your deposit', tone: 'waiting' }
+          : exec.phase === 'expired'
+            ? { text: 'Deposit window passed', tone: 'waiting' }
+            : exec.isBusy
+              ? { text: isRefund ? 'Refund in progress' : 'Payment in progress', tone: 'busy' }
+              : stoppedFollowing(exec)
+                ? { text: 'Payment not finished', tone: 'waiting' }
+                : exec.status === 'OPERATION_FAILED'
+                  ? { text: isRefund ? 'Refund failed' : 'Payment failed', tone: 'failed' }
+                  : undefined;
+  const bar: Bar | undefined = debt && ready.current && !done && (status || suggested) ? { amount: suggested, symbol: debt.symbol, status } : undefined;
+  useEffect(() => onBar(bar), [bar?.amount, bar?.symbol, bar?.status?.text, bar?.status?.tone]);
   useEffect(() => () => onBar(undefined), []);
 
   const outcome =
@@ -107,11 +155,15 @@ function Position({ obligation, url, payment, onBusy, onBar }: PositionProps) {
     ((spendable: string) => {
       const after = ltvAfter(position, debt, spendable);
       const surplus = BigInt(spendable) - BigInt(debt.amount);
+      // written as the card writes the quote's figures: exact, and at the one precision of what it spends, which is in them
+      const of = (atomic: string) => ({ atomic, decimals: debt.decimals });
+      const repays = surplus > 0n ? debt.amount : spendable;
+      const places = sharedPlaces([of(spendable), of(repays), ...(surplus > 0n ? [of(surplus.toString())] : [])]);
       return (
         <>
           <Quoted spendable={spendable} onQuote={setQuoted} />
           <FigureRow term="It repays">
-            {fromAtomic(surplus > 0n ? debt.amount : spendable, debt.decimals)} {debt.symbol}
+            {writeAmount(of(repays), places)} {debt.symbol}
           </FigureRow>
           {after !== null && (
             <FigureRow term="LTV after, at today's prices" note={t !== null && after > t && !amount?.short && 'The fee comes out of what is delivered.'}>
@@ -121,7 +173,7 @@ function Position({ obligation, url, payment, onBusy, onBar }: PositionProps) {
           )}
           {surplus > 0n && (
             <FigureRow term="Surplus" note="It stays with your intermediary, and Refund takes it back.">
-              {fromAtomic(surplus.toString(), debt.decimals)} {debt.symbol}
+              {writeAmount(of(surplus.toString()), places)} {debt.symbol}
             </FigureRow>
           )}
         </>
@@ -131,9 +183,10 @@ function Position({ obligation, url, payment, onBusy, onBar }: PositionProps) {
   return (
     <>
       <div className={cn(LEFT, 'flex flex-col gap-6')}>
-        {reread.loading && <ReadingAgain compact={!!latest} />}
+        {reread.loading && <ReadingAgain compact={!!latest || refunded} />}
         {reread.error && <Failure error={new Error(besideRetry(reread.error.message))} retry={reread.retry} />}
-        {latest && <BeforeAfter before={obligation} after={latest} reading={reread.loading} onReadAgain={reread.retry} />}
+        {sent && <SentBack {...sent} />}
+        {latest && repaid && !refunded && <BeforeAfter before={obligation} after={latest} reading={reread.loading} onReadAgain={reread.retry} />}
 
         {/* once folded away, the target leaves the LTV bar too */}
         <PositionCard position={position} target={debt && !done ? t : null} after={done ? null : landing}>
@@ -170,7 +223,15 @@ function Position({ obligation, url, payment, onBusy, onBar }: PositionProps) {
 
       <RunColumn id={payment}>
         {ready.current ? (
-          <Execute exec={exec} recipe={ready.current.recipe} stored={ready.current.stored} suggested={done ? undefined : suggested} outcome={outcome} closed={why} />
+          <Execute
+            exec={exec}
+            recipe={ready.current.recipe}
+            stored={ready.current.stored}
+            suggested={done ? undefined : suggested}
+            outcome={outcome}
+            closed={why}
+            restartable={!done}
+          />
         ) : (
           <RunPlaceholder kind="closed" />
         )}
@@ -220,13 +281,13 @@ export function Rescue() {
   const ranked = obligations && [...obligations].sort((one, other) => risk(other) - risk(one));
 
   return (
-    <div className="flex flex-col gap-6 sm:gap-8">
+    <div className={cn('flex flex-col gap-6 sm:gap-8', bar && position && CLEAR_OF_BAR)}>
       <header className="flex flex-col gap-2">
         <p className="flex items-center gap-2 text-sm font-medium text-muted">
           <ChainIcon chain="sol" size={16} />
           Kamino Lend on Solana
         </p>
-        <h2 className="text-xl font-semibold tracking-tight text-text sm:text-2xl">Repay a Kamino debt</h2>
+        <h1 className="text-xl font-semibold tracking-tight text-text sm:text-2xl">Repay a Kamino debt</h1>
         <p className="max-w-2xl text-muted">
           Enter the Solana wallet that owns the position. It does not have to be yours: anyone can repay a debt on Kamino, and you pay from an EVM chain with one signature.
         </p>

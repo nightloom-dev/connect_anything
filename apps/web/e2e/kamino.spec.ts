@@ -1,9 +1,12 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
+import { audit } from './axe.ts';
+import { expectOutline, headingsOf } from './headings.ts';
 import { STAND_IN } from './mocks/fixtures.ts';
 import { HEALTHY, NEAR_LIQUIDATION, RECORDED_CASH, RECORDED_USDT, RECORDED_WALLET } from './mocks/kamino.ts';
 import { BASE_USDC, SOL_USDC } from './mocks/tokens.ts';
 import { KAMINO } from './paths.ts';
 import { expect, statusOf, test } from './support.ts';
+import { WALLET } from './wallet.ts';
 
 // /kamino reads the positions of any Solana wallet and works out what to repay for a target LTV. Every variant of
 // GET /api/kamino is in mocks/kamino.ts; most take the recorded main-market position and change what it owes.
@@ -40,6 +43,19 @@ async function side(page: Page, name: 'Collateral' | 'Debt', total: string, rows
 
 /** A button of the list of positions, by its whole name. */
 const choice = (page: Page, name: string) => page.getByRole('region', { name: 'Positions' }).getByRole('button', { name, exact: true });
+
+/** The figure of a row of the payment card's quote, by the row's whole term. */
+const quoted = (page: Page, term: string) =>
+  page.getByRole('region', { name: 'Payment' }).locator('dt').filter({ hasText: new RegExp(`^${term}$`) }).locator('xpath=following-sibling::dd[1]');
+
+/** A heading of the page, by its whole name and its level. */
+const heading = (page: Page, name: string, level: number) => expect(page.getByRole('main').getByRole('heading', { name, level, exact: true })).toBeVisible();
+
+/** The outline of the page, as headings.ts checks every page's: one h1, and no level skipped. Here the h1 is the title. */
+async function outlined(page: Page) {
+  await expectOutline(page);
+  expect((await headingsOf(page))[0]).toEqual({ level: 1, text: 'Repay a Kamino debt' });
+}
 
 /** Keeps what Open in builder puts in session storage for the builder, which takes it out as it opens. */
 const keepHanded = (page: Page) =>
@@ -318,7 +334,7 @@ test('positions that cannot be repaid here say why, and offer no payment', async
   }
 });
 
-test('the repay is checked on a fork for the amount of the target, and the check holds nothing up', async ({ page, api }) => {
+test('the repay is checked on a fork for the amount of the target, and the check holds nothing up', async ({ page, api }, testInfo) => {
   await page.goto(KAMINO);
   await read(page);
   const simulations = () => api.requests.filter(({ method, path }) => method === 'POST' && path === '/api/simulate');
@@ -337,7 +353,17 @@ test('the repay is checked on a fork for the amount of the target, and the check
 
   const target = page.getByLabel('Target LTV, %');
   api.simulate = 'warn';
+  // while it runs again, the last figures stay, greyed under a line that says so, and as readable as before
+  const held = api.hold('simulate');
   await target.fill('50');
+  await held.reached();
+  const checking = page.getByRole('region', { name: 'Checking on a mainnet fork…' });
+  await expect(checking.getByRole('status')).toHaveText('Running the repay of 400 USDC on a fork of mainnet…');
+  await expect(checking.getByText('Checking again. These figures are from the last check.', { exact: true })).toBeVisible();
+  await expect(checking.getByRole('meter', { name: 'Compute units' })).toHaveAttribute('aria-valuetext', '115,948 of 200,000 CU');
+  await expect(checking.getByText('Passed', { exact: true })).toHaveCount(0);
+  await audit(page, testInfo, { idle: false, include: 'main', name: 'the check on a fork, running again' });
+  held.release();
   await expect(checked.getByRole('heading')).toHaveText('Checked on a mainnet fork for 400 USDC');
   await expect(checked.getByRole('status')).toHaveText("The repay ran, with warnings, for the target's amount before fees.");
   await expect(checked.getByText('Passed with warnings', { exact: true })).toBeVisible();
@@ -431,6 +457,54 @@ test('a quote moves the LTV bar to where it lands, and after the run the positio
   await expect(after.getByRole('status')).toHaveText('After the run the debt is $3,600.00, from $4,400.00, and the LTV is 45.00%, from 55.00%.');
 });
 
+test('what the quote repays, and a surplus over the debt, at the one precision of the quote', async ({ page, wallet }) => {
+  await page.goto(`${KAMINO}?wallet=${RECORDED_WALLET}&obligation=${HEALTHY.address}`);
+  await expect(page.getByText('Repay $800.00, which is 800 USDC.')).toBeVisible();
+  await wallet.connect();
+  await page.getByRole('button', { name: 'Get exact amount and fee' }).click();
+  await expect(page.getByRole('button', { name: 'Sign and run' })).toBeEnabled();
+  // all that the recipe spends goes to the debt
+  await expect(quoted(page, 'The recipe spends')).toHaveText('774.19965 USDC');
+  await expect(quoted(page, 'It repays')).toHaveText('774.19965 USDC');
+  await expect(quoted(page, 'Surplus')).toHaveCount(0);
+
+  // more than the debt: it repays all of it, and the rest stays with the intermediary, written as the quote writes its figures
+  await page.getByLabel('Amount you pay').fill('5000');
+  await page.getByRole('button', { name: 'Get exact amount and fee' }).click();
+  await expect(page.getByRole('button', { name: 'Sign and run' })).toBeEnabled();
+  await expect(quoted(page, 'The recipe spends')).toHaveText('4,838.85255 USDC');
+  await expect(quoted(page, 'It repays')).toHaveText('4,400.00000 USDC');
+  await expect(quoted(page, 'Surplus')).toHaveText('438.85255 USDC');
+  await expect(quoted(page, "LTV after, at today's prices")).toHaveText('0.00%');
+});
+
+test('after a Refund that went through, the page says where the money went, and shows no before and after', async ({ page, api, connect, wallet }) => {
+  await page.goto(`${KAMINO}?wallet=${RECORDED_WALLET}&obligation=${HEALTHY.address}`);
+  await expect(page.getByText('Repay $800.00, which is 800 USDC.')).toBeVisible();
+  await wallet.connect();
+  await page.getByRole('button', { name: 'Get exact amount and fee' }).click();
+  await expect(page.getByRole('button', { name: 'Sign and run' })).toBeEnabled();
+  // the run fails on Solana, and the Refund sends what the intermediary holds back to the wallet on Base
+  connect.scripts.push(['OPERATION_FAILED']);
+  api.balance = '510000';
+  await page.getByRole('button', { name: 'Sign and run' }).click();
+  await expect(page.getByText('Your intermediary holds 0.51 USDC.')).toBeVisible();
+  await page.getByRole('button', { name: 'Refund', exact: true }).click();
+  api.balance = '0';
+  await page.getByRole('button', { name: 'Sign and refund', exact: true }).click();
+
+  const sent = page.getByRole('region', { name: 'Sent back' });
+  await expect(sent.getByRole('status')).toHaveText(`0.51 USDC went back from your intermediary to ${WALLET.slice(0, 6)}…${WALLET.slice(-4)} on Base, less the bridge's fee. The position is as it was: a refund does not touch it.`);
+  await expect(sent.getByRole('link', { name: 'Open in Basescan (new tab)' })).toHaveAttribute('href', new RegExp(`${WALLET}$`));
+  // the position was read again, and nothing compares it with itself
+  await expect(page.getByRole('region', { name: 'After the run' })).toHaveCount(0);
+  await expect(page.getByText('Reading the position again…')).toHaveCount(0);
+  await ltv(page, 'LTV 55.00%, liquidation at 80.00%, target 45.00%');
+  // it repaid nothing, so the target stays open for the next payment
+  await expect(page.getByLabel('Target LTV, %')).toHaveValue('45');
+  await expect(page.getByRole('button', { name: 'Repay more' })).toHaveCount(0);
+});
+
 test('the builder waits while a run is in flight, and after the repay the target folds away behind Repay more', async ({ page, api, connect, wallet }) => {
   await page.goto(`${KAMINO}?wallet=${RECORDED_WALLET}&obligation=${HEALTHY.address}`);
   await expect(page.getByText('Repay $800.00, which is 800 USDC.')).toBeVisible();
@@ -457,6 +531,9 @@ test('the builder waits while a run is in flight, and after the repay the target
   await expect(page.getByText('already at or under that target', { exact: false })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Before you pay' })).toHaveCount(0);
   await expect(page.getByRole('region', { name: /mainnet fork/ })).toHaveCount(0);
+  // Repay more is the one way to start again: the run card offers no new payment of its own beside it
+  await expect(page.getByRole('button', { name: 'Start a new payment' })).toHaveCount(0);
+  await expect(page.getByLabel('Amount you pay')).toHaveCount(0);
 
   // Repay more opens the target again, at Safe for the position as it is now: 45% less 10 points
   await page.getByRole('button', { name: 'Repay more' }).click();
@@ -468,6 +545,11 @@ test('the builder waits while a run is in flight, and after the repay the target
   await expect(page.getByText('Repay $800.00, which is 800 USDC.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Repay more' })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Checked on a mainnet fork for 800 USDC' })).toBeVisible();
+  // and the run card opens a new payment with its amount by itself, under how the last run ended
+  await expect(page.getByLabel('Amount you pay')).toHaveValue('800');
+  await expect(page.getByRole('button', { name: 'Get exact amount and fee' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Start a new payment' })).toHaveCount(0);
+  await expect(statusOf(page, 'Done: the instructions ran on Solana.')).toBeVisible();
   // what the run did stays on the screen
   await expect(after.getByRole('status')).toHaveText('After the run the debt is $3,600.00, from $4,400.00, and the LTV is 45.00%, from 55.00%.');
 });
@@ -513,6 +595,139 @@ test('on a phone a bar at the foot of the screen leads to the payment, and keeps
   await expect(pay).toBeHidden();
 });
 
+test('on a phone the bar offers to pay only while a new payment is the way on, and else says where the payment is', async ({ page, api, connect, wallet }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${KAMINO}?wallet=${RECORDED_WALLET}&obligation=${HEALTHY.address}`);
+  await expect(page.getByText('Repay $800.00, which is 800 USDC.')).toBeVisible();
+  await wallet.connect();
+  await page.getByRole('button', { name: 'Get exact amount and fee' }).click();
+  await expect(page.getByRole('button', { name: 'Sign and run' })).toBeEnabled();
+  const payment = page.getByRole('region', { name: 'Payment' });
+  const bar = page.locator('[data-ui="pay-bar"]');
+  const pay = page.getByRole('button', { name: 'Pay, in the payment card below' });
+  const view = page.getByRole('button', { name: 'View the payment' });
+  const top = () => page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+
+  // the run fails on Solana once its deposit is through
+  connect.scripts.push(['OPERATION_FAILED']);
+  api.balance = '510000';
+  const transfer = await wallet.hold('eth_sendTransaction');
+  await page.getByRole('button', { name: 'Sign and run' }).click();
+  await transfer.reached();
+  // the wallet sends the deposit: nothing to pay, and View leads to the card that says what to do
+  await top();
+  await expect(view).toBeInViewport();
+  await expect(bar).toContainText('Waiting for your deposit');
+  await expect(pay).toHaveCount(0);
+  await expect(bar.getByText('Repay 800 USDC', { exact: true })).toHaveCount(0);
+  await view.click();
+  await expect(payment).toBeFocused();
+  await expect(payment).toBeInViewport();
+  await expect(statusOf(page, 'Confirm the deposit in your wallet.')).toBeVisible();
+  await transfer.release();
+
+  // the money waits with the intermediary for Retry or Refund, which the card offers: still nothing to pay
+  await expect(page.getByText('Your intermediary holds 0.51 USDC.')).toBeVisible();
+  await top();
+  await expect(view).toBeInViewport();
+  await expect(bar).toContainText('Payment failed');
+  await expect(pay).toHaveCount(0);
+  await view.click();
+  await expect(payment).toBeFocused();
+  await expect(payment.getByRole('button', { name: 'Refund', exact: true })).toBeInViewport();
+  // and so while the Refund is quoted
+  await payment.getByRole('button', { name: 'Refund', exact: true }).click();
+  await expect(payment.getByRole('button', { name: 'Sign and refund', exact: true })).toBeVisible();
+  await top();
+  await expect(bar).toContainText('Payment failed');
+  await expect(pay).toHaveCount(0);
+});
+
+test('on a phone the keyboard never leaves the focus under the pay bar', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(`${KAMINO}?wallet=${RECORDED_WALLET}`);
+  await expect(page.getByText('Repay $800.00, which is 800 USDC.')).toBeVisible();
+  const bar = page.locator('[data-ui="pay-bar"]');
+  // every stop of the Tab key above the payment card, where the bar shows, in their order
+  const stops = await page.getByRole('main').evaluate(main => {
+    const card = main.querySelector('section[aria-label="Payment"]')!;
+    const all = main.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])');
+    const above = [...all].filter(one => one.getClientRects().length > 0 && one.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING);
+    above.forEach((one, index) => one.setAttribute('data-stop', String(index)));
+    return above.length;
+  });
+  expect(stops).toBeGreaterThan(8);
+
+  /** Whether the bar shows over any of this stop. */
+  const covered = async (stop: Locator) => {
+    if (!(await bar.isVisible())) return false;
+    const [one, under] = [await stop.boundingBox(), await bar.boundingBox()];
+    return one!.y + one!.height > under!.y;
+  };
+
+  let tested = 0;
+  for (let index = 1; index < stops; index++) {
+    const stop = page.locator(`[data-stop="${index}"]`);
+    // the one before has the focus, and scrolling has left the next one at the bottom of the screen, under the bar
+    await page.locator(`[data-stop="${index - 1}"]`).evaluate((one: HTMLElement) => one.focus({ preventScroll: true }));
+    await stop.evaluate(one => window.scrollBy({ top: one.getBoundingClientRect().bottom - window.innerHeight + 16, behavior: 'instant' }));
+    const before = await covered(stop);
+    await page.keyboard.press('Tab');
+    await expect(stop).toBeFocused();
+    if (!before) continue;
+    tested++;
+    // the browser brings it up clear of the bar
+    await expect.poll(() => covered(stop), { timeout: 2000 }).toBe(false);
+  }
+  // most of them were under the bar before the Tab, so the walk tested something
+  expect(tested).toBeGreaterThan(stops / 2);
+});
+
+test('on a phone, while the card offers to finish an execution first, the bar leads there and offers no payment', async ({ page, connect, wallet }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${KAMINO}?wallet=${RECORDED_WALLET}&obligation=${HEALTHY.address}`);
+  await expect(page.getByText('Repay $800.00, which is 800 USDC.')).toBeVisible();
+  await wallet.connect();
+  await page.getByRole('button', { name: 'Get exact amount and fee' }).click();
+  await expect(page.getByRole('button', { name: 'Sign and run' })).toBeEnabled();
+  const payment = page.getByRole('region', { name: 'Payment' });
+  const bar = page.locator('[data-ui="pay-bar"]');
+  const pay = page.getByRole('button', { name: 'Pay, in the payment card below' });
+  const view = page.getByRole('button', { name: 'View the payment' });
+  const top = () => page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+
+  // another execution of this wallet holds its one slot: the card offers to resume it or delete it
+  connect.seed({ wallet: WALLET, status: 'CREATED', signed: false });
+  await page.getByRole('button', { name: 'Sign and run' }).click();
+  await expect(payment.getByRole('button', { name: 'Resume it', exact: true })).toBeVisible();
+  await top();
+  await expect(view).toBeInViewport();
+  await expect(bar).toContainText('Another payment in flight');
+  await expect(pay).toHaveCount(0);
+  await view.click();
+  await expect(payment).toBeFocused();
+
+  // once it is deleted, a new payment is the way on again
+  await payment.getByRole('button', { name: 'Delete it (a signature that moves no money)' }).click();
+  await expect(payment.getByText(/was deleted, so a new run can start\.$/)).toBeVisible();
+  await top();
+  await expect(pay).toBeInViewport();
+  await expect(bar.getByText('Repay 800 USDC', { exact: true })).toBeVisible();
+
+  // a deposit transfer the wallet declined: the card offers to send it again, or to cancel
+  await wallet.rejectTransactions(1);
+  await payment.getByRole('button', { name: 'Sign and run' }).click();
+  await expect(statusOf(page, 'The deposit transfer did not go through.')).toBeVisible();
+  await top();
+  await expect(view).toBeInViewport();
+  await expect(bar).toContainText('Deposit not sent');
+  await expect(pay).toHaveCount(0);
+  await view.click();
+  await expect(payment).toBeFocused();
+  await expect(payment.getByRole('button', { name: 'Send the deposit again' })).toBeVisible();
+});
+
 test('no positions, an address that is not one, and a read that failed', async ({ page, api }) => {
   await page.goto(KAMINO);
   api.kamino = 'none';
@@ -535,4 +750,47 @@ test('no positions, an address that is not one, and a read that failed', async (
   api.kamino = 'healthy';
   await failure.getByRole('button', { name: 'Try again' }).click();
   await expect(page.getByRole('heading', { name: 'Position', exact: true })).toBeVisible();
+});
+
+test('the title is the one h1 of the page, and each part of it is a level under what holds it', async ({ page, api, wallet }) => {
+  await page.goto(KAMINO);
+  await heading(page, 'Repay a Kamino debt', 1);
+  await outlined(page);
+
+  api.kamino = 'none';
+  await read(page);
+  await heading(page, 'No open positions', 2);
+  await outlined(page);
+
+  api.kamino = 'three';
+  await read(page);
+  await heading(page, 'Choose a position', 2);
+  await outlined(page);
+
+  // the payment card is a part of its own beside the position, and its headings sit under its title
+  await choice(page, `LTV 55.00% 25.00 pts to liquidation ${short(HEALTHY.address)} owes USDC $4,400.00 against $8,000.00`).click();
+  await heading(page, 'Pay and run', 2);
+  await heading(page, 'Position', 2);
+  await heading(page, 'Collateral', 3);
+  await heading(page, 'Debt', 3);
+  await heading(page, 'Target LTV', 3);
+  await heading(page, 'Before you pay', 3);
+  await heading(page, 'Checked on a mainnet fork for 800 USDC', 2);
+  await outlined(page);
+
+  await choice(page, `LTV 80.20% 10.80 pts to liquidation ${short(RECORDED_CASH.address)} owes CASH $3.23 against $4.03`).click();
+  await heading(page, 'No payment for this position', 2);
+  await outlined(page);
+
+  // after a run, what it did is a part of its own, over the position
+  await page.goto(`${KAMINO}?wallet=${RECORDED_WALLET}&obligation=${HEALTHY.address}`);
+  await expect(page.getByText('Repay $800.00, which is 800 USDC.')).toBeVisible();
+  await wallet.connect();
+  await page.getByRole('button', { name: 'Get exact amount and fee' }).click();
+  await expect(page.getByRole('button', { name: 'Sign and run' })).toBeEnabled();
+  api.kamino = 'repaid';
+  await page.getByRole('button', { name: 'Sign and run' }).click();
+  await heading(page, 'After the run', 2);
+  await heading(page, 'Position', 2);
+  await outlined(page);
 });

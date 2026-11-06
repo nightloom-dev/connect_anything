@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from 'react';
-import { ArrowRight, CircleCheck, Plus, RotateCw } from 'lucide-react';
+import { ArrowRight, CircleCheck, Plus, RotateCw, Undo2 } from 'lucide-react';
 import type { Obligation } from '@connect-anything/kamino-rescue';
-import { Button, Card, HealthBar, Skeleton, Spinner, cn } from '../../ui/index.ts';
+import { Address, Button, Card, HealthBar, Skeleton, Spinner, cn } from '../../ui/index.ts';
 import { dollars, percent, points } from './format.ts';
 
 function Change({ label, from, to, delta, down }: { label: string; from: string; to: string; delta: string; down: boolean }) {
@@ -48,9 +48,9 @@ export function BeforeAfter({ before, after, reading = false, onReadAgain }: Bef
           <span className="flex size-9 shrink-0 items-center justify-center rounded-md border border-success/32 bg-success/12 text-success" aria-hidden>
             <CircleCheck className="size-[18px]" />
           </span>
-          <h3 id={id} className="min-w-0 flex-1 text-base leading-6 font-semibold text-text">
+          <h2 id={id} className="min-w-0 flex-1 text-base leading-6 font-semibold text-text">
             After the run
-          </h3>
+          </h2>
           <Button size="sm" icon={<RotateCw />} loading={reading} onClick={onReadAgain}>
             Read again
           </Button>
@@ -70,6 +70,44 @@ export function BeforeAfter({ before, after, reading = false, onReadAgain }: Bef
           <HealthBar size="sm" value={before.ltv} after={moved ? after.ltv : null} liquidation={after.liquidationLtv} format={percent} />
         </div>
       )}
+    </Card>
+  );
+}
+
+type SentBackProps = {
+  /** What left the intermediary, as "0.51 USDC", if the page knows the token. */
+  amount?: string;
+  /** The wallet it went back to, and the chain it is on (base, arb or eth), if the run says. */
+  to?: string;
+  chain?: { id: string; name: string };
+};
+
+/**
+ * After a Refund that went through, in place of the comparison: it sent the money with the intermediary back to the wallet
+ * and did nothing on Kamino, so there is no before and after to show.
+ */
+export function SentBack({ amount, to, chain }: SentBackProps) {
+  const id = useId();
+  return (
+    <Card as="section" aria-labelledby={id} padding="lg" className="flex flex-col gap-3 border-success/32 bg-linear-to-b from-success/6 to-surface">
+      <div className="flex items-center gap-3">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-md border border-success/32 bg-success/12 text-success" aria-hidden>
+          <Undo2 className="size-[18px]" />
+        </span>
+        <h2 id={id} className="min-w-0 flex-1 text-base leading-6 font-semibold text-text">
+          Sent back
+        </h2>
+      </div>
+      <p role="status" className="text-sm leading-6 text-text/80">
+        {amount ?? 'The money'} went back from your intermediary
+        {to && (
+          <>
+            {' '}
+            to <Address value={to} chain={chain?.id} copy={false} explorer={!!chain} />
+          </>
+        )}
+        {chain && ` on ${chain.name}`}, less the bridge&apos;s fee. The position is as it was: a refund does not touch it.
+      </p>
     </Card>
   );
 }

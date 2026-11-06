@@ -43,9 +43,9 @@ export function TargetLtv({ value, onChange, fraction, now, liquidation, presets
     <section aria-labelledby={id} className="flex flex-col gap-4">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h4 id={id} className="text-base font-semibold text-text">
+          <h3 id={id} className="text-base font-semibold text-text">
             Target LTV
-          </h4>
+          </h3>
           <p className="mt-0.5 text-sm text-muted">Where the repay brings the LTV, at today's prices.</p>
         </div>
         <div className="w-28 shrink-0">

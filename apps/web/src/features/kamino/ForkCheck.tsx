@@ -14,11 +14,23 @@ const VERDICT = {
   fail: { variant: 'bad', text: 'Failed' },
 } as const;
 
-function Meters({ result, dim = false }: { result: SimResult; dim?: boolean }) {
+/**
+ * The simulator's figures. `stale` while the check runs again: the last figures stay, in grey and under a line that says
+ * so, at full contrast for whoever reads them (a faded figure would fall under 4.5:1).
+ */
+function Meters({ result, stale = false }: { result: SimResult; stale?: boolean }) {
   return (
-    <div className={cn('grid gap-x-6 gap-y-4 transition-opacity duration-200 @md:grid-cols-2', dim && 'opacity-50')}>
-      <Meter label="Compute units" value={result.computeUnits} max={CU_MAX} unit="CU" />
-      <Meter label="Transaction size" value={result.txBytes} max={BYTES_MAX} unit="bytes" />
+    <div className="flex flex-col gap-3">
+      {stale && (
+        <p className="flex items-start gap-2 text-xs leading-5 text-muted">
+          <span aria-hidden className="mt-[7px] size-1.5 shrink-0 animate-pulse-dot rounded-full bg-muted" />
+          Checking again. These figures are from the last check.
+        </p>
+      )}
+      <div className={cn('grid gap-x-6 gap-y-4 @md:grid-cols-2', stale && 'grayscale [&_.text-text]:text-muted')}>
+        <Meter label="Compute units" value={result.computeUnits} max={CU_MAX} unit="CU" />
+        <Meter label="Transaction size" value={result.txBytes} max={BYTES_MAX} unit="bytes" />
+      </div>
     </div>
   );
 }
@@ -92,13 +104,14 @@ export function ForkCheckCard({ check, amount, steps, onRetry, action }: ForkChe
   const id = useId();
   const result = check.kind === 'done' ? check.result : undefined;
   const verdict = result && VERDICT[result.verdict];
-  // the title says for which amount: the target's, which the quote then delivers less of, after fees
+  // the title says for which amount: the target's, which the quote then delivers less of, after fees; while the check runs
+  // again, the figures under it are for the amount before, so it says only that it is checking
   const title =
     check.kind === 'offline'
       ? 'Not simulated: simulator offline'
       : check.kind === 'failed' || check.kind === 'idle'
         ? 'Not simulated'
-        : check.kind === 'checking' && !check.last
+        : check.kind === 'checking'
           ? 'Checking on a mainnet fork…'
           : `Checked on a mainnet fork${amount ? ` for ${amount}` : ''}`;
 
@@ -109,9 +122,9 @@ export function ForkCheckCard({ check, amount, steps, onRetry, action }: ForkChe
           <FlaskConical className="size-[18px]" />
         </span>
         <div className="min-w-0 flex-1">
-          <h3 id={id} className="text-base leading-6 font-semibold text-text">
+          <h2 id={id} className="text-base leading-6 font-semibold text-text">
             {title}
-          </h3>
+          </h2>
           <p role="status" className="mt-0.5 text-sm text-muted">
             {check.kind === 'idle' && 'Nothing to simulate: the target asks for no repay.'}
             {check.kind === 'checking' && `Running the repay${amount ? ` of ${amount}` : ''} on a fork of mainnet…`}
@@ -131,7 +144,7 @@ export function ForkCheckCard({ check, amount, steps, onRetry, action }: ForkChe
       </header>
 
       {result && <Meters result={result} />}
-      {check.kind === 'checking' && (check.last ? <Meters result={check.last} dim /> : <MetersSkeleton />)}
+      {check.kind === 'checking' && (check.last ? <Meters result={check.last} stale /> : <MetersSkeleton />)}
 
       {result && result.warnings.length > 0 && (
         <ul className="flex flex-col gap-1 text-sm text-warning">

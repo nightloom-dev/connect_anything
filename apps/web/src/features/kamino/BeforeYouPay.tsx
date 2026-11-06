@@ -21,9 +21,9 @@ export function BeforeYouPay() {
   const id = useId();
   return (
     <section aria-labelledby={id} className="rounded-lg border border-border bg-surface-2/50 px-4 py-3.5">
-      <h4 id={id} className="text-sm font-semibold text-text">
+      <h3 id={id} className="text-sm font-semibold text-text">
         Before you pay
-      </h4>
+      </h3>
       <ul className="mt-2.5 flex flex-col gap-2 text-sm text-text/85">
         <Item icon={<HandCoins />}>It repays debt only: the collateral stays with the position's owner.</Item>
         <Item icon={<LockKeyhole />}>The amount is fixed when you sign. What is not spent can come back through Refund.</Item>
