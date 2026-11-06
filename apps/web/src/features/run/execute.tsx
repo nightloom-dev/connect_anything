@@ -5,10 +5,10 @@ import { useIntentsConnect, type UseExecutionResult } from '@aurora-is-near/inte
 import { useIntentsConnectWallet } from '@aurora-is-near/intents-connect-wallet/connect/appkit';
 import type { Idl } from '@connect-anything/core';
 import { checkCompat, issueText } from '../../compat.ts';
-import { CHAINS, STAGES, STAGE_OF, bridgeKeeps, bridgePlan, bySymbol, existingOffer, explain, fromAtomic, isQuoteMoved, legs, refundBody, retryPlan, stoppedFollowing, toAtomic, type Balance, type Token, type TokenList } from '../../connect.ts';
+import { CHAINS, STAGE_OF, bridgeKeeps, bridgePlan, bySymbol, existingOffer, explain, fromAtomic, isQuoteMoved, legs, refundBody, retryPlan, stoppedFollowing, toAtomic, type Balance, type Token, type TokenList } from '../../connect.ts';
 import { STAND_IN, buildRecipe, destinationIssue, matchesPublished, runsRecipe, signsOnlyRecipe, takesAmount, type StoredRecipe } from '../../recipe.ts';
 import { Failure, Notice, short, useAct, useAsync, useJson } from '../../ui.tsx';
-import { Address, Alert, Button, ChainIcon, Checkbox, Skeleton, Spinner, Timeline, TokenIcon, chainMeta, copyText, type StageState, type TimelineStage } from '../../ui/index.ts';
+import { Address, Alert, Button, ChainIcon, Checkbox, Skeleton, Spinner, Timeline, TokenIcon, chainMeta, copyText, type StageState } from '../../ui/index.ts';
 import {
   AMOUNT_INPUT,
   Actions,
@@ -25,6 +25,7 @@ import {
   ExplorerLink,
   Facts,
   Figure,
+  FigureRow,
   Figures,
   Held,
   LONG_LABEL,
@@ -44,8 +45,9 @@ import {
   TokenTag,
   WorkingLine,
 } from './parts.tsx';
+import { flowOf, progressStages } from './progress.ts';
 import { IdlCheck, Summary, TrustPanel } from './summary.tsx';
-import { CANCEL_NOTE, DOING, PHASE_TEXT, TIME_NOTE } from './words.ts';
+import { BROKE_NOTE, CANCEL_NOTE, DOING, LATE_NOTE, PHASE_TEXT, REFUND_DOING, TIME_NOTE } from './words.ts';
 
 const SOLSCAN = 'https://solscan.io';
 // Known limit: these live in this browser, so another browser finds an execution only through the 409 of a second run.
@@ -86,8 +88,11 @@ function Progress({ exec, chain, resumed, unfinished }: { exec: UseExecutionResu
   // a resume asks the wallet for the deposit only while the execution is CREATED: after that the address is shown instead
   const text = exec.error || (resumed && phase === 'awaiting-deposit' && status !== 'CREATED') ? undefined : PHASE_TEXT[phase];
   const stage = status ? STAGE_OF[status] : -1;
-  const originChain = (execution?.quote?.originAsset && parseOriginAsset(execution.quote.originAsset)?.chain) || chain;
-  const evmTx = CHAINS.find(({ id }) => id === originChain)?.tx ?? CHAINS[0].tx;
+  const flow = flowOf(execution);
+  // the EVM side of the execution, for its links: where a bridge-in comes from, and where a Refund goes
+  const evmAsset = flow === 'refund' ? execution?.quote?.destinationAsset : execution?.quote?.originAsset;
+  const evmChain = (evmAsset && parseOriginAsset(evmAsset)?.chain) || chain;
+  const evmTx = CHAINS.find(({ id }) => id === evmChain)?.tx ?? CHAINS[0].tx;
   const { evmTxHash, solanaTxHash } = execution?.transaction ?? {};
   const failed = status === 'DEPOSIT_FAILED' || status === 'OPERATION_FAILED';
 
@@ -95,25 +100,31 @@ function Progress({ exec, chain, resumed, unfinished }: { exec: UseExecutionResu
   // signature is in is stale: the stages show the deposit, and the line under them leaves that status out.
   const stale = status === 'CREATED' && exec.hasSubmittedSignature;
   const at = stale ? STAGE_OF.DEPOSIT_PENDING : stage;
-  // nothing runs on this page now: what stopped is waiting on the person (paused) or did not go through (failed)
-  const now: StageState = failed ? 'failed' : status === 'SUCCESS' ? 'success' : phase === 'cancelled' ? 'cancelled' : exec.isBusy ? 'active' : unfinished || phase === 'expired' ? 'paused' : 'failed';
+  // a cancel wipes the status, so the stages stop where this page last saw the execution
+  const [seen, setSeen] = useState<{ id?: string; at: number }>({ at: -1 });
+  if (at >= 0 && (seen.at !== at || seen.id !== executionId)) setSeen({ id: executionId, at });
+  const where = at < 0 && phase === 'cancelled' && seen.id === executionId ? seen.at : at;
+  // Past its window the runner still polls for a late deposit, so it stays busy: that wait is on the person (paused), and
+  // so is what stopped otherwise. What did not go through is failed.
+  const now: StageState =
+    failed ? 'failed' : status === 'SUCCESS' ? 'success' : phase === 'cancelled' ? 'cancelled' : phase === 'expired' ? 'paused' : exec.isBusy ? 'active' : unfinished ? 'paused' : 'failed';
   const note =
     status === 'OPERATION_FAILED'
-      ? 'The instructions failed on Solana'
+      ? BROKE_NOTE[flow === 'refund' ? 'refund' : 'instructions']
       : status === 'DEPOSIT_FAILED'
-        ? 'The deposit failed, so nothing ran'
+        ? BROKE_NOTE.deposit
         : exec.recovery?.kind === 'retry-transfer'
           ? 'The transfer did not go through'
           : phase === 'expired'
-            ? 'The deposit window passed'
+            ? LATE_NOTE
             : unfinished
               ? 'This page stopped following it'
               : now === 'failed' && at === 0
                 ? 'Not signed'
                 : now === 'active'
-                  ? DOING[at]
+                  ? (flow === 'refund' ? REFUND_DOING : DOING)[at]
                   : undefined;
-  const explorer = (chainMeta(originChain) ?? chainMeta(CHAINS[0].id))!.explorer;
+  const explorer = (chainMeta(evmChain) ?? chainMeta(CHAINS[0].id))!.explorer;
   const links: (ReactNode | undefined)[] = [
     undefined,
     (depositTxHash || (evmTxHash && evmTxHash !== depositTxHash)) && (
@@ -126,23 +137,13 @@ function Progress({ exec, chain, resumed, unfinished }: { exec: UseExecutionResu
     solanaTxHash && <ExplorerLink href={`${SOLSCAN}/tx/${solanaTxHash}`} label={short(solanaTxHash)} explorer="Solscan" />,
     undefined,
   ];
-  const stages: TimelineStage[] = STAGES.map((name, index) => {
-    const last = index === STAGES.length - 1;
-    return {
-      id: name,
-      title: last && status === 'SUCCESS' ? 'Success' : last && failed ? 'Failed' : name,
-      state: index < at ? 'done' : index === at ? now : 'pending',
-      description: index === at ? note : undefined,
-      time: index === 0 ? timeOf(execution?.createdAt) : undefined,
-      link: links[index] || undefined,
-    };
-  });
+  const stages = progressStages({ at: where, now, status, phase, flow, note, time: timeOf(execution?.createdAt), links });
 
   return (
     <Block>
       {text && <PhaseCallout phase={phase} text={text} since={execution?.createdAt} />}
-      {/* the callout says each phase as it changes, so the stages stay quiet */}
-      <Timeline stages={stages} label="Progress" announce="" />
+      {/* the callout says each phase as it changes, so the stages stay quiet. A cancel this page did not see has no stage to stop at. */}
+      {(where >= 0 || phase !== 'cancelled') && <Timeline stages={stages} label="Progress" announce="" />}
       {(status || executionId) && (
         <MetaLine>
           {status && !stale && `${status}. `}
@@ -288,8 +289,7 @@ function Recover({ exec, execution, unsigned, act, locked, recipe, stored, gate,
           {retry && (
             <QuoteBox title="Retry">
               <Figures>
-                <dt>Fee</dt>
-                <dd>{amount(retry.networkFee)}</dd>
+                <FigureRow term="Fee">{amount(retry.networkFee)}</FigureRow>
                 <Spends stored={stored} figure={amount(retry.spendable)} />
               </Figures>
               {moved && <Notice kind="warn">The fee moved before you signed. These are the new numbers, and nothing was charged.</Notice>}
@@ -302,16 +302,11 @@ function Recover({ exec, execution, unsigned, act, locked, recipe, stored, gate,
           {refund && backTo && (
             <QuoteBox title="Refund">
               <Figures>
-                <dt>You get at least</dt>
-                <dd>
+                <FigureRow term="You get at least">
                   {fromAtomic(refund.quote.minAmountOut, backTo.decimals)} {backTo.symbol} on {CHAINS.find(({ id }) => id === backTo.blockchain)?.name}
-                </dd>
-                <dt>Sent to</dt>
-                <dd>
-                  <code className="font-mono text-[0.8125rem] break-all">{address}</code>
-                </dd>
-                <dt>Fee</dt>
-                <dd>{amount(refund.details.networkFee)}</dd>
+                </FigureRow>
+                <FigureRow term="Sent to">{address && <Address value={address} chain={backTo.blockchain} full />}</FigureRow>
+                <FigureRow term="Fee">{amount(refund.details.networkFee)}</FigureRow>
               </Figures>
               <Caption>Figures from a test run: the real one can differ by what the price does in the seconds before you sign.</Caption>
               {unsigned && <Notice kind="warn">Your wallet will first ask you to sign the deletion of the earlier attempt. That moves no money.</Notice>}
@@ -401,6 +396,8 @@ function Existing({ id, head, address, intermediary, stored, list, gate, locked,
   const paid = quote?.swapType === 'EXACT_OUTPUT' ? quote.amountIn : quote?.amount;
   const token = [...(list?.sources ?? []), ...(list?.tokens ?? [])].find(({ assetId }) => assetId === quote?.originAsset);
   const chain = CHAINS.find(({ id: known }) => known === token?.blockchain);
+  // where an address of the quote lives, for its explorer: the deposit on the side paid from, the recipient on the other
+  const on = (asset?: string) => (asset && parseOriginAsset(asset)?.chain) || undefined;
 
   return (
     <ExistingFrame title={title}>
@@ -413,7 +410,7 @@ function Existing({ id, head, address, intermediary, stored, list, gate, locked,
           <>
             <dt>Deposit</dt>
             <dd>
-              {token && paid ? `${fromAtomic(paid, token.decimals)} ${token.symbol}${chain ? ` on ${chain.name}` : ''}` : `${paid} atomic units of ${quote.originAsset}`} to <code>{quote.depositAddress}</code>
+              {token && paid ? `${fromAtomic(paid, token.decimals)} ${token.symbol}${chain ? ` on ${chain.name}` : ''}` : `${paid} atomic units of ${quote.originAsset}`} to <Address value={quote.depositAddress} chain={on(quote.originAsset)} explorer={!!on(quote.originAsset)} full />
             </dd>
           </>
         )}
@@ -421,7 +418,7 @@ function Existing({ id, head, address, intermediary, stored, list, gate, locked,
           <>
             <dt>Delivered to</dt>
             <dd>
-              <code>{quote.recipient}</code>
+              <Address value={quote.recipient} chain={on(quote.destinationAsset)} explorer={!!on(quote.destinationAsset)} full />
             </dd>
           </>
         )}
@@ -642,6 +639,9 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
 
   const deposit = exec.execution?.quote;
   const depositToken = list.data?.sources.find(token => token.assetId === deposit?.originAsset);
+  // the network a deposit has to be sent on: the same address on another one never reaches Connect
+  const depositChain = CHAINS.find(({ id }) => id === depositToken?.blockchain);
+  const depositWhat = depositToken && `${depositToken.symbol}${depositChain ? ` on ${depositChain.name}` : ''}`;
   const existing = { address: address!, intermediary, stored, list: list.data, gate: refused, locked, act, resume, drop: dropAndSay };
 
   // the person reads what will run before they consent to it on a shared link, and finds it under the card elsewhere
@@ -785,8 +785,7 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
             }
           >
             <Figures>
-              <dt>You pay</dt>
-              <dd>
+              <FigureRow term="You pay">
                 <Figure
                   value={
                     <>
@@ -795,14 +794,13 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
                   }
                   note="plus the gas of the deposit"
                 />
-              </dd>
-              <dt>Network fee</dt>
-              <dd>
+              </FigureRow>
+              <FigureRow term="Network fee">
                 <Figure
                   value={preview.execution.details.networkFee ? `${fromAtomic(preview.execution.details.networkFee, target.decimals)} ${target.symbol}` : 'none stated'}
                   note="taken out of what is delivered"
                 />
-              </dd>
+              </FigureRow>
               <Spends stored={stored} figure={preview.spendable ? `${fromAtomic(preview.spendable, target.decimals)} ${target.symbol}` : '–'} />
             </Figures>
             <Figures className="border-t border-border pt-2.5 empty:hidden">{preview.spendable && outcome?.(preview.spendable)}</Figures>
@@ -911,7 +909,7 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
           <DepositBox
             actions={
               <>
-                <Button size="sm" icon={<Copy />} onClick={() => copyText(deposit.depositAddress, 'Deposit address copied')}>
+                <Button size="sm" icon={<Copy />} onClick={() => copyText(deposit.depositAddress, depositWhat ? `Deposit address copied. Send only ${depositWhat} to it.` : 'Deposit address copied')}>
                   Copy the address
                 </Button>
                 <Button size="sm" variant="ghost" disabled={exec.isCancelling} onClick={cancel(exec.executionId!)}>
@@ -921,7 +919,7 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
             }
           >
             <p>
-              Waiting for a deposit of <strong>{depositToken ? `${fromAtomic(deposit.amount, depositToken.decimals)} ${depositToken.symbol}` : `${deposit.amount} atomic units`}</strong> to <code>{deposit.depositAddress}</code>. If you already sent it, wait: sending it again would pay
+              Waiting for a deposit of <strong>{depositToken ? `${fromAtomic(deposit.amount, depositToken.decimals)} ${depositWhat}` : `${deposit.amount} atomic units`}</strong> to <code>{deposit.depositAddress}</code>. If you already sent it, wait: sending it again would pay
               twice. If you have not, send it from any wallet and this page will follow it.
             </p>
             <p className="mt-2 text-xs text-muted">{CANCEL_NOTE}</p>

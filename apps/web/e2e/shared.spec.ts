@@ -63,6 +63,9 @@ test('a link that leads to no recipe, or to a malformed one, runs nothing', asyn
     await expect(alertOf(page, 'This link does not lead to a recipe.')).toContainText('Ask the sender for a new link.');
     await expect(page.getByRole('button', { name: 'Connect EVM wallet' })).toHaveCount(0);
   }
+  // and it is no dead end: the two ways on of the 404 page
+  await expect(alertOf(page, 'This link does not lead to a recipe.').getByRole('link', { name: 'Rescue Kamino' })).toHaveAttribute('href', '/kamino');
+  await expect(alertOf(page, 'This link does not lead to a recipe.').getByRole('link', { name: 'Build a recipe' })).toHaveAttribute('href', '/build');
 
   await page.goto(shared(RECIPES.corrupt));
   await expect(alertOf(page, 'This recipe is malformed: it is not a version 1 recipe. Nothing can run from this link.')).toContainText('Ask the sender for a new link.');

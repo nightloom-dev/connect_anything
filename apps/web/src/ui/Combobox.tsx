@@ -33,6 +33,13 @@ type ComboboxProps<T> = {
   className?: string;
 };
 
+/** Where the icon and the button sit in the field, and the room the text leaves them: FIELD_SIZE's padding, a 16px icon and a gap of 8. */
+const AFFIX: Record<InputSize, { icon: string; button: string; input: string }> = {
+  sm: { icon: 'left-2.5', button: 'right-1.5', input: 'pr-10.5 pl-8.5' },
+  md: { icon: 'left-3', button: 'right-2', input: 'pr-11 pl-9' },
+  lg: { icon: 'left-3.5', button: 'right-2.5', input: 'pr-11.5 pl-9.5' },
+};
+
 const contains = (label: string, query: string) => label.toLowerCase().includes(query.trim().toLowerCase());
 
 /** A field that filters a list as you type. Arrows move, Enter picks, Escape closes and restores the value. */
@@ -72,18 +79,9 @@ export function Combobox<T>({
         immediate={immediate}
         invalid={!!error}
       >
-        <div
-          className={cn(
-            'group relative flex w-full min-w-0 items-center gap-2 rounded-md border transition-[border-color,box-shadow] duration-120 ease-out',
-            FIELD_SIZE[size],
-            disabled
-              ? 'cursor-not-allowed border-border-control bg-surface opacity-60'
-              : error
-                ? 'border-danger/70 bg-surface-2 has-[input:focus]:border-danger has-[input:focus]:shadow-[0_0_0_4px_rgb(255_92_108/0.18)]'
-                : 'border-border-control bg-surface-2 [&:hover:not(:has(input:focus))]:border-border-control-hover has-[input:focus]:border-accent has-[input:focus]:shadow-glow',
-          )}
-        >
-          <Search className="size-4 shrink-0 text-muted" aria-hidden />
+        {/* The input is the frame: the list anchors to it, so it takes the field's width and left edge. */}
+        <div className={cn('group relative w-full min-w-0', disabled && 'opacity-60')}>
+          <Search className={cn('pointer-events-none absolute top-1/2 size-4 -translate-y-1/2 text-muted', AFFIX[size].icon)} aria-hidden />
           <ComboboxInput
             aria-label={rest['aria-label']}
             placeholder={placeholder}
@@ -91,16 +89,25 @@ export function Combobox<T>({
             onChange={event => setQuery(event.target.value)}
             autoComplete="off"
             spellCheck={false}
-            className="h-full min-w-0 flex-1 bg-transparent text-text outline-none placeholder:text-placeholder disabled:cursor-not-allowed"
+            className={cn(
+              'block w-full min-w-0 rounded-md border text-text outline-none transition-[border-color,box-shadow] duration-120 ease-out placeholder:text-placeholder',
+              FIELD_SIZE[size],
+              AFFIX[size].input,
+              disabled
+                ? 'cursor-not-allowed border-border-control bg-surface'
+                : error
+                  ? 'border-danger/70 bg-surface-2 focus:border-danger focus:shadow-[0_0_0_4px_rgb(255_92_108/0.18)]'
+                  : 'border-border-control bg-surface-2 group-hover:[&:not(:focus)]:border-border-control-hover focus:border-accent focus:shadow-glow',
+            )}
           />
-          <ComboboxButton className="-mr-1 flex size-7 shrink-0 items-center justify-center rounded-sm text-muted hover:text-text" aria-label="Show all">
+          <ComboboxButton className={cn('absolute top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-sm text-muted hover:text-text', AFFIX[size].button)} aria-label="Show all">
             <ChevronsUpDown className="size-4" aria-hidden />
           </ComboboxButton>
         </div>
         <ComboboxOptions
           anchor={{ to: 'bottom start', gap: 6 }}
           transition
-          className={cn(popoverPanel, 'max-h-80 w-(--input-width) min-w-72 overflow-y-auto p-1 empty:invisible')}
+          className={cn(popoverPanel, 'max-h-80 w-(--input-width) overflow-y-auto p-1 empty:invisible')}
         >
           {shown.length === 0 ? (
             <div className="px-3 py-6 text-center text-sm text-muted">{empty}</div>

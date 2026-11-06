@@ -1,16 +1,32 @@
 import { useMemo, type ReactNode } from 'react';
-import { FileWarning, Link2Off } from 'lucide-react';
+import { Blocks, FileWarning, LifeBuoy, Link2Off } from 'lucide-react';
+import { Link } from 'wouter';
 import { useExecution } from '@aurora-is-near/intents-connect/react';
 import { parseStored, toSolanaRecipe } from '../../recipe.ts';
 import { Failure, FetchError, useJson } from '../../ui.tsx';
-import { EmptyState, Skeleton, Spinner } from '../../ui/index.ts';
+import { EmptyState, Skeleton, Spinner, buttonClass } from '../../ui/index.ts';
 import { Execute } from './execute.tsx';
 
-/** A link that leads nowhere that can run: what is wrong, and the one thing to do about it. */
+/** A link that leads nowhere that can run: what is wrong, what to do about it, and the two ways on, as on the 404 page. */
 export function Dead({ icon, title, children }: { icon: ReactNode; title: string; children?: ReactNode }) {
   return (
     <div role="alert" className="rounded-xl border border-border bg-surface">
-      <EmptyState icon={icon} title={title}>
+      <EmptyState
+        icon={icon}
+        title={title}
+        action={
+          <>
+            <Link href="/kamino" className={buttonClass({ size: 'sm' })}>
+              <LifeBuoy className="size-4" aria-hidden />
+              Rescue Kamino
+            </Link>
+            <Link href="/build" className={buttonClass({ size: 'sm' })}>
+              <Blocks className="size-4" aria-hidden />
+              Build a recipe
+            </Link>
+          </>
+        }
+      >
         {children}
         <p className="mt-1.5">Ask the sender for a new link.</p>
       </EmptyState>

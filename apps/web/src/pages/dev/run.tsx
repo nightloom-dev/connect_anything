@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from 'react';
 import { ArrowLeftRight, Calculator, Clock, Copy, FileWarning, Link2Off, PenLine, RefreshCw, RotateCcw, Undo2, Wallet } from 'lucide-react';
-import type { SolanaStep } from '@aurora-is-near/intents-connect';
+import type { ExecutionStatus, SolanaStep } from '@aurora-is-near/intents-connect';
 import type { UseExecutionResult } from '@aurora-is-near/intents-connect/react';
 import { rescueRecipe, type Obligation, type ObligationRow } from '@connect-anything/kamino-rescue';
-import { CHAINS, STAGES } from '../../connect.ts';
+import { CHAINS } from '../../connect.ts';
 import { Dead, Loading, SharedHeader } from '../../features/run/shared.tsx';
 import {
   AMOUNT_INPUT,
@@ -21,6 +21,7 @@ import {
   ExplorerLink,
   Facts,
   Figure,
+  FigureRow,
   Figures,
   Held,
   LONG_LABEL,
@@ -41,11 +42,12 @@ import {
   WorkingLine,
   type Tone,
 } from '../../features/run/parts.tsx';
+import { progressStages, type Flow } from '../../features/run/progress.ts';
 import { IdlCheck, Summary, TrustPanel, type IdlState } from '../../features/run/summary.tsx';
-import { CANCEL_NOTE, DOING, PHASE_TEXT, TIME_NOTE } from '../../features/run/words.ts';
+import { BROKE_NOTE, CANCEL_NOTE, DOING, LATE_NOTE, PHASE_TEXT, TIME_NOTE } from '../../features/run/words.ts';
 import { buildRecipe, type StoredRecipe } from '../../recipe.ts';
 import { Failure, Notice, short } from '../../ui.tsx';
-import { Address, Alert, Button, ChainIcon, Checkbox, Skeleton, Timeline, TokenIcon, chainMeta, type StageState, type TimelineStage } from '../../ui/index.ts';
+import { Address, Alert, Button, ChainIcon, Checkbox, Skeleton, Timeline, TokenIcon, chainMeta, type StageState } from '../../ui/index.ts';
 import { Demo, DemoGrid, Surface } from './kit.tsx';
 import type { DevSection } from './types.ts';
 
@@ -155,10 +157,10 @@ const KAMINO_QUOTE: Quote = {
   kept: 0.0298,
   outcome: (
     <>
-      <dt>It repays</dt>
-      <dd>776.16 USDC</dd>
-      <dt>LTV after, at today's prices</dt>
-      <dd>11.2%</dd>
+      <FigureRow term="It repays">776.16 USDC</FigureRow>
+      <FigureRow term="LTV after, at today's prices" note="The fee comes out of what is delivered.">
+        45.32% (target 45%)
+      </FigureRow>
     </>
   ),
 };
@@ -286,14 +288,12 @@ function Scene({ wallet, amount = '800', token = 'USDC', target = 'USDC', interm
             }
           >
             <Figures>
-              <dt>You pay</dt>
-              <dd>
+              <FigureRow term="You pay">
                 <Figure value={quote.pay} note="plus the gas of the deposit" />
-              </dd>
-              <dt>Network fee</dt>
-              <dd>
+              </FigureRow>
+              <FigureRow term="Network fee">
                 <Figure value={quote.fee} note="taken out of what is delivered" />
-              </dd>
+              </FigureRow>
               <SpendsRow figure={quote.spends} />
             </Figures>
             <Figures className="border-t border-border pt-2.5 empty:hidden">{quote.outcome}</Figures>
@@ -354,25 +354,18 @@ type RunProps = {
   now: StageState;
   note?: ReactNode;
   /** The raw status under the stages, left out when it is stale. */
-  status?: string;
+  status?: ExecutionStatus;
   links?: ReactNode[];
-  /** The last stage's name once it is over. */
-  last?: string;
+  /** A run of steps (Retry) or a Refund, which skip stages. */
+  flow?: Flow;
   /** The callout above the stages: none once an error says it. */
   callout?: boolean;
 };
 
-/** The run's progress, as Progress in execute.tsx draws it: done before the stage it is at, waiting after. */
-function Run({ phase, at, now, note, status, links = [], last, callout = true }: RunProps) {
+/** The run's progress, drawn by the same mapping as Progress in execute.tsx. */
+function Run({ phase, at, now, note, status, links = [], flow, callout = true }: RunProps) {
   const text = callout && PHASE_TEXT[phase];
-  const stages: TimelineStage[] = STAGES.map((name, index) => ({
-    id: name,
-    title: index === STAGES.length - 1 && last ? last : name,
-    state: index < at ? 'done' : index === at ? now : 'pending',
-    description: index === at ? note : undefined,
-    time: index === 0 && at >= 0 ? STARTED : undefined,
-    link: links[index],
-  }));
+  const stages = progressStages({ at, now, status, phase, flow, note, time: at >= 0 ? STARTED : undefined, links });
   return (
     <Block>
       {text && <PhaseCallout phase={phase} text={text} since={SINCE} />}
@@ -388,7 +381,7 @@ function Run({ phase, at, now, note, status, links = [], last, callout = true }:
 
 const DEPOSIT_FACT = (
   <>
-    800 USDC on Base to <code>{DEPOSIT_ADDRESS}</code>
+    800 USDC on Base to <Address value={DEPOSIT_ADDRESS} chain="base" full />
   </>
 );
 
@@ -531,7 +524,7 @@ export const sections: DevSection[] = [
             ['awaiting-deposit', 1, undefined, undefined],
             ['settling', 2, 'DEPOSIT_PROCESSING', [undefined, DEPOSIT_LINK]],
             ['settling', 3, 'OPERATION_PROCESSING', [undefined, DEPOSIT_LINK]],
-          ] as [Phase, number, string | undefined, ReactNode[] | undefined][]
+          ] as [Phase, number, ExecutionStatus | undefined, ReactNode[] | undefined][]
         ).map(([phase, at, status, links]) => (
           <Demo key={`${phase}-${at}`} title={status ? `${phase}, ${status}` : phase}>
             <Surface className="py-0">
@@ -554,7 +547,7 @@ export const sections: DevSection[] = [
               <dd>{DEPOSIT_FACT}</dd>
               <dt>Delivered to</dt>
               <dd>
-                <code>{INTERMEDIARY}</code>
+                <Address value={INTERMEDIARY} full />
               </dd>
               <dt>Deposit hash</dt>
               <dd>none seen yet</dd>
@@ -581,7 +574,7 @@ export const sections: DevSection[] = [
               <dd>{DEPOSIT_FACT}</dd>
               <dt>Delivered to</dt>
               <dd>
-                <code>{INTERMEDIARY}</code>
+                <Address value={INTERMEDIARY} full />
               </dd>
               <dt>Deposit hash</dt>
               <dd>none seen yet</dd>
@@ -648,7 +641,7 @@ export const sections: DevSection[] = [
           <dd>{DEPOSIT_FACT}</dd>
           <dt>Delivered to</dt>
           <dd>
-            <code>{INTERMEDIARY}</code>
+            <Address value={INTERMEDIARY} full />
           </dd>
           <dt>Deposit hash</dt>
           <dd>none seen yet</dd>
@@ -686,7 +679,7 @@ export const sections: DevSection[] = [
         }
       >
         <p>
-          Waiting for a deposit of <strong>800 USDC</strong> to <code>{DEPOSIT_ADDRESS}</code>. If you already sent it, wait: sending it again would pay twice. If you have not, send it from any wallet and this page will follow it.
+          Waiting for a deposit of <strong>800 USDC on Base</strong> to <code>{DEPOSIT_ADDRESS}</code>. If you already sent it, wait: sending it again would pay twice. If you have not, send it from any wallet and this page will follow it.
         </p>
         <p className="mt-2 text-xs text-muted">{CANCEL_NOTE}</p>
       </DepositBox>
@@ -694,7 +687,7 @@ export const sections: DevSection[] = [
   )),
   run('20', 'expired', 'The deposit window passed', "phase === 'expired'. A late deposit can still revive it, or it can be cancelled.", () => (
     <Scene wallet="evm" intermediary={INTERMEDIARY} button={quoteButton({ disabled: true })}>
-      <Run phase="expired" at={1} now="paused" note="The deposit window passed" status="EXPIRED" />
+      <Run phase="expired" at={1} now="paused" note={LATE_NOTE} status="EXPIRED" />
       <Alert kind="warning" actions={<Button size="sm">Cancel the execution</Button>}>
         {CANCEL_NOTE}
       </Alert>
@@ -702,18 +695,18 @@ export const sections: DevSection[] = [
   )),
   run('21', 'deposit-failed', 'The deposit failed', 'DEPOSIT_FAILED. Nothing ran on Solana, and the transfer is refunded.', () => (
     <Scene wallet="evm" intermediary={INTERMEDIARY} button={quoteButton({ again: true })}>
-      <Run phase="failed" at={4} now="failed" note="The deposit failed, so nothing ran" status="DEPOSIT_FAILED" last="Failed" links={[undefined, DEPOSIT_LINK]} callout={false} />
+      <Run phase="failed" at={4} now="failed" note={BROKE_NOTE.deposit} status="DEPOSIT_FAILED" links={[undefined, DEPOSIT_LINK]} callout={false} />
       <Notice kind="error">The deposit failed, for example on an invalid amount, so nothing ran on Solana. What was transferred is refunded.</Notice>
     </Scene>
   )),
   run('22', 'success', 'Success', 'SUCCESS. The deposit and the Solana transaction, each in its explorer. The Kamino page adds Before → After.', () => (
     <Scene wallet="evm" intermediary={INTERMEDIARY} button={quoteButton({ again: true })}>
-      <Run phase="success" at={4} now="success" status="SUCCESS" last="Success" links={[undefined, DEPOSIT_LINK, undefined, SOLANA_LINK]} />
+      <Run phase="success" at={4} now="success" status="SUCCESS" links={[undefined, DEPOSIT_LINK, undefined, SOLANA_LINK]} />
     </Scene>
   )),
   run('23', 'failed', 'The instructions failed: Retry or Refund', 'OPERATION_FAILED. The money stays with the intermediary: run the instructions again on it, or send it back. Each asks for its own figures.', () => (
     <Scene wallet="evm" intermediary={INTERMEDIARY} button={quoteButton({ again: true })}>
-      <Run phase="failed" at={4} now="failed" note="The instructions failed on Solana" status="OPERATION_FAILED" last="Failed" links={[undefined, DEPOSIT_LINK]} callout={false} />
+      <Run phase="failed" at={4} now="failed" note={BROKE_NOTE.instructions} status="OPERATION_FAILED" links={[undefined, DEPOSIT_LINK, undefined, SOLANA_LINK]} callout={false} />
       <Block tight>
         <Notice kind="error">The instructions failed on Solana, so the money stayed with your intermediary. You can run them again with it, or send it back.</Notice>
         <Held>776.16 USDC</Held>
@@ -725,8 +718,7 @@ export const sections: DevSection[] = [
         </div>
         <QuoteBox title="Retry">
           <Figures>
-            <dt>Fee</dt>
-            <dd>0.05 USDC</dd>
+            <FigureRow term="Fee">0.05 USDC</FigureRow>
             <SpendsRow figure="776.11 USDC" />
           </Figures>
           <Button variant="primary" size="lg" block icon={<PenLine />}>
@@ -738,21 +730,18 @@ export const sections: DevSection[] = [
   )),
   run('24', 'refund-failed', 'The Refund failed', 'isRefund. The money is still with the intermediary, and Refund can be asked again.', () => (
     <Scene wallet="evm" intermediary={INTERMEDIARY} button={quoteButton({ again: true })}>
-      <Run phase="failed" at={4} now="failed" note="The instructions failed on Solana" status="OPERATION_FAILED" last="Failed" callout={false} />
+      <Run phase="failed" at={4} now="failed" note={BROKE_NOTE.refund} status="OPERATION_FAILED" flow="refund" links={[undefined, undefined, undefined, SOLANA_LINK]} callout={false} />
       <Block tight>
         <Notice kind="error">The Refund failed, so the money is still with your intermediary. You can send it back again.</Notice>
         <Held>776.16 USDC</Held>
         <div className="flex flex-col gap-2">{REFUND_TILE}</div>
         <QuoteBox title="Refund">
           <Figures>
-            <dt>You get at least</dt>
-            <dd>775.02 USDC on Base</dd>
-            <dt>Sent to</dt>
-            <dd>
-              <code className="font-mono text-[0.8125rem] break-all">{EVM_WALLET}</code>
-            </dd>
-            <dt>Fee</dt>
-            <dd>0.31 USDC</dd>
+            <FigureRow term="You get at least">775.02 USDC on Base</FigureRow>
+            <FigureRow term="Sent to">
+              <Address value={EVM_WALLET} chain="base" full />
+            </FigureRow>
+            <FigureRow term="Fee">0.31 USDC</FigureRow>
           </Figures>
           <Caption>Figures from a test run: the real one can differ by what the price does in the seconds before you sign.</Caption>
           <Button variant="primary" size="lg" block icon={<PenLine />}>
@@ -780,7 +769,7 @@ export const sections: DevSection[] = [
   )),
   run('27', 'cancelled', 'Cancelled', "phase === 'cancelled'. The stages stop where it was.", () => (
     <Scene wallet="evm" intermediary={INTERMEDIARY} button={quoteButton()}>
-      <Run phase="cancelled" at={1} now="cancelled" status="DEPOSIT_PENDING" />
+      <Run phase="cancelled" at={1} now="cancelled" />
     </Scene>
   )),
   {

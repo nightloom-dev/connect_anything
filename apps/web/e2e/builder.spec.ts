@@ -97,7 +97,7 @@ test('an uploaded IDL lists its instructions, and a repay is added once its acco
   await expect(page.getByLabel('liquidity_amount')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Accounts', exact: true })).toBeVisible();
   await expect(page.getByText('the intermediary of whoever runs this', { exact: true })).toBeVisible();
-  await expect(page.getByText('Not checked yet. This page only checks that the recipe touches the token it receives')).toBeVisible();
+  await expect(page.getByText('Signers checked: Connect signs only as the intermediary, and this instruction needs no other signer.')).toBeVisible();
 
   const add = page.getByRole('button', { name: 'Add to recipe' });
   await expect(add).toBeDisabled();
@@ -379,7 +379,8 @@ test('suggested and known addresses fill an account in one click, and the checkl
 
   // the accounts that need input come first, so the first menu is the obligation's
   await page.getByRole('button', { name: 'Known addresses' }).first().click();
-  const menu = page.getByLabel('Known addresses for Address of repay_accounts.obligation');
+  // a non-modal dialog, named for its field
+  const menu = page.getByRole('dialog', { name: 'Known addresses for Address of repay_accounts.obligation' });
   await expect(menu).not.toHaveAttribute('data-transition');
   await menu.getByRole('button', { name: /^System\b/ }).click();
   await expect(address(page, 'repay_accounts.obligation')).toHaveValue('11111111111111111111111111111111');
@@ -482,4 +483,63 @@ test('a handed-over recipe that cannot be read says why, and is dropped', async 
   await page.getByRole('button', { name: /^klend\b/ }).click();
   await expect(page.getByRole('heading', { name: '2. Instruction' })).toBeVisible();
   await expect(alertOf(page, 'The recipe handed to the builder could not be opened')).toHaveCount(0);
+});
+
+test('a link to a later step with nothing loaded opens the program, and says why', async ({ page }) => {
+  // three loads of the dev page, seconds of CPU each
+  test.slow();
+  for (const [step, why] of [
+    [2, 'Instructions come from a program: load one first.'],
+    [4, 'Nothing to run yet: load a program, then add an instruction.'],
+    [3, 'Nothing to simulate yet: load a program, then add an instruction.'],
+  ] as const) {
+    await page.goto(`${BUILDER}?step=${step}`);
+    await expect(page.getByRole('heading', { name: '1. Program' })).toBeVisible();
+    await expect(statusOf(page, why)).toBeVisible();
+    await expect(page).toHaveURL(/\?step=1$/);
+  }
+  // nothing is marked done that was not
+  await expect(stepper(page).getByRole('button', { name: /, done$/ })).toHaveCount(0);
+
+  // a program loaded, the builder goes on, and the reason is gone
+  await page.getByLabel('IDL file').setInputFiles(KLEND_FILE);
+  await expect(page.getByRole('heading', { name: '2. Instruction' })).toBeVisible();
+  await stepper(page).getByRole('button', { name: 'Program' }).click();
+  await expect(page.getByRole('heading', { name: '1. Program' })).toBeVisible();
+  await expect(statusOf(page, 'Nothing to simulate yet')).toHaveCount(0);
+
+  // with the program and still no recipe, a later step is where the address says, and offers the way back
+  await page.goto(`${BUILDER}?step=4`);
+  await expect(page.getByRole('heading', { name: '4. Run' })).toBeVisible();
+  await expect(stepper(page).getByRole('button', { name: 'Simulate' })).not.toHaveAccessibleName(/done/);
+  await page.getByRole('button', { name: 'Add an instruction' }).click();
+  await expect(page.getByRole('heading', { name: '2. Instruction' })).toBeVisible();
+});
+
+test('a step moved in the recipe keeps its accounts open, and the step it passed keeps them closed', async ({ page }) => {
+  await page.goto(BUILDER);
+  await handOver(page, WRONG_MARKET_RECIPE);
+  await page.goto(BUILDER);
+  await expect(recipeSteps(page)).toHaveCount(4);
+  const repay = () => recipeSteps(page).filter({ hasText: REPAY });
+  const obligation = () => recipeSteps(page).filter({ hasText: 'refresh_obligation' });
+  await repay().getByRole('button', { name: '13 accounts, 8 from the recipe' }).click();
+  await expect(repay().getByText('From the recipe 8')).toBeVisible();
+
+  await page.getByRole('button', { name: `Move ${REPAY} up` }).click();
+  await expect(recipeSteps(page).nth(2)).toContainText(REPAY);
+  await expect(repay().getByText('From the recipe 8')).toBeVisible();
+  await expect(repay().getByRole('button', { name: /accounts/ })).toHaveAttribute('aria-expanded', 'true');
+  await expect(obligation().getByRole('button', { name: /accounts/ })).toHaveAttribute('aria-expanded', 'false');
+
+  await page.getByRole('button', { name: `Move ${REPAY} down` }).click();
+  await expect(recipeSteps(page).last()).toContainText(REPAY);
+  await expect(repay().getByText('From the recipe 8')).toBeVisible();
+  await expect(obligation().getByRole('button', { name: /accounts/ })).toHaveAttribute('aria-expanded', 'false');
+
+  // a removal does not hand them to the next step either
+  await page.getByRole('button', { name: 'Remove refresh_obligation' }).click();
+  await expect(recipeSteps(page)).toHaveCount(3);
+  await expect(repay().getByText('From the recipe 8')).toBeVisible();
+  await expect(recipeSteps(page).nth(1).getByRole('button', { name: /accounts/ })).toHaveAttribute('aria-expanded', 'false');
 });

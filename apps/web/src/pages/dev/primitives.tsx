@@ -692,7 +692,8 @@ const stages = (reached: number, end: 'active' | 'success' | 'failed' | 'cancell
     return {
       id: title,
       title,
-      state: index < reached ? 'done' : index === reached ? end : 'pending',
+      // a run that failed or was cancelled never reaches the stages after it
+      state: index < reached ? 'done' : index === reached ? end : end === 'failed' || end === 'cancelled' ? 'unreached' : 'pending',
       time: index < reached ? `${[4, 12, 96, 31][index] ?? 2} s` : index === reached && end === 'active' ? '0:48' : undefined,
       description:
         index === reached

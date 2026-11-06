@@ -4,13 +4,14 @@ import { useExecution } from '@aurora-is-near/intents-connect/react';
 import { CU_LIMIT, estimateCu, ltvAfter, rescuable, rescueAmount, rescueRecipe, targetFrom, type Obligation } from '@connect-anything/kamino-rescue';
 import { fromAtomic } from '../../connect.ts';
 import { Execute } from '../run/execute.tsx';
+import { FigureRow } from '../run/parts.tsx';
 import { toSolanaRecipe, type StoredRecipe } from '../../recipe.ts';
 import { Failure, FetchError, useJson } from '../../ui.tsx';
 import { AddressInput, Button, Card, ChainIcon, cn } from '../../ui/index.ts';
 import { BeforeAfter, ReadingAgain } from './BeforeAfter.tsx';
 import { BeforeYouPay } from './BeforeYouPay.tsx';
 import { ForkCheckCard } from './ForkCheck.tsx';
-import { dollars, listed, ltvOf, percent, risk } from './format.ts';
+import { dollars, listed, ltvOf, percent, risk, targetPercent } from './format.ts';
 import { COLUMNS, HowItWorks, LEFT, NoPositions, ReadingPositions, RunColumn, RunPlaceholder, WatcherBanner } from './layout.tsx';
 import { OpenInBuilder } from './OpenInBuilder.tsx';
 import { PositionCard } from './PositionCard.tsx';
@@ -79,26 +80,19 @@ function Position({ obligation, url, onBusy }: { obligation: Obligation; url: st
       return (
         <>
           <Quoted spendable={spendable} onQuote={setQuoted} />
-          <dt>It repays</dt>
-          <dd>
+          <FigureRow term="It repays">
             {fromAtomic(surplus > 0n ? debt.amount : spendable, debt.decimals)} {debt.symbol}
-          </dd>
+          </FigureRow>
           {after !== null && (
-            <>
-              <dt>LTV after, at today's prices</dt>
-              <dd>
-                {percent(after)}
-                {t !== null && after > t && !amount?.short && ', over the target. The fee comes out of what is delivered, so reaching it takes a little more than the amount worked out above.'}
-              </dd>
-            </>
+            <FigureRow term="LTV after, at today's prices" note={t !== null && after > t && !amount?.short && 'The fee comes out of what is delivered.'}>
+              {percent(after)}
+              {t !== null && after > t && !amount?.short && ` (target ${targetPercent(t)})`}
+            </FigureRow>
           )}
           {surplus > 0n && (
-            <>
-              <dt>Surplus</dt>
-              <dd>
-                {fromAtomic(surplus.toString(), debt.decimals)} {debt.symbol} stays with your intermediary, and Refund takes it back
-              </dd>
-            </>
+            <FigureRow term="Surplus" note="It stays with your intermediary, and Refund takes it back.">
+              {fromAtomic(surplus.toString(), debt.decimals)} {debt.symbol}
+            </FigureRow>
           )}
         </>
       );
@@ -232,7 +226,7 @@ export function Rescue() {
       {(!url || badAddress) && <HowItWorks />}
       {found.loading && <ReadingPositions />}
       {found.error && !badAddress && <Failure error={found.error} retry={found.retry} />}
-      {obligations?.length === 0 && <NoPositions />}
+      {obligations?.length === 0 && <NoPositions field={field} />}
       {ranked && ranked.length > 0 && (
         <div className={COLUMNS}>
           {ranked.length > 1 && (

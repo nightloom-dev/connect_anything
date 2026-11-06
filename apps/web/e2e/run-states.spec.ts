@@ -39,6 +39,8 @@ async function quote(page: Page) {
 const button = (page: Page, name: string) => page.getByRole('button', { name, exact: true });
 /** The stage of the run the card marks as the current one. */
 const stage = (page: Page) => page.getByRole('list', { name: 'Progress' }).locator('[aria-current="step"]');
+/** Every stage of the run, each with how it ended, as a screen reader hears it. */
+const stages = (page: Page) => page.getByRole('list', { name: 'Progress' }).getByRole('listitem');
 const shows = (page: Page, text: string | RegExp) => expect(page.getByText(text, typeof text === 'string' ? { exact: true } : undefined).first()).toBeVisible();
 
 test('state 01 no wallet: nothing is quoted until an EVM wallet connects', async ({ page, connect }) => {
@@ -215,7 +217,9 @@ test('state 11 the quote: what is paid, what arrives, the fee, and what the repa
   // (776.16 - 0.02) × 99.75%: the SDK keeps a quarter percent back for the quote to move
   await expect(page.getByText('774.19965 USDC', { exact: true })).toHaveCount(2);
   await shows(page, 'It repays');
-  await shows(page, "45.32%, over the target. The fee comes out of what is delivered, so reaching it takes a little more than the amount worked out above.");
+  // a little over the target, said short, with why on its own line
+  await shows(page, '45.32% (target 45%)');
+  await shows(page, 'The fee comes out of what is delivered.');
   await shows(page, 'Your wallet asks for one signature, then for the deposit, switching to Base if it is on another network.');
 
   // three dry creates, and nothing real or signed yet
@@ -419,7 +423,8 @@ test('state 19 a resumed execution waits for its deposit, which can come from an
   await page.reload();
   await shows(page, `${FROM_THIS_BROWSER} ${execution.id}`);
   await button(page, 'Resume it').click();
-  const waiting = statusOf(page, `Waiting for a deposit of 800 USDC to ${execution.quote.depositAddress}. If you already sent it, wait: sending it again would pay twice.`);
+  // the network is named: the same address on another one never reaches Connect
+  const waiting = statusOf(page, `Waiting for a deposit of 800 USDC on Base to ${execution.quote.depositAddress}. If you already sent it, wait: sending it again would pay twice.`);
   await expect(waiting).toBeVisible();
   await expect(waiting.getByRole('button', { name: 'Cancel, I will not send it' })).toBeEnabled();
   expect(await wallet.calls('eth_sendTransaction')).toEqual([]);
@@ -436,6 +441,9 @@ test('state 20 the deposit window passed', async ({ page, connect, wallet }) => 
   await button(page, SIGN).click();
   await expect(statusOf(page, 'The deposit window has passed. A late deposit can still revive this execution, or you can cancel it.')).toBeVisible();
   await shows(page, /^EXPIRED\. Execution/);
+  // the page still polls for a late deposit, which waits on the person: paused, not in progress
+  await expect(stage(page)).toContainText('Deposit, paused');
+  await expect(stage(page)).toContainText('Waiting for a late deposit');
   await expect(button(page, 'Cancel the execution')).toBeEnabled();
   await expect(button(page, QUOTE)).toBeDisabled();
 });
@@ -447,6 +455,9 @@ test('state 21 the deposit failed', async ({ page, connect, wallet }) => {
   await button(page, SIGN).click();
   await expect(alertOf(page, 'The deposit failed, for example on an invalid amount, so nothing ran on Solana. What was transferred is refunded.')).toBeVisible();
   await shows(page, /^DEPOSIT_FAILED\. Execution/);
+  // it broke at the deposit, so nothing after it is drawn as done
+  await expect(stages(page)).toContainText(['Signature, done', 'Deposit, failed', 'Bridge, not reached', 'Execution, not reached', 'Result, not reached']);
+  await expect(stages(page).nth(1)).toContainText('The deposit failed, so nothing ran');
   await expect(button(page, 'Refund')).toHaveCount(0);
   await expect(button(page, QUOTE)).toBeEnabled();
 });
@@ -483,6 +494,9 @@ test('state 23 the instructions failed on Solana: retry with what the intermedia
   const failed = alertOf(page, 'The instructions failed on Solana, so the money stayed with your intermediary. You can run them again with it, or send it back.');
   await expect(failed).toBeVisible();
   await shows(page, 'Your intermediary holds 0.51 USDC.');
+  // it broke at the execution, and the Result says where the money waits
+  await expect(stages(page)).toContainText(['Signature, done', 'Deposit, done', 'Bridge, done', 'Execution, failed', 'Result, paused']);
+  await expect(stages(page).last()).toContainText('Money is with your intermediary');
 
   // Retry spends what the intermediary holds, so it deposits nothing
   await button(page, 'Retry').click();
@@ -493,6 +507,7 @@ test('state 23 the instructions failed on Solana: retry with what the intermedia
   expect(retry).toMatchObject({ executionMode: 'steps_only', quote: { destinationAsset: SOL_USDC.assetId } });
   await expect(failed).toBeVisible();
   expect(await wallet.calls('eth_sendTransaction')).toHaveLength(1);
+  await expect(stages(page)).toContainText(['Signature, done', 'Deposit, not needed', 'Bridge, not needed', 'Execution, failed', 'Result, paused']);
 
   // Refund sends it back to the wallet on Base
   await button(page, 'Refund').click();
@@ -501,6 +516,8 @@ test('state 23 the instructions failed on Solana: retry with what the intermedia
   await expect(button(page, 'Sign and retry')).toHaveCount(0);
   await button(page, 'Sign and refund').click();
   await expect(statusOf(page, DONE)).toBeVisible();
+  // a Refund deposits nothing: it runs its transfer on Solana, then crosses the bridge back
+  await expect(stages(page)).toContainText(['Signature, done', 'Deposit, not needed', 'Execution, done', 'Bridge, done', 'Success, complete']);
   const refund = connect.list()[2];
   expect(refund.quote).toMatchObject({ originAsset: SOL_USDC.assetId, destinationAsset: BASE_USDC.assetId, amount: '510000', recipient: WALLET });
   expect(await wallet.calls('personal_sign')).toHaveLength(3);
@@ -517,6 +534,10 @@ test('state 24 the Refund failed too: the money is still with the intermediary',
   await button(page, 'Sign and refund').click();
   await expect(alertOf(page, 'The Refund failed, so the money is still with your intermediary. You can send it back again.')).toBeVisible();
   await shows(page, 'Your intermediary holds 0.51 USDC.');
+  // the Refund broke at its transfer on Solana, before the bridge
+  await expect(stages(page)).toContainText(['Signature, done', 'Deposit, not needed', 'Execution, failed', 'Bridge, not reached', 'Result, paused']);
+  await expect(stages(page).nth(2)).toContainText('The transfer back failed on Solana');
+  await expect(stages(page).last()).toContainText('Money is still with your intermediary');
   await expect(button(page, 'Retry')).toHaveCount(0);
 
   // and again, which goes through
@@ -569,6 +590,8 @@ test('state 27 an execution is cancelled', async ({ page, connect, wallet }) => 
   await button(page, SIGN).click();
   await button(page, 'Cancel the execution').click();
   await expect(statusOf(page, 'The execution was cancelled.')).toBeVisible();
+  // the stages stop where it was
+  await expect(stages(page)).toContainText(['Signature, done', 'Deposit, cancelled', 'Bridge, not reached', 'Execution, not reached', 'Result, not reached']);
   expect(connect.list()).toEqual([]);
   const [, deletion] = await wallet.calls('personal_sign');
   expect(JSON.stringify(deletion.params)).toContain('delete_execution');

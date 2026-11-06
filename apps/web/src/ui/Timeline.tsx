@@ -3,8 +3,12 @@ import { Check, Minus, Pause, X } from 'lucide-react';
 import { cn } from './cn.ts';
 import { Spinner } from './Spinner.tsx';
 
-/** paused: stopped where it is and waiting on the person, as an execution this page no longer follows. */
-export type StageState = 'pending' | 'active' | 'paused' | 'done' | 'failed' | 'success' | 'cancelled';
+/**
+ * paused: stopped where it is and waiting on the person, as an execution this page no longer follows.
+ * unreached: the run ended before it, with a failure or a cancel, so it never comes.
+ * skipped: not part of this kind of run at all, as a deposit for a run that spends what is already there.
+ */
+export type StageState = 'pending' | 'active' | 'paused' | 'done' | 'failed' | 'success' | 'cancelled' | 'unreached' | 'skipped';
 
 export type TimelineStage = {
   id: string;
@@ -26,7 +30,20 @@ type TimelineProps = {
   className?: string;
 };
 
-const SPOKEN: Record<StageState, string> = { pending: 'waiting', active: 'in progress', paused: 'paused', done: 'done', failed: 'failed', success: 'complete', cancelled: 'cancelled' };
+const SPOKEN: Record<StageState, string> = {
+  pending: 'waiting',
+  active: 'in progress',
+  paused: 'paused',
+  done: 'done',
+  failed: 'failed',
+  success: 'complete',
+  cancelled: 'cancelled',
+  unreached: 'not reached',
+  skipped: 'not needed',
+};
+
+/** The states a run never goes through: drawn dashed, and named on the right. */
+const NEVER: Partial<Record<StageState, string>> = { unreached: 'Not reached', skipped: 'Not needed' };
 
 const NODE: Record<StageState, string> = {
   pending: 'border-border-strong bg-surface',
@@ -36,6 +53,8 @@ const NODE: Record<StageState, string> = {
   failed: 'border-danger/50 bg-danger/14 text-danger-text',
   success: 'border-success bg-success text-[#062012]',
   cancelled: 'border-border-strong bg-surface-3 text-muted',
+  unreached: 'border-dashed border-border-strong',
+  skipped: 'border-dashed border-border-strong',
 };
 
 const TITLE: Record<StageState, string> = {
@@ -46,6 +65,8 @@ const TITLE: Record<StageState, string> = {
   failed: 'text-danger-text font-semibold',
   success: 'text-success font-semibold',
   cancelled: 'text-muted',
+  unreached: 'text-muted',
+  skipped: 'text-muted',
 };
 
 function Node({ state }: { state: StageState }) {
@@ -54,12 +75,13 @@ function Node({ state }: { state: StageState }) {
   if (state === 'done' || state === 'success') return <Check className="size-3.5" strokeWidth={2.75} aria-hidden />;
   if (state === 'failed') return <X className="size-3.5" strokeWidth={2.75} aria-hidden />;
   if (state === 'cancelled') return <Minus className="size-3.5" strokeWidth={2.75} aria-hidden />;
+  if (NEVER[state]) return null;
   return <span className="size-1.5 rounded-full bg-faint" aria-hidden />;
 }
 
 /** The stages of a run, top to bottom. A screen reader hears each change of stage once, politely. */
 export function Timeline({ stages, label = 'Progress', announce, className }: TimelineProps) {
-  const latest = [...stages].reverse().find(stage => stage.state !== 'pending');
+  const latest = [...stages].reverse().find(stage => stage.state !== 'pending' && !NEVER[stage.state]);
   const spoken = announce ?? (latest ? `${latest.title}: ${SPOKEN[latest.state]}` : '');
   return (
     <div data-ui="timeline" className={className}>
@@ -67,9 +89,12 @@ export function Timeline({ stages, label = 'Progress', announce, className }: Ti
         {stages.map((stage, index) => {
           const last = index === stages.length - 1;
           const reached = stage.state === 'done' || stage.state === 'success';
+          // the way to a stage the run never goes through is dashed, like its node
+          const next = stages[index + 1];
+          const line = next && NEVER[next.state] ? 'border-l border-dashed border-border-strong' : reached ? 'bg-success/40' : 'bg-border-strong';
           return (
             <li key={stage.id} aria-current={stage.state === 'active' || stage.state === 'paused' ? 'step' : undefined} className={cn('relative flex gap-3', !last && 'pb-5')}>
-              {!last && <span aria-hidden className={cn('absolute top-7 bottom-0.5 left-[11.5px] w-px', reached ? 'bg-success/40' : 'bg-border-strong')} />}
+              {!last && <span aria-hidden className={cn('absolute top-7 bottom-0.5 left-[11.5px] w-px', line)} />}
               <span className={cn('relative flex size-6 shrink-0 items-center justify-center rounded-full border transition-colors duration-300', NODE[stage.state])}>
                 <Node state={stage.state} />
               </span>
@@ -80,6 +105,12 @@ export function Timeline({ stages, label = 'Progress', announce, className }: Ti
                     <span className="sr-only">, {SPOKEN[stage.state]}</span>
                   </span>
                   {stage.time && <span className="shrink-0 text-xs text-muted nums">{stage.time}</span>}
+                  {/* the title already says it to a screen reader */}
+                  {NEVER[stage.state] && !stage.time && (
+                    <span aria-hidden className="shrink-0 text-xs text-muted">
+                      {NEVER[stage.state]}
+                    </span>
+                  )}
                 </div>
                 {stage.description && <div className={cn('mt-0.5 text-xs leading-5', stage.state === 'failed' ? 'text-danger-text/90' : 'text-muted')}>{stage.description}</div>}
                 {stage.link && <div className="mt-1 text-xs">{stage.link}</div>}

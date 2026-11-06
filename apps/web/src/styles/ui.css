@@ -17,15 +17,16 @@
     background: transparent;
     cursor: pointer;
   }
+  /* the part not filled is the edge of a control, so it keeps 3:1 against the surfaces too (WCAG 1.4.11) */
   .ui-range::-webkit-slider-runnable-track {
     height: 6px;
     border-radius: 999px;
-    background: linear-gradient(to right, var(--range-color) 0 var(--fill), var(--color-surface-3) var(--fill) 100%);
+    background: linear-gradient(to right, var(--range-color) 0 var(--fill), var(--color-border-control) var(--fill) 100%);
   }
   .ui-range::-moz-range-track {
     height: 6px;
     border-radius: 999px;
-    background: var(--color-surface-3);
+    background: var(--color-border-control);
   }
   .ui-range::-moz-range-progress {
     height: 6px;

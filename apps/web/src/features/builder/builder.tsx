@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
 import { useExecution } from '@aurora-is-near/intents-connect/react';
 import { argFields, buildInstruction, flatten, listInstructions, type Idl, type SimResult } from '@connect-anything/core';
-import { ArrowRight, Info, ListPlus, Play, Plus, SquareMousePointer } from 'lucide-react';
+import { ArrowRight, CircleCheck, ListPlus, Play, Plus, SquareMousePointer } from 'lucide-react';
 import { checkCompat, issueText } from '../../compat.ts';
 import { bySymbol, fromAtomic, toAtomic, type Token, type TokenList } from '../../connect.ts';
 import { Execute } from '../run/execute.tsx';
@@ -29,7 +29,7 @@ const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.
 
 type HeadingRef = Ref<HTMLHeadingElement>;
 
-function ProgramScreen({ onLoad, heading }: { onLoad: (idl: Idl) => void; heading: HeadingRef }) {
+function ProgramScreen({ onLoad, heading, hint }: { onLoad: (idl: Idl) => void; heading: HeadingRef; hint?: string }) {
   const [programId, setProgramId] = useState('');
   const [idError, setIdError] = useState<string>();
   const [example, setExample] = useState<string>();
@@ -60,6 +60,7 @@ function ProgramScreen({ onLoad, heading }: { onLoad: (idl: Idl) => void; headin
   return (
     <section aria-labelledby="builder-step" className="flex flex-col gap-6">
       <StepHeader ref={heading} number={1} title="Program" description="Load an Anchor program by its ID, or from its IDL file. Each instruction it has becomes a form." />
+      {hint && <Alert>{hint}</Alert>}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-12 md:items-start">
         <div className="flex min-w-0 flex-col gap-6 md:col-span-7">
           <ProgramForm
@@ -289,8 +290,8 @@ export function InstructionForm({ idl, ixName, mint, symbol, onAdd }: { idl: Idl
       <div className="flex flex-col gap-5 border-t border-border pt-6">
         {issues.length === 0 ? (
           <p className="flex gap-2 text-xs leading-5 text-muted">
-            <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-            <span>Not checked yet. This page only checks that the recipe touches the token it receives, so Connect may still refuse this instruction at the run.</span>
+            <CircleCheck className="mt-0.5 size-3.5 shrink-0 text-success" aria-hidden />
+            <span>Signers checked: Connect signs only as the intermediary, and this instruction needs no other signer. The simulation in step 3 checks the rest.</span>
           </p>
         ) : (
           <Alert id="compat" kind="danger" title="Connect cannot run this instruction">
@@ -306,6 +307,15 @@ export function InstructionForm({ idl, ixName, mint, symbol, onAdd }: { idl: Idl
       </div>
     </Card>
   );
+}
+
+// A step's key in the tray, by the step itself: a move or a removal keeps the steps and changes their places.
+const keys = new WeakMap<StoredStep, string>();
+let made = 0;
+function keyOf(step: StoredStep) {
+  let key = keys.get(step);
+  if (key === undefined) keys.set(step, (key = `step ${made++}`));
+  return key;
 }
 
 type InstructionScreenProps = {
@@ -337,9 +347,10 @@ function InstructionScreen({ idl, idls, list, targets, token, onTarget, steps, o
   // What each step's accounts resolve to with the token as it is, for the tray to show on demand: the resolution the run uses.
   const trayed = useMemo<TrayStep[]>(
     () =>
-      steps.map(step => {
+      steps.map((step, index) => {
         const of = idls[step.program];
-        const shown: TrayStep = { ixName: step.ixName, program: step.program, programName: of?.metadata?.name ?? 'Program', amountArg: step.amountArg };
+        const key = steps.indexOf(step) === index ? keyOf(step) : `${keyOf(step)} ${index}`;
+        const shown: TrayStep = { key, ixName: step.ixName, program: step.program, programName: of?.metadata?.name ?? 'Program', amountArg: step.amountArg };
         if (!of || !token) return shown;
         try {
           const { accounts } = resolveStep(of, step, { intermediary: STAND_IN, mint: token.contractAddress!, amount: '1' });
@@ -563,14 +574,26 @@ function TokensPending({ list }: { list: ReturnType<typeof useJson<TokenList>> }
 
 const STEPS = ['Program', 'Instruction', 'Simulate', 'Run'];
 
-type Start = { saved?: Saved; imported?: StoredRecipe; problem?: string; screen: number };
+/** Why the builder opened at the program in place of the later step the address asked for. */
+const NOTHING_YET: Record<number, string> = {
+  2: 'Instructions come from a program: load one first.',
+  3: 'Nothing to simulate yet: load a program, then add an instruction.',
+  4: 'Nothing to run yet: load a program, then add an instruction.',
+};
 
-/** Where the builder opens: a recipe another page handed over, else what this tab left, at the step in the address. */
+type Start = { saved?: Saved; imported?: StoredRecipe; problem?: string; screen: number; asked?: number };
+
+/**
+ * Where the builder opens: a recipe another page handed over, else what this tab left, at the step in the address. A later
+ * step with no program and no recipe behind it, as the landing page links to, opens the program instead, saying why.
+ */
 function start(): Start {
   const handed = readImport();
   const step = stepInUrl();
   if (handed?.recipe) return { imported: handed.recipe, screen: step ?? 2 };
-  return { saved: readSession(), problem: handed?.problem, screen: step ?? 1 };
+  const saved = readSession();
+  if (step && step > 1 && !saved?.idl && !saved?.steps.length) return { saved, problem: handed?.problem, screen: 1, asked: step };
+  return { saved, problem: handed?.problem, screen: step ?? 1 };
 }
 
 export function Builder() {
@@ -646,7 +669,7 @@ export function Builder() {
   const stepper: StepItem[] = STEPS.map((title, index) => {
     // leaving screen 4 mid-run would hide the only way to act on a running execution
     const locked = exec.isBusy || (index >= 2 && !!destination);
-    const done = [!!idl, steps.length > 0, screen > 3, false][index];
+    const done = [!!idl, steps.length > 0, screen > 3 && steps.length > 0, false][index];
     return {
       id: String(index + 1),
       title,
@@ -663,7 +686,7 @@ export function Builder() {
           {problem}
         </Alert>
       )}
-      {screen === 1 && <ProgramScreen onLoad={onLoad} heading={heading} />}
+      {screen === 1 && <ProgramScreen onLoad={onLoad} heading={heading} hint={idl || !initial.asked ? undefined : NOTHING_YET[initial.asked]} />}
       {screen === 2 && (
         <Boundary>
           <InstructionScreen

@@ -378,6 +378,9 @@ test('no positions, an address that is not one, and a read that failed', async (
   api.kamino = 'none';
   await read(page);
   await expect(page.getByRole('status').filter({ hasText: 'This wallet has no open positions on Kamino.' })).toBeVisible();
+  // the way on is the field above
+  await page.getByRole('button', { name: 'Check another wallet' }).click();
+  await expect(page.getByLabel('Wallet address')).toBeFocused();
 
   await read(page, '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed');
   await expect(page.getByRole('alert').filter({ hasText: 'That is not a Solana address.' })).toBeVisible();

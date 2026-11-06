@@ -10,7 +10,7 @@ type PopoverProps = {
   /** A function gets close(), for links and actions that should shut the panel. */
   children: ReactNode | ((bag: { close: () => void }) => ReactNode);
   anchor?: Anchor;
-  /** The accessible name of the panel, when its content starts with no heading. */
+  /** Names the panel, which then is a non-modal dialog: an aria-label needs a role to name. Without it, the panel has neither. */
   label?: string;
   className?: string;
   panelClassName?: string;
@@ -30,6 +30,7 @@ export function Popover({ trigger, children, anchor = 'bottom end', label, class
       <PopoverPanel
         anchor={{ to: anchor, gap: 8 }}
         transition
+        role={label ? 'dialog' : undefined}
         aria-label={label}
         className={cn(popoverPanel, 'w-72 max-w-[calc(100vw_-_16px)] p-1.5', panelClassName)}
       >

@@ -2,7 +2,7 @@ import { useEffect, useId, useState, type ReactNode, type SelectHTMLAttributes }
 import { ArrowDown, ArrowUpRight, ChevronDown, CircleCheck, CircleMinus, HandCoins, Info, OctagonAlert, TriangleAlert, Wallet } from 'lucide-react';
 import { BACKEND_PLACEHOLDERS, type ExecutionStep } from '@aurora-is-near/intents-connect';
 import type { UseExecutionResult } from '@aurora-is-near/intents-connect/react';
-import { Card, ChainIcon, Spinner, TokenIcon, cn, toast } from '../../ui/index.ts';
+import { Address, Card, ChainIcon, Spinner, TokenIcon, cn, toast } from '../../ui/index.ts';
 
 // The run card's presentational parts. Each takes ready values and works nothing out: the conditions, the figures and the
 // money stay in execute.tsx, which composes these, and the /dev/states gallery composes them the same way on fake values.
@@ -153,7 +153,7 @@ export function SelectPill({ label, display, compact = false, className, ...sele
   );
 }
 
-const share = new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 0 });
+const share = new Intl.NumberFormat('en-US', { style: 'percent', maximumFractionDigits: 0 });
 
 /**
  * What arrives, at least: one sentence for the page's text and a screen reader, "at least 776.16 USDC, after the bridge's
@@ -194,41 +194,37 @@ export function NoFigure() {
   );
 }
 
-/**
- * Label and figure, in rows, for dt and dd elements written straight inside it: the rows of this card and those an
- * `outcome` adds, as a Kamino repay does.
- */
+/** The figures of a quote, a FigureRow each: the rows of this card and those an `outcome` adds, as a Kamino repay does. */
 export function Figures({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <dl
-      className={cn(
-        'grid min-w-0 grid-cols-[fit-content(45%)_minmax(0,1fr)] gap-y-2.5 text-sm',
-        '[&>dt]:pr-4 [&>dt]:text-muted [&>dd]:min-w-0 [&>dd]:text-right [&>dd]:font-medium [&>dd]:text-pretty [&>dd]:break-words [&>dd]:text-text [&>dd]:nums',
-        '[&>div]:col-span-2',
-        className,
-      )}
-    >
-      {children}
-    </dl>
-  );
+  return <dl className={cn('flex min-w-0 flex-col gap-2.5 text-sm', className)}>{children}</dl>;
 }
 
-// the row that sums up: an edge above, a larger figure
-const TOTAL_TERM = 'mt-1 border-t border-border-strong pt-3 font-medium text-text!';
-const TOTAL_VALUE = 'mt-1 border-t border-border-strong pt-3 text-base font-semibold!';
+/**
+ * One row of Figures: the term on the left and its figure on the right. Each row is sized on its own, so a long term does
+ * not narrow the others, and on a narrow card a figure that does not fit beside its term goes under it, still on the
+ * right. A note runs under both, small and from the left.
+ */
+export function FigureRow({ term, children, note, total = false }: { term: ReactNode; children: ReactNode; note?: ReactNode; total?: boolean }) {
+  return (
+    <div className={cn('flex min-w-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-1', total && 'mt-1 border-t border-border-strong pt-3')}>
+      <dt className={cn('min-w-0', total ? 'font-medium text-text' : 'text-muted')}>{term}</dt>
+      <dd className={cn('ml-auto min-w-0 text-right text-pretty break-words text-text nums', total ? 'text-base font-semibold' : 'font-medium')}>{children}</dd>
+      {note && <dd className="basis-full text-xs leading-5 text-muted">{note}</dd>}
+    </div>
+  );
+}
 
 /** The last row of a quote: what the recipe spends, or without a figure, that its amounts are written into it. */
 export function SpendsRow({ figure }: { figure?: ReactNode }) {
   return figure !== undefined ? (
-    <>
-      <dt className={TOTAL_TERM}>The recipe spends</dt>
-      <dd className={TOTAL_VALUE}>{figure}</dd>
-    </>
+    <FigureRow term="The recipe spends" total>
+      {figure}
+    </FigureRow>
   ) : (
-    <>
-      <dt className={`${TOTAL_TERM} col-span-2`}>Amounts</dt>
-      <dd className="col-span-2 text-left! text-xs font-normal! text-muted!">Fixed in the recipe's instructions and listed under What will run, whatever you pay here. What they do not spend stays with your intermediary.</dd>
-    </>
+    <div className="mt-1 flex flex-col gap-1 border-t border-border-strong pt-3">
+      <dt className="font-medium text-text">Amounts</dt>
+      <dd className="text-xs text-muted">Fixed in the recipe's instructions and listed under What will run, whatever you pay here. What they do not spend stays with your intermediary.</dd>
+    </div>
   );
 }
 
@@ -523,7 +519,7 @@ export function ExecutionSteps({ steps, intermediary }: { steps: ExecutionStep[]
         <li key={index} className="flex min-w-0 flex-col gap-1.5">
           {'programId' in step ? (
             <>
-              <code className="text-[0.8125rem]">{step.programId}</code>
+              <Address value={step.programId} full />
               <div className="text-muted">
                 Data: <code>{step.discriminator}</code>
               </div>
@@ -531,7 +527,7 @@ export function ExecutionSteps({ steps, intermediary }: { steps: ExecutionStep[]
               <ul className="flex flex-col gap-1 border-l border-border pl-3">
                 {step.accounts?.map(({ pubkey }, at) => (
                   <li key={at} className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                    <code>{pubkey}</code>{' '}
+                    {pubkey === BACKEND_PLACEHOLDERS.intermediary ? <code>{pubkey}</code> : <Address value={pubkey} full />}{' '}
                     {(pubkey === BACKEND_PLACEHOLDERS.intermediary || pubkey === intermediary) && (
                       <em className="rounded-full border border-accent/36 bg-accent/14 px-2 text-xs leading-5 font-medium text-accent-hover not-italic">your intermediary</em>
                     )}

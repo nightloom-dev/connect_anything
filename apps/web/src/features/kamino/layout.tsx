@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { BellRing, Inbox, LifeBuoy, MousePointerClick } from 'lucide-react';
-import { Address, Alert, Card, EmptyState, Skeleton, Spinner, cn } from '../../ui/index.ts';
+import { Address, Alert, Button, Card, EmptyState, Skeleton, Spinner, cn } from '../../ui/index.ts';
 
 /**
  * Two columns from 960px: on the left the list of positions, the position and the check on a fork, one under the other;
@@ -102,10 +102,28 @@ export function ReadingPositions() {
   );
 }
 
-export function NoPositions() {
+/** `field`: the id of the wallet field above, where the action takes the person back to. */
+export function NoPositions({ field }: { field?: string }) {
+  const another = () => {
+    const input = field ? document.getElementById(field) : null;
+    if (input instanceof HTMLInputElement) {
+      input.focus();
+      input.select();
+    }
+  };
   return (
     <Card padding="none" role="status">
-      <EmptyState icon={<Inbox />} title="No open positions">
+      <EmptyState
+        icon={<Inbox />}
+        title="No open positions"
+        action={
+          field && (
+            <Button size="sm" onClick={another}>
+              Check another wallet
+            </Button>
+          )
+        }
+      >
         This wallet has no open positions on Kamino.
       </EmptyState>
     </Card>

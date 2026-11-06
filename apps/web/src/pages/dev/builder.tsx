@@ -250,8 +250,9 @@ function ReadinessStates() {
 }
 
 const STEPS: TrayStep[] = [
-  { ixName: 'refresh_reserve', program: KLEND, programName: 'kamino_lending' },
+  { key: 'refresh', ixName: 'refresh_reserve', program: KLEND, programName: 'kamino_lending' },
   {
+    key: 'obligation',
     ixName: 'refresh_obligation',
     program: KLEND,
     programName: 'kamino_lending',
@@ -262,6 +263,7 @@ const STEPS: TrayStep[] = [
     ],
   },
   {
+    key: 'repay',
     ixName: REPAY,
     program: KLEND,
     programName: 'kamino_lending',

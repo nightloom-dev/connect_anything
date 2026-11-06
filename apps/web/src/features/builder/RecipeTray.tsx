@@ -13,6 +13,8 @@ export type TrayAccount = {
 
 /** A step of the recipe as the tray shows it. */
 export type TrayStep = {
+  /** Who the step is, the same when it moves, so that the accounts open in the tray move with it. */
+  key: string;
   ixName: string;
   program: string;
   programName: string;
@@ -173,7 +175,7 @@ export function RecipeTray({ tokens, targets, token, onTarget, steps, onUp, onDo
         ) : (
           <ol aria-label="Steps of the recipe" className="flex flex-col gap-2">
             {steps.map((step, index) => (
-              <li key={index} className="flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-surface-2/50 py-2.5 pr-2 pl-3">
+              <li key={step.key} className="flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-surface-2/50 py-2.5 pr-2 pl-3">
                 <div className="flex min-w-0 items-start gap-3">
                   <span aria-hidden className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-border-strong bg-surface text-xs font-semibold text-muted nums">
                     {index + 1}

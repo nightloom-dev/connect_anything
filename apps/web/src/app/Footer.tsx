@@ -8,7 +8,7 @@ const external = `${item} inline-flex items-center gap-1`;
 export function Footer() {
   return (
     <footer className="border-t border-border">
-      <div className="mx-auto flex max-w-content flex-col gap-4 px-4 py-8 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-6">
+      <div className="mx-auto flex max-w-content flex-col gap-4 px-4 py-8 text-sm sm:px-6 lg:flex-row lg:items-center lg:justify-between">
         <p className="flex items-center gap-2.5 text-muted">
           <LogoMark size={18} className="shrink-0" />
           <span>Built on Aurora Intents Connect · Encode Solana Hackathon 2026</span>

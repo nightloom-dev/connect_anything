@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { ArrowLeftRight } from 'lucide-react';
-import { Badge, Button, Combobox, cn } from '../../ui/index.ts';
+import { Address, Badge, Button, Combobox, cn } from '../../ui/index.ts';
 
 /** One instruction of the IDL, with what Connect would refuse about it, worked out once for the whole list. */
 export type InstructionOption = { name: string; args: number; accounts: number; docs?: string; issues: string[] };
@@ -19,7 +19,7 @@ export function ProgramBar({ name, address, onBack }: ProgramBarProps) {
       </span>
       <div className="min-w-0 flex-1 basis-56">
         <p className="truncate text-sm font-medium text-text">{name}</p>
-        <p className="font-mono text-xs break-all text-muted">{address}</p>
+        <Address value={address} full className="text-muted [&>span:first-child]:text-xs [&>span:first-child]:text-muted" />
       </div>
       <Button size="sm" icon={<ArrowLeftRight />} onClick={onBack}>
         Load another program

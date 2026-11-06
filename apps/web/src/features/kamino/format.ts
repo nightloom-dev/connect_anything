@@ -5,6 +5,8 @@ import type { BadgeVariant } from '../../ui/index.ts';
 // How /kamino writes its figures. The rescue and its parts share these, so a figure reads the same in every place.
 
 export const percent = (fraction: number) => `${(fraction * 100).toFixed(2)}%`;
+/** A target as it was typed, without the zeros percent() adds: 0.45 is "45%". */
+export const targetPercent = (fraction: number) => `${(fraction * 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}%`;
 export const dollars = (usd: number) => usd.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 export const listed = (rows: ObligationRow[]) => rows.map(row => `${row.symbol} ${dollars(row.usd)}`).join(', ') || 'nothing';
 export const ltvOf = (position: Obligation) => (position.collateralUsd > 0 ? percent(position.ltv) : 'no collateral');
