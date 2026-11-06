@@ -147,7 +147,7 @@ export const SCENES: Scene[] = [
     open: async ({ page }) => {
       await page.goto(`${KAMINO}?wallet=${RECORDED_WALLET}`);
       await expect(page.getByText('Repay $800.00, which is 800 USDC.')).toBeVisible();
-      await expect(page.getByRole('region', { name: 'Checked on a fork' }).getByText('Passed', { exact: true })).toBeVisible();
+      await expect(page.getByRole('region', { name: /^Checked on a mainnet fork for / }).getByText('Passed', { exact: true })).toBeVisible();
     },
   },
   {
@@ -159,7 +159,7 @@ export const SCENES: Scene[] = [
       await page.goto(`${KAMINO}?wallet=${RECORDED_WALLET}&obligation=${NEAR_LIQUIDATION.address}`);
       await expect(status(page, 'Opened from a watcher alert')).toBeVisible();
       await expect(page.getByText('Repay $1,000.00, which is 1000 USDC.')).toBeVisible();
-      await expect(page.getByRole('region', { name: 'Checked on a fork' }).getByText('Passed', { exact: true })).toBeVisible();
+      await expect(page.getByRole('region', { name: /^Checked on a mainnet fork for / }).getByText('Passed', { exact: true })).toBeVisible();
     },
   },
   {
@@ -168,7 +168,7 @@ export const SCENES: Scene[] = [
     tablet: true,
     open: async fixtures => {
       await quoted(fixtures);
-      await expect(fixtures.page.getByRole('region', { name: 'Checked on a fork' }).getByText('Passed', { exact: true })).toBeVisible();
+      await expect(fixtures.page.getByRole('region', { name: /^Checked on a mainnet fork for / }).getByText('Passed', { exact: true })).toBeVisible();
     },
   },
   {
