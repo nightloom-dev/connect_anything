@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from 'react';
-import { ArrowRight, CircleCheck, RotateCw } from 'lucide-react';
+import { ArrowRight, CircleCheck, Plus, RotateCw } from 'lucide-react';
 import type { Obligation } from '@connect-anything/kamino-rescue';
 import { Button, Card, HealthBar, Skeleton, Spinner, cn } from '../../ui/index.ts';
 import { dollars, percent, points } from './format.ts';
@@ -60,7 +60,7 @@ export function BeforeAfter({ before, after, reading = false, onReadAgain }: Bef
           {ltv && `, and the LTV is ${percent(after.ltv)}, from ${percent(before.ltv)}`}.
         </p>
       </header>
-      <div className="grid gap-4 @sm:grid-cols-2">
+      <div className="grid gap-4 @md:grid-cols-2">
         <Change label="Debt" from={dollars(before.debtUsd)} to={dollars(after.debtUsd)} delta={paid > 0 ? `${dollars(paid)} repaid` : 'unchanged'} down={paid > 0} />
         {ltv && <Change label="LTV" from={percent(before.ltv)} to={percent(after.ltv)} delta={fell > 0 ? `${points(fell)} lower` : fell < 0 ? `${points(fell)} higher` : 'unchanged'} down={fell > 0} />}
       </div>
@@ -98,5 +98,20 @@ export function ReadingAgain({ compact = false }: { compact?: boolean }) {
       </div>
       <Skeleton className="h-1.5 w-full" />
     </Card>
+  );
+}
+
+/**
+ * In place of the target once a run succeeded, so that the card shows where the position is now and nothing reads as a
+ * second payment to make. Repay more opens the target again. `disabled` while the position is read again.
+ */
+export function RepayMore({ onRepayMore, disabled = false }: { onRepayMore: () => void; disabled?: boolean }) {
+  return (
+    <div className="flex flex-col items-start gap-3 border-t border-border pt-6 @md:flex-row @md:items-center @md:justify-between">
+      <p className="text-sm text-muted">To lower the LTV further, set a new target and pay again.</p>
+      <Button icon={<Plus />} disabled={disabled} onClick={onRepayMore} className="shrink-0">
+        Repay more
+      </Button>
+    </div>
   );
 }

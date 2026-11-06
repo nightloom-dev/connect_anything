@@ -1,7 +1,9 @@
-import { useId, useRef } from 'react';
-import { Input, Slider, TokenIcon, cn } from '../../ui/index.ts';
+import { useId, useRef, type Ref } from 'react';
+import { Input, Slider, TokenIcon, Tooltip, cn } from '../../ui/index.ts';
+import type { Preset } from './presets.ts';
+import { useSettled } from './simulate.ts';
 
-export type Preset = { label: string; /** What it types into the field. */ value: string };
+export type { Preset } from './presets.ts';
 
 type TargetLtvProps = {
   /** The field's text, as typed. */
@@ -15,10 +17,12 @@ type TargetLtvProps = {
   liquidation?: number;
   presets: Preset[];
   disabled?: boolean;
+  /** The field, for the page to put the focus in it. */
+  fieldRef?: Ref<HTMLInputElement>;
 };
 
 /** The target LTV: a field and a slider that show the same value, and presets that type one in. */
-export function TargetLtv({ value, onChange, fraction, now, liquidation, presets, disabled }: TargetLtvProps) {
+export function TargetLtv({ value, onChange, fraction, now, liquidation, presets, disabled, fieldRef }: TargetLtvProps) {
   const id = useId();
   const errorId = `${id}-error`;
   // while the text is not a target, the slider stays where the last one put it
@@ -32,7 +36,7 @@ export function TargetLtv({ value, onChange, fraction, now, liquidation, presets
     ...(now !== undefined ? [{ value: now * 100, label: 'Now' }] : []),
     ...(liquidation !== undefined ? [{ value: liquidation * 100, label: 'Liquidation', tone: 'danger' as const }] : []),
   ];
-  // a preset that comes to the same target as a later one says less than it, as −20 pts under 20%: Repay all
+  // a preset that comes to the same target as a later one says less than it, as Safer under 20%: Repay all
   const distinct = presets.filter((preset, index) => !presets.slice(index + 1).some(other => other.value === preset.value));
 
   return (
@@ -46,6 +50,7 @@ export function TargetLtv({ value, onChange, fraction, now, liquidation, presets
         </div>
         <div className="w-28 shrink-0">
           <Input
+            ref={fieldRef}
             aria-label="Target LTV, %"
             inputMode="decimal"
             autoComplete="off"
@@ -69,20 +74,21 @@ export function TargetLtv({ value, onChange, fraction, now, liquidation, presets
         {distinct.map(preset => {
           const pressed = value === preset.value;
           return (
-            <button
-              key={preset.label}
-              type="button"
-              aria-pressed={pressed}
-              disabled={disabled}
-              onClick={() => onChange(preset.value)}
-              className={cn(
-                'inline-flex h-8 items-center gap-2 rounded-full border px-3 text-sm font-medium transition-colors duration-120 disabled:cursor-not-allowed disabled:opacity-50',
-                pressed ? 'border-accent/60 bg-accent/14 text-text' : 'border-border-strong bg-surface-2 text-text enabled:hover:border-border-control enabled:hover:bg-surface-3',
-              )}
-            >
-              {preset.label}{' '}
-              <span className={cn('nums', pressed ? 'text-accent-hover' : 'text-muted')}>{preset.value}%</span>
-            </button>
+            <Tooltip key={preset.label} content={preset.hint} disabled={disabled}>
+              <button
+                type="button"
+                aria-pressed={pressed}
+                disabled={disabled}
+                onClick={() => onChange(preset.value)}
+                className={cn(
+                  'inline-flex h-8 items-center gap-2 rounded-full border px-3 text-sm font-medium transition-colors duration-120 disabled:cursor-not-allowed disabled:opacity-50',
+                  pressed ? 'border-accent/60 bg-accent/14 text-text' : 'border-border-strong bg-surface-2 text-text enabled:hover:border-border-control enabled:hover:bg-surface-3',
+                )}
+              >
+                {preset.label}{' '}
+                <span className={cn('nums', pressed ? 'text-accent-hover' : 'text-muted')}>{preset.value}%</span>
+              </button>
+            </Tooltip>
           );
         })}
       </div>
@@ -90,16 +96,26 @@ export function TargetLtv({ value, onChange, fraction, now, liquidation, presets
   );
 }
 
-/** The amount the target works out to, in dollars and in the token repaid. The page's tests read it word for word. */
+/**
+ * The amount the target works out to, in dollars and in the token repaid. The page's tests read it word for word.
+ * A screen reader hears it once the target holds still, not at every step of the slider, which says its own value. It
+ * reads the line it hears, which says the same as the one on the screen, so it does not read the amount twice.
+ */
 export function RepaySummary({ usd, amount, symbol }: { usd: string; amount: string; symbol: string }) {
+  const heard = useSettled(`Amount to repay: ${usd}, ${amount} ${symbol}.`, 700);
   return (
-    <p aria-live="polite" aria-atomic="true" className="rounded-lg border border-accent/30 bg-accent/8 px-4 py-3 text-md leading-8 text-text">
-      Repay <strong className="text-lg font-semibold nums">{usd}</strong>, which is{' '}
-      <strong className="text-lg font-semibold whitespace-nowrap nums">
-        <TokenIcon symbol={symbol} size={18} className="mr-1.5 inline-block -translate-y-px align-middle" />
-        {amount} {symbol}
-      </strong>
-      .
-    </p>
+    <div className="rounded-lg border border-accent/30 bg-accent/8 px-4 py-3 text-md leading-8 text-text">
+      <p aria-hidden>
+        Repay <strong className="text-lg font-semibold nums">{usd}</strong>, which is{' '}
+        <strong className="text-lg font-semibold whitespace-nowrap nums">
+          <TokenIcon symbol={symbol} size={18} className="mr-1.5 inline-block -translate-y-px align-middle" />
+          {amount} {symbol}
+        </strong>
+        .
+      </p>
+      <p aria-live="polite" aria-atomic="true" className="sr-only">
+        {heard}
+      </p>
+    </div>
   );
 }

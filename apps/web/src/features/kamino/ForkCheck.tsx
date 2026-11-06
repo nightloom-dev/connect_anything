@@ -2,7 +2,7 @@ import { useId, type ReactNode } from 'react';
 import { FlaskConical, RotateCw } from 'lucide-react';
 import type { SimResult } from '@connect-anything/core';
 import { Badge, Button, Card, Meter, Skeleton, Spinner, cn } from '../../ui/index.ts';
-import type { ForkCheck } from './simulate.ts';
+import type { ForkCheck } from './fork.ts';
 
 /** What Connect allows a transaction: about 200k compute units, and Solana's 1232 bytes. */
 export const CU_MAX = 200_000;
@@ -75,7 +75,10 @@ function Instructions({ steps }: { steps: string[] }) {
 
 type ForkCheckCardProps = {
   check: ForkCheck;
-  /** What the simulation delivers to the stand-in intermediary, as "800 USDC". */
+  /**
+   * What the simulation delivers to the stand-in intermediary, as "800 USDC": the amount of the target, before fees. A run
+   * delivers what its quote says, which is a little less.
+   */
   amount?: string;
   /** The recipe's instructions, in order. */
   steps: string[];
@@ -89,14 +92,15 @@ export function ForkCheckCard({ check, amount, steps, onRetry, action }: ForkChe
   const id = useId();
   const result = check.kind === 'done' ? check.result : undefined;
   const verdict = result && VERDICT[result.verdict];
+  // the title says for which amount: the target's, which the quote then delivers less of, after fees
   const title =
     check.kind === 'offline'
       ? 'Not simulated: simulator offline'
       : check.kind === 'failed' || check.kind === 'idle'
         ? 'Not simulated'
         : check.kind === 'checking' && !check.last
-          ? 'Checking on a fork…'
-          : 'Checked on a fork';
+          ? 'Checking on a mainnet fork…'
+          : `Checked on a mainnet fork${amount ? ` for ${amount}` : ''}`;
 
   return (
     <Card as="section" aria-labelledby={id} padding="lg" className="@container flex min-w-0 flex-col gap-5">
@@ -111,9 +115,9 @@ export function ForkCheckCard({ check, amount, steps, onRetry, action }: ForkChe
           <p role="status" className="mt-0.5 text-sm text-muted">
             {check.kind === 'idle' && 'Nothing to simulate: the target asks for no repay.'}
             {check.kind === 'checking' && `Running the repay${amount ? ` of ${amount}` : ''} on a fork of mainnet…`}
-            {result?.verdict === 'ok' && `The repay${amount ? ` of ${amount}` : ''} ran on a fork of mainnet.`}
-            {result?.verdict === 'warn' && `The repay${amount ? ` of ${amount}` : ''} ran on a fork of mainnet, with warnings.`}
-            {result?.verdict === 'fail' && `The repay${amount ? ` of ${amount}` : ''} failed on a fork of mainnet, and would most likely fail for real.`}
+            {result?.verdict === 'ok' && "The repay ran with no errors, for the target's amount before fees."}
+            {result?.verdict === 'warn' && "The repay ran, with warnings, for the target's amount before fees."}
+            {result?.verdict === 'fail' && 'The repay failed on the fork, and would most likely fail for real.'}
             {check.kind === 'offline' && 'This repay has not been checked. Paying does not depend on it.'}
             {check.kind === 'failed' && `The simulator gave no answer: ${check.message}`}
           </p>

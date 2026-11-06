@@ -21,7 +21,7 @@ const BOTTOM = 24;
  * The payment, beside the position. It stays in view while the position scrolls, as long as all of it fits on the screen:
  * a column taller than the screen would hide its own end, so then it scrolls with the page.
  */
-export function RunColumn({ children, className }: { children: ReactNode; className?: string }) {
+export function RunColumn({ id, children, className }: { /** For the pay bar to lead to. */ id?: string; children: ReactNode; className?: string }) {
   const column = useRef<HTMLElement>(null);
   const [fits, setFits] = useState(true);
   useEffect(() => {
@@ -37,7 +37,12 @@ export function RunColumn({ children, className }: { children: ReactNode; classN
     };
   }, []);
   return (
-    <section ref={column} aria-label="Payment" className={cn('min-w-0 md:col-start-2 md:row-span-3 md:row-start-1 md:self-start', fits && 'md:sticky md:top-20', className)}>
+    <section
+      ref={column}
+      id={id}
+      aria-label="Payment"
+      className={cn('min-w-0 scroll-mt-20 md:col-start-2 md:row-span-3 md:row-start-1 md:self-start', fits && 'md:sticky md:top-20', className)}
+    >
       {children}
     </section>
   );

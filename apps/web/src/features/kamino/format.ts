@@ -28,6 +28,16 @@ export function health(position: Pick<Obligation, 'ltv' | 'liquidationLtv' | 'co
   return { variant: left < 0.1 ? 'warn' : 'ok', text: `${points(left)} to liquidation` };
 }
 
+/**
+ * A message shown beside a Try again button, without saying the same: "Could not read the position from Solana, try
+ * again" is "Could not read the position from Solana." A message that is nothing else stays as it is.
+ */
+export function besideRetry(message: string) {
+  const shorter = message.replace(/(,|\s+and)?\s*try again[.!]?\s*$/i, '').trimEnd();
+  if (shorter === message.trimEnd() || !/[\p{L}\p{N}]/u.test(shorter)) return message;
+  return /[.!?]$/.test(shorter) ? shorter : `${shorter}.`;
+}
+
 /** For a list sorted by risk: the share of its liquidation LTV a position uses, and a debt with no collateral first of all. */
 export const risk = ({ ltv, liquidationLtv, collateralUsd, debtUsd }: Obligation) =>
   !(debtUsd > 0) ? -1 : !(collateralUsd > 0) ? Number.POSITIVE_INFINITY : liquidationLtv > 0 ? ltv / liquidationLtv : Number.POSITIVE_INFINITY;

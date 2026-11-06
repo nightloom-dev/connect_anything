@@ -24,13 +24,17 @@ type AddressProps = {
   className?: string;
 };
 
-/** A base58 or 0x value as `abcd…wxyz`, the whole of it in a tooltip, with Copy and a link to the explorer. */
+/**
+ * A base58 or 0x value as `abcd…wxyz`, the whole of it in a tooltip, with Copy and a link to the explorer. The keyboard
+ * finds the whole value on Copy, so the short text takes the focus only where there is no Copy.
+ */
 export function Address({ value, chain = 'sol', kind = 'account', label, chars = 4, full = false, copy = true, explorer = true, className }: AddressProps) {
   const meta = chainMeta(chain);
   const href = explorer && meta ? `${kind === 'token' ? meta.token : meta.address}${value}` : undefined;
+  const whole = <span className="font-mono font-normal break-all">{value}</span>;
   const text = (
     <span
-      tabIndex={full ? undefined : 0}
+      tabIndex={full || copy ? undefined : 0}
       className={cn('rounded-xs font-mono text-[0.8125rem] leading-5 tracking-tight text-text outline-offset-1', full ? 'break-all' : 'whitespace-nowrap')}
     >
       {full ? value : truncateMiddle(value, chars)}
@@ -41,7 +45,7 @@ export function Address({ value, chain = 'sol', kind = 'account', label, chars =
       {full ? (
         text
       ) : (
-        <Tooltip content={<span className="font-mono font-normal break-all">{value}</span>} wide>
+        <Tooltip content={whole} wide>
           {text}
         </Tooltip>
       )}
@@ -50,7 +54,7 @@ export function Address({ value, chain = 'sol', kind = 'account', label, chars =
           {label}
         </Badge>
       )}
-      {copy && <CopyButton value={value} label="Copy address" message="Address copied" />}
+      {copy && <CopyButton value={value} label="Copy address" message="Address copied" tip={full ? undefined : whole} />}
       {href && (
         <Tooltip content={`Open in ${meta!.explorer}`} describe={false}>
           <a

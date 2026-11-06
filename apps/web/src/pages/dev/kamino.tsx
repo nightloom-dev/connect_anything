@@ -2,13 +2,17 @@ import { useState } from 'react';
 import { Blocks } from 'lucide-react';
 import type { SimResult } from '@connect-anything/core';
 import { targetFrom, type Obligation, type ObligationRow } from '@connect-anything/kamino-rescue';
-import { BeforeAfter, ReadingAgain } from '../../features/kamino/BeforeAfter.tsx';
+import { BeforeAfter, ReadingAgain, RepayMore } from '../../features/kamino/BeforeAfter.tsx';
 import { BeforeYouPay } from '../../features/kamino/BeforeYouPay.tsx';
 import { ForkCheckCard } from '../../features/kamino/ForkCheck.tsx';
+import type { ForkCheck } from '../../features/kamino/fork.ts';
+import { besideRetry } from '../../features/kamino/format.ts';
 import { HowItWorks, NoPositions, ReadingPositions, RunPlaceholder, WatcherBanner } from '../../features/kamino/layout.tsx';
+import { ReplaceRecipe } from '../../features/kamino/OpenInBuilder.tsx';
+import { PayStrip } from '../../features/kamino/PayBar.tsx';
 import { PositionCard } from '../../features/kamino/PositionCard.tsx';
 import { PositionList } from '../../features/kamino/PositionList.tsx';
-import type { ForkCheck } from '../../features/kamino/simulate.ts';
+import { targetPresets } from '../../features/kamino/presets.ts';
 import { RepaySummary, TargetLtv } from '../../features/kamino/TargetLtv.tsx';
 import { AtLiquidation, NoCollateral, NotRepayable, NothingToRepay, OtherDebts, OverComputeLimit, ShortOfTarget, TargetPastLiquidation } from '../../features/kamino/warnings.tsx';
 import { Failure } from '../../ui.tsx';
@@ -83,7 +87,6 @@ const OpenInBuilderLookalike = () => (
 /** The target LTV with its own state, as the rescue keeps it. */
 function TargetDemo({ of, initial, disabled = false }: { of: Obligation; initial: string; disabled?: boolean }) {
   const [value, setValue] = useState(initial);
-  const points = (gap: number) => String(Math.max(Math.floor(of.ltv * 100) - gap, 0));
   return (
     <TargetLtv
       value={value}
@@ -91,11 +94,7 @@ function TargetDemo({ of, initial, disabled = false }: { of: Obligation; initial
       fraction={targetFrom(value)}
       now={of.collateralUsd > 0 ? of.ltv : undefined}
       liquidation={of.collateralUsd > 0 ? of.liquidationLtv : undefined}
-      presets={[
-        { label: 'Safe (−10 pts)', value: points(10) },
-        { label: '−20 pts', value: points(20) },
-        { label: 'Repay all', value: '0' },
-      ]}
+      presets={targetPresets(of)}
       disabled={disabled}
     />
   );
@@ -124,7 +123,7 @@ function Positions() {
           <div className="flex flex-col gap-5 border-t border-border pt-6">
             <TargetDemo of={SAFE} initial="45" />
             <RepaySummary usd="$800.00" amount="800" symbol="USDC" />
-            <BeforeYouPay atLiquidation={false} />
+            <BeforeYouPay />
           </div>
         </PositionCard>
       </Demo>
@@ -159,6 +158,9 @@ function Target() {
       </Demo>
       <Demo title="Near liquidation: the slider turns amber, then red">
         <TargetDemo of={WARNING} initial="74" />
+      </Demo>
+      <Demo title="Past liquidation: Safe stays 15 pts under it, out of the amber">
+        <TargetDemo of={DANGER} initial="75" />
       </Demo>
       <Demo title="While a run is busy">
         <TargetDemo of={SAFE} initial="45" disabled />
@@ -200,11 +202,8 @@ function Warnings() {
       <Demo title="At liquidation already">
         <AtLiquidation />
       </Demo>
-      <Demo title="Before you pay">
-        <BeforeYouPay atLiquidation={false} />
-      </Demo>
-      <Demo title="Before you pay, at liquidation: Why? says so too">
-        <BeforeYouPay atLiquidation />
+      <Demo title="Before you pay: three points, and Why? on demand">
+        <BeforeYouPay />
       </Demo>
     </DemoGrid>
   );
@@ -241,11 +240,44 @@ function Fork() {
   );
 }
 
+/** After a run: the comparison, and the position with its target folded into Repay more, which opens it again. */
+function AfterRunDemo() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="flex flex-col gap-6">
+      <BeforeAfter before={SAFE} after={REPAID} onReadAgain={nowhere} />
+      {/* folded, the target leaves the bar too; opened, it starts at Safe */}
+      <PositionCard position={REPAID} target={open ? Number(targetPresets(REPAID)[0].value) / 100 : null}>
+        {open ? (
+          <div className="flex flex-col gap-5 border-t border-border pt-6">
+            <TargetDemo of={REPAID} initial={targetPresets(REPAID)[0].value} />
+            <RepaySummary usd="$800.00" amount="800" symbol="USDC" />
+            <BeforeYouPay />
+            <div>
+              <Button size="sm" onClick={() => setOpen(false)}>
+                Fold it again (gallery only)
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <RepayMore onRepayMore={() => setOpen(true)} />
+        )}
+      </PositionCard>
+    </div>
+  );
+}
+
 function After() {
   return (
     <DemoGrid>
+      <Demo title="After the run, as /kamino shows it: Repay more opens the target" wide>
+        <AfterRunDemo />
+      </Demo>
       <Demo title="Before → after: 800 USDC repaid">
         <BeforeAfter before={SAFE} after={REPAID} onReadAgain={nowhere} />
+      </Demo>
+      <Demo title="Repay more, while the position is read again">
+        <RepayMore onRepayMore={nowhere} disabled />
       </Demo>
       <Demo title="Reading again">
         <div className="flex flex-col gap-6">
@@ -285,14 +317,57 @@ function Empty() {
   );
 }
 
+/** The bar a phone shows at the bottom of the screen while the payment is further down, as it sits there. */
+function PhoneBar({ busy = false }: { busy?: boolean }) {
+  return (
+    <div className="mx-auto w-full max-w-[390px] overflow-hidden rounded-lg border border-border">
+      <div className="h-16 bg-bg/60" aria-hidden />
+      <div className="border-t border-border-strong bg-surface/95 px-4 py-3 shadow-[0_-12px_32px_-16px_rgb(0_0_0/0.7)]">
+        <PayStrip amount="800" symbol="USDC" busy={busy} onGo={nowhere} />
+      </div>
+    </div>
+  );
+}
+
+/** Open in builder, when the builder holds a recipe of its own. */
+function ReplaceDemo() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <div>
+        <Button size="sm" icon={<Blocks />} onClick={() => setOpen(true)}>
+          Open in builder
+        </Button>
+      </div>
+      <ReplaceRecipe open={open} steps={3} onCancel={() => setOpen(false)} onReplace={() => setOpen(false)} />
+    </>
+  );
+}
+
+function Phone() {
+  return (
+    <DemoGrid>
+      <Demo title="Something to pay, the card out of view">
+        <PhoneBar />
+      </Demo>
+      <Demo title="A run in flight">
+        <PhoneBar busy />
+      </Demo>
+      <Demo title="Open in builder, with a recipe in the builder: it asks first">
+        <ReplaceDemo />
+      </Demo>
+    </DemoGrid>
+  );
+}
+
 function Errors() {
   return (
     <DemoGrid>
       <Demo title="Not a Solana address, as the server answers it">
         <AddressInput aria-label="Wallet address (gallery)" size="lg" value="0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed" onChange={() => {}} error={<span>That is not a Solana address.</span>} />
       </Demo>
-      <Demo title="The read failed">
-        <Failure error={new Error('Could not read the position from Solana, try again')} retry={nowhere} />
+      <Demo title="The read failed: the words leave Try again to the button">
+        <Failure error={new Error(besideRetry('Could not read the position from Solana, try again'))} retry={nowhere} />
       </Demo>
     </DemoGrid>
   );
@@ -307,7 +382,13 @@ export const sections: DevSection[] = [
   { id: 'kamino-warnings', title: 'Kamino: warnings', description: 'One alert each, a short title over the exact words.', render: () => <Warnings /> },
   { id: 'kamino-deeplink', title: 'Kamino: watcher deep link', description: '/kamino?wallet=…&obligation=… from a Telegram alert.', render: () => <DeepLink /> },
   { id: 'kamino-fork', title: 'Kamino: checked on a fork', description: 'POST /api/simulate of the repay. It never holds up the payment.', render: () => <Fork /> },
-  { id: 'kamino-after', title: 'Kamino: after the run', render: () => <After /> },
+  { id: 'kamino-after', title: 'Kamino: after the run', description: 'The target folds into Repay more, so nothing reads as a second payment.', render: () => <After /> },
+  {
+    id: 'kamino-phone',
+    title: 'Kamino: the pay bar and the builder',
+    description: 'Under 960px a bar leads down to the payment while it is further down the page. Open in builder asks before it replaces a recipe.',
+    render: () => <Phone />,
+  },
   { id: 'kamino-empty', title: 'Kamino: empty and loading', render: () => <Empty /> },
   { id: 'kamino-errors', title: 'Kamino: errors', render: () => <Errors /> },
 ];

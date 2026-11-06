@@ -41,6 +41,28 @@ async function side(page: Page, name: 'Collateral' | 'Debt', total: string, rows
 /** A button of the list of positions, by its whole name. */
 const choice = (page: Page, name: string) => page.getByRole('region', { name: 'Positions' }).getByRole('button', { name, exact: true });
 
+/** Keeps what Open in builder puts in session storage for the builder, which takes it out as it opens. */
+const keepHanded = (page: Page) =>
+  page.addInitScript(() => {
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (key === 'connect-anything:builder-import') (window as unknown as { handed?: string }).handed = value;
+      return setItem.call(this, key, value);
+    };
+  });
+
+/** The recipe Open in builder handed over, if it handed one. */
+const handed = async (page: Page) => JSON.parse((await page.evaluate(() => (window as unknown as { handed?: string }).handed)) ?? 'null');
+
+/** A recipe of the builder's own in this tab, of two steps, as the builder keeps it across a reload. */
+const builderHolds = (page: Page) =>
+  page.evaluate(() => {
+    const program = 'Demo111111111111111111111111111111111111111';
+    const idl = { address: program, metadata: { name: 'demo', version: '0.1.0', spec: '0.1.0' }, instructions: [{ name: 'ping', discriminator: [1], accounts: [], args: [] }] };
+    const step = { program, ixName: 'ping', args: {}, inputs: {} };
+    sessionStorage.setItem('connect-anything:builder', JSON.stringify({ version: 1, idl: program, idls: { [program]: idl }, steps: [step, step], target: '' }));
+  });
+
 test('a healthy position: the target LTV sets the amount, which the payment form takes', { tag: '@mobile' }, async ({ page, api }) => {
   await page.goto(KAMINO);
   await expect(page.getByRole('button', { name: 'Read positions' })).toBeDisabled();
@@ -59,13 +81,16 @@ test('a healthy position: the target LTV sets the amount, which the payment form
   const target = page.getByLabel('Target LTV, %');
   await expect(target).toHaveValue('45');
   await expect(page.getByText('Repay $800.00, which is 800 USDC.')).toBeVisible();
-  // three things to know before paying, and the whole reason behind them on demand
+  // three things that decide whether to pay, and the whole reason behind them on demand
   const before = page.getByRole('region', { name: 'Before you pay' });
   await expect(before.getByRole('listitem')).toHaveText([
-    'It lands about 150 s after the deposit, plus the MPC signature.',
-    'The amount is fixed when you sign.',
-    'Whatever is not spent can come back to you through Refund.',
+    "It repays debt only: the collateral stays with the position's owner.",
+    'The amount is fixed when you sign. What is not spent can come back through Refund.',
+    'If nothing is owed by the time it lands, the run fails and the money waits for Refund.',
   ]);
+  // how long a run takes is said once on the screen, by the payment, and not here again
+  await expect(before).not.toContainText('150');
+  await expect(page.getByText(/150 s/)).toHaveCount(1);
   await expect(before.getByText('The position can move before this runs.')).toHaveCount(0);
   await before.getByRole('button', { name: 'Why?' }).click();
   await expect(before.getByText('The position can move before this runs.')).toBeVisible();
@@ -103,14 +128,14 @@ test('the presets and the slider set the target as typing does, and Repay all re
   const presets = page.getByRole('group', { name: 'Presets' });
   await expect(target).toHaveValue('45');
   await expect(slider).toHaveValue('45');
-  await expect(presets.getByRole('button', { name: 'Safe (−10 pts) 45%' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(presets.getByRole('button', { name: 'Safe 45%' })).toHaveAttribute('aria-pressed', 'true');
 
-  await presets.getByRole('button', { name: '−20 pts 35%' }).click();
+  await presets.getByRole('button', { name: 'Safer 35%' }).click();
   await expect(target).toHaveValue('35');
   await expect(slider).toHaveValue('35');
   await expect(page.getByText('Repay $1,600.00, which is 1600 USDC.')).toBeVisible();
   await expect(page.getByLabel('Amount')).toHaveValue('1600');
-  await expect(presets.getByRole('button', { name: 'Safe (−10 pts) 45%' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(presets.getByRole('button', { name: 'Safe 45%' })).toHaveAttribute('aria-pressed', 'false');
 
   await presets.getByRole('button', { name: 'Repay all 0%' }).click();
   await expect(target).toHaveValue('0');
@@ -247,11 +272,22 @@ test('what can stop a repay: USDC short of the target, other debts, no collatera
   await opened(page, HEALTHY.address, 'Past liquidation');
   await ltv(page, 'LTV 85.00%, liquidation at 80.00%, target 75.00%');
   await expect(warning('This position is at or past its liquidation LTV, so it can be liquidated before the repay lands.')).toBeVisible();
+  // the alert says it once: Why? does not say it again
   const before = page.getByRole('region', { name: 'Before you pay' });
   await before.getByRole('button', { name: 'Why?' }).click();
-  await expect(before).toContainText('This position is already at its liquidation LTV, so that can happen at any moment.');
+  await expect(before.getByText('The position can move before this runs.')).toBeVisible();
+  await expect(before).not.toContainText('at any moment');
   await expect(page.getByLabel('Target LTV, %')).toHaveValue('75');
   await expect(page.getByText('Repay $800.00, which is 800 USDC.')).toBeVisible();
+  // 10 points down from 85% is 75%, in the amber zone that starts 10 points under liquidation: Safe goes 15 under it
+  const presets = page.getByRole('group', { name: 'Presets' });
+  await expect(presets.getByRole('button')).toHaveText(['Safe 65%', 'Safer 55%', 'Repay all 0%']);
+  await presets.getByRole('button', { name: 'Safe 65%' }).click();
+  await expect(page.getByLabel('Target LTV, %')).toHaveValue('65');
+  await ltv(page, 'LTV 85.00%, liquidation at 80.00%, target 65.00%');
+  await expect(page.getByText('Repay $1,600.00, which is 1600 USDC.')).toBeVisible();
+  await presets.getByRole('button', { name: 'Safer 55%' }).click();
+  await expect(page.getByText('Repay $2,400.00, which is 2400 USDC.')).toBeVisible();
 
   api.kamino = 'six-reserves';
   await read(page);
@@ -286,8 +322,10 @@ test('the repay is checked on a fork for the amount of the target, and the check
   await page.goto(KAMINO);
   await read(page);
   const simulations = () => api.requests.filter(({ method, path }) => method === 'POST' && path === '/api/simulate');
-  const checked = page.getByRole('region', { name: 'Checked on a fork' });
-  await expect(checked.getByRole('status')).toHaveText('The repay of 800 USDC ran on a fork of mainnet.');
+  // the card says plainly which amount it ran: the target's, which the quote delivers a little less of
+  const checked = page.getByRole('region', { name: /^Checked on a mainnet fork for / });
+  await expect(checked.getByRole('heading')).toHaveText('Checked on a mainnet fork for 800 USDC');
+  await expect(checked.getByRole('status')).toHaveText("The repay ran with no errors, for the target's amount before fees.");
   await expect(checked.getByText('Passed', { exact: true })).toBeVisible();
   await expect(checked.getByRole('meter', { name: 'Compute units' })).toHaveAttribute('aria-valuetext', '115,948 of 200,000 CU');
   await expect(checked.getByRole('meter', { name: 'Transaction size' })).toHaveAttribute('aria-valuetext', '934 of 1,232 bytes');
@@ -300,7 +338,8 @@ test('the repay is checked on a fork for the amount of the target, and the check
   const target = page.getByLabel('Target LTV, %');
   api.simulate = 'warn';
   await target.fill('50');
-  await expect(checked.getByRole('status')).toHaveText('The repay of 400 USDC ran on a fork of mainnet, with warnings.');
+  await expect(checked.getByRole('heading')).toHaveText('Checked on a mainnet fork for 400 USDC');
+  await expect(checked.getByRole('status')).toHaveText("The repay ran, with warnings, for the target's amount before fees.");
   await expect(checked.getByText('Passed with warnings', { exact: true })).toBeVisible();
   await expect(checked.getByRole('meter', { name: 'Compute units' })).toHaveAttribute('aria-valuetext', '250,028 of 200,000 CU, over the limit');
   await expect(checked.getByText('CU 250.0k > 200k', { exact: true })).toBeVisible();
@@ -308,7 +347,8 @@ test('the repay is checked on a fork for the amount of the target, and the check
 
   api.simulate = 'fail';
   await target.fill('40');
-  await expect(checked.getByRole('status')).toHaveText('The repay of 1200 USDC failed on a fork of mainnet, and would most likely fail for real.');
+  await expect(checked.getByRole('heading')).toHaveText('Checked on a mainnet fork for 1200 USDC');
+  await expect(checked.getByRole('status')).toHaveText('The repay failed on the fork, and would most likely fail for real.');
   await expect(checked.getByText('Failed', { exact: true })).toBeVisible();
   await expect(checked.getByText('Step 4 of 4 (repay_obligation_liquidity_v2) failed: ConstraintHasOne: A has one constraint was violated (account obligation)', { exact: true })).toBeVisible();
 
@@ -329,22 +369,40 @@ test('the repay is checked on a fork for the amount of the target, and the check
 
 test('Open in builder hands the rescue recipe to the builder, at its instructions', async ({ page }) => {
   // the builder takes the recipe out of session storage as it opens, so the test keeps what was put there
-  await page.addInitScript(() => {
-    const setItem = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (key: string, value: string) {
-      if (key === 'connect-anything:builder-import') (window as unknown as { handed?: string }).handed = value;
-      return setItem.call(this, key, value);
-    };
-  });
+  await keepHanded(page);
   await page.goto(KAMINO);
   await read(page);
   await expect(page.getByText('Repay $800.00, which is 800 USDC.')).toBeVisible();
   await page.getByRole('button', { name: 'Open in builder' }).click();
   await expect(page).toHaveURL(/\/build\?step=2$/);
-  const handed = JSON.parse((await page.evaluate(() => (window as unknown as { handed?: string }).handed)) ?? 'null');
-  expect(handed.steps.map((step: { ixName: string }) => step.ixName)).toEqual(['refresh_reserve', 'refresh_reserve', 'refresh_obligation', 'repay_obligation_liquidity_v2']);
-  expect(handed.destination).toMatchObject({ tokenAddress: SOL_USDC.contractAddress });
-  expect(JSON.stringify(handed.steps)).toContain(HEALTHY.address);
+  const recipe = await handed(page);
+  expect(recipe.steps.map((step: { ixName: string }) => step.ixName)).toEqual(['refresh_reserve', 'refresh_reserve', 'refresh_obligation', 'repay_obligation_liquidity_v2']);
+  expect(recipe.destination).toMatchObject({ tokenAddress: SOL_USDC.contractAddress });
+  expect(JSON.stringify(recipe.steps)).toContain(HEALTHY.address);
+});
+
+test('Open in builder asks before it replaces a recipe the builder holds', async ({ page }) => {
+  await keepHanded(page);
+  await page.goto(KAMINO);
+  await read(page);
+  await expect(page.getByText('Repay $800.00, which is 800 USDC.')).toBeVisible();
+  await builderHolds(page);
+  const open = page.getByRole('button', { name: 'Open in builder' });
+  await open.click();
+  const ask = page.getByRole('dialog', { name: 'Replace the recipe in the builder?' });
+  await expect(ask).toContainText('The builder holds a recipe of 2 steps. Opening this one there replaces it.');
+
+  // Cancel leaves both where they are
+  await ask.getByRole('button', { name: 'Cancel' }).click();
+  await expect(ask).toHaveCount(0);
+  await expect(open).toBeFocused();
+  await expect(page).toHaveURL(new RegExp(`${KAMINO}$`));
+  expect(await handed(page)).toBeNull();
+
+  await open.click();
+  await ask.getByRole('button', { name: 'Replace it' }).click();
+  await expect(page).toHaveURL(/\/build\?step=2$/);
+  expect((await handed(page)).steps.map((step: { ixName: string }) => step.ixName)).toEqual(['refresh_reserve', 'refresh_reserve', 'refresh_obligation', 'repay_obligation_liquidity_v2']);
 });
 
 test('a quote moves the LTV bar to where it lands, and after the run the position is read again', async ({ page, api, wallet }) => {
@@ -362,8 +420,8 @@ test('a quote moves the LTV bar to where it lands, and after the run the positio
   await expect(after.getByRole('status')).toHaveText('After the run the debt is $3,600.00, from $4,400.00, and the LTV is 45.00%, from 55.00%.');
   await expect(after.getByText('$800.00 repaid', { exact: true })).toBeVisible();
   await expect(after.getByText('10.00 pts lower', { exact: true })).toBeVisible();
-  // the position below is the one read after the run
-  await ltv(page, 'LTV 45.00%, liquidation at 80.00%, target 45.00%');
+  // the position below is the one read after the run, and the target it reached has folded away with its field
+  await ltv(page, 'LTV 45.00%, liquidation at 80.00%');
   await side(page, 'Debt', '$3,600.00', [['USDC', '3,600 USDC', '$3,600.00']]);
 
   const reads = () => api.requests.filter(({ path }) => path.startsWith('/api/kamino/')).length;
@@ -371,6 +429,88 @@ test('a quote moves the LTV bar to where it lands, and after the run the positio
   await after.getByRole('button', { name: 'Read again', exact: true }).click();
   await expect.poll(reads).toBe(count + 1);
   await expect(after.getByRole('status')).toHaveText('After the run the debt is $3,600.00, from $4,400.00, and the LTV is 45.00%, from 55.00%.');
+});
+
+test('the builder waits while a run is in flight, and after the repay the target folds away behind Repay more', async ({ page, api, connect, wallet }) => {
+  await page.goto(`${KAMINO}?wallet=${RECORDED_WALLET}&obligation=${HEALTHY.address}`);
+  await expect(page.getByText('Repay $800.00, which is 800 USDC.')).toBeVisible();
+  await wallet.connect();
+  await page.getByRole('button', { name: 'Get exact amount and fee' }).click();
+  await expect(page.getByRole('button', { name: 'Sign and run' })).toBeEnabled();
+  const builder = page.getByRole('button', { name: 'Open in builder' });
+  await expect(builder).toBeEnabled();
+
+  // the builder would take the page, and the run with it
+  api.kamino = 'repaid';
+  const create = connect.hold('create');
+  await page.getByRole('button', { name: 'Sign and run' }).click();
+  await create.reached();
+  await expect(builder).toBeDisabled();
+  create.release();
+
+  // the page shows what the run did, and nothing on it reads as a second payment to make
+  const after = page.getByRole('region', { name: 'After the run' });
+  await expect(after.getByRole('status')).toHaveText('After the run the debt is $3,600.00, from $4,400.00, and the LTV is 45.00%, from 55.00%.');
+  await ltv(page, 'LTV 45.00%, liquidation at 80.00%');
+  await expect(page.getByLabel('Target LTV, %')).toHaveCount(0);
+  await expect(page.getByText(/^Repay \$/)).toHaveCount(0);
+  await expect(page.getByText('already at or under that target', { exact: false })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Before you pay' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: /mainnet fork/ })).toHaveCount(0);
+
+  // Repay more opens the target again, at Safe for the position as it is now: 45% less 10 points
+  await page.getByRole('button', { name: 'Repay more' }).click();
+  const target = page.getByLabel('Target LTV, %');
+  await expect(target).toBeFocused();
+  await expect(target).toHaveValue('35');
+  await expect(page.getByRole('group', { name: 'Presets' }).getByRole('button', { name: 'Safe 35%' })).toHaveAttribute('aria-pressed', 'true');
+  await ltv(page, 'LTV 45.00%, liquidation at 80.00%, target 35.00%');
+  await expect(page.getByText('Repay $800.00, which is 800 USDC.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Repay more' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Checked on a mainnet fork for 800 USDC' })).toBeVisible();
+  // what the run did stays on the screen
+  await expect(after.getByRole('status')).toHaveText('After the run the debt is $3,600.00, from $4,400.00, and the LTV is 45.00%, from 55.00%.');
+});
+
+test('on a phone a bar at the foot of the screen leads to the payment, and keeps out of its way', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(KAMINO);
+  await read(page);
+  await expect(page.getByText('Repay $800.00, which is 800 USDC.')).toBeVisible();
+  const pay = page.getByRole('button', { name: 'Pay, in the payment card below' });
+  await expect(pay).toBeInViewport();
+  await expect(page.getByText('Repay 800 USDC', { exact: true })).toBeVisible();
+
+  // it takes the person to the payment, and the focus with them, and is out of the way while the payment is in view
+  const payment = page.getByRole('region', { name: 'Payment' });
+  await expect(payment).not.toBeInViewport();
+  await pay.click();
+  await expect(payment).toBeFocused();
+  await expect(payment).toBeInViewport();
+  await expect(pay).toBeHidden();
+  await expect(payment.getByLabel('Amount')).toHaveValue('800');
+  // past the payment, at the check on a fork that follows it on a phone, it does not lead back up (on a short screen,
+  // where there is page enough under the payment to scroll it out of view)
+  await page.setViewportSize({ width: 390, height: 560 });
+  await page.getByRole('region', { name: /^Checked on a mainnet fork for / }).evaluate(card => card.scrollIntoView({ block: 'start', behavior: 'instant' }));
+  await expect(payment).not.toBeInViewport();
+  await expect(pay).toBeHidden();
+  await page.setViewportSize({ width: 390, height: 844 });
+
+  // back at the top it leads there again, with the amount of the target
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+  await expect(pay).toBeInViewport();
+  await page.getByLabel('Target LTV, %').fill('50');
+  await expect(page.getByText('Repay 400 USDC', { exact: true })).toBeVisible();
+  // nothing to repay, nothing to lead to
+  await page.getByLabel('Target LTV, %').fill('60');
+  await expect(pay).toHaveCount(0);
+  await page.getByLabel('Target LTV, %').fill('45');
+  await expect(pay).toBeInViewport();
+
+  // two columns from 960px put the payment beside the position, and the bar goes
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(pay).toBeHidden();
 });
 
 test('no positions, an address that is not one, and a read that failed', async ({ page, api }) => {
@@ -388,8 +528,10 @@ test('no positions, an address that is not one, and a read that failed', async (
 
   api.kamino = 'error';
   await read(page);
-  const failure = page.getByRole('alert').filter({ hasText: 'Could not read the position from Solana, try again' });
-  await expect(failure).toBeVisible();
+  // the button says Try again, so the words do not
+  const failure = page.getByRole('alert').filter({ hasText: 'Could not read the position from Solana.' });
+  await expect(failure.getByText('Could not read the position from Solana.', { exact: true })).toBeVisible();
+  await expect(failure).not.toContainText('try again');
   api.kamino = 'healthy';
   await failure.getByRole('button', { name: 'Try again' }).click();
   await expect(page.getByRole('heading', { name: 'Position', exact: true })).toBeVisible();

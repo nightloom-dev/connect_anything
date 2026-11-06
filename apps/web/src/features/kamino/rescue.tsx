@@ -2,20 +2,22 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import type { SolanaRecipe } from '@aurora-is-near/intents-connect';
 import { useExecution } from '@aurora-is-near/intents-connect/react';
 import { CU_LIMIT, estimateCu, ltvAfter, rescuable, rescueAmount, rescueRecipe, targetFrom, type Obligation } from '@connect-anything/kamino-rescue';
-import { fromAtomic } from '../../connect.ts';
+import { fromAtomic, legs } from '../../connect.ts';
 import { Execute } from '../run/execute.tsx';
 import { FigureRow } from '../run/parts.tsx';
 import { toSolanaRecipe, type StoredRecipe } from '../../recipe.ts';
 import { Failure, FetchError, useJson } from '../../ui.tsx';
 import { AddressInput, Button, Card, ChainIcon, cn } from '../../ui/index.ts';
-import { BeforeAfter, ReadingAgain } from './BeforeAfter.tsx';
+import { BeforeAfter, ReadingAgain, RepayMore } from './BeforeAfter.tsx';
 import { BeforeYouPay } from './BeforeYouPay.tsx';
 import { ForkCheckCard } from './ForkCheck.tsx';
-import { dollars, listed, ltvOf, percent, risk, targetPercent } from './format.ts';
+import { besideRetry, dollars, listed, ltvOf, percent, risk, targetPercent } from './format.ts';
 import { COLUMNS, HowItWorks, LEFT, NoPositions, ReadingPositions, RunColumn, RunPlaceholder, WatcherBanner } from './layout.tsx';
 import { OpenInBuilder } from './OpenInBuilder.tsx';
+import { PayBar, type Bar } from './PayBar.tsx';
 import { PositionCard } from './PositionCard.tsx';
 import { PositionList } from './PositionList.tsx';
+import { targetPresets } from './presets.ts';
 import { useForkCheck } from './simulate.ts';
 import { RepaySummary, TargetLtv } from './TargetLtv.tsx';
 import { AtLiquidation, NoCollateral, NotRepayable, NothingToRepay, OtherDebts, OverComputeLimit, ShortOfTarget, TargetPastLiquidation } from './warnings.tsx';
@@ -31,7 +33,17 @@ function Quoted({ spendable, onQuote }: { spendable: string; onQuote: (spendable
   return null;
 }
 
-function Position({ obligation, url, onBusy }: { obligation: Obligation; url: string; onBusy: (busy: boolean) => void }) {
+type PositionProps = {
+  obligation: Obligation;
+  url: string;
+  /** The id of the payment card, for the pay bar to lead to. */
+  payment: string;
+  onBusy: (busy: boolean) => void;
+  /** What the pay bar under the page says, or undefined while it has nothing to lead to. */
+  onBar: (bar: Bar | undefined) => void;
+};
+
+function Position({ obligation, url, payment, onBusy, onBar }: PositionProps) {
   const exec = useExecution();
   useEffect(() => onBusy(exec.isBusy), [exec.isBusy]);
 
@@ -66,11 +78,29 @@ function Position({ obligation, url, onBusy }: { obligation: Obligation; url: st
   const [quoted, setQuoted] = useState<string>();
   const landing = debt && quoted ? ltvAfter(position, debt, quoted) : null;
   const fork = useForkCheck(debt ? ready.current?.stored : undefined, amount && amount.atomic !== '0' ? amount.atomic : undefined);
-  const presets = [
-    { label: 'Safe (−10 pts)', value: String(Math.max(Math.floor(position.ltv * 100) - 10, 0)) },
-    { label: '−20 pts', value: String(Math.max(Math.floor(position.ltv * 100) - 20, 0)) },
-    { label: 'Repay all', value: '0' },
-  ];
+  const presets = targetPresets(position);
+
+  // For the screen only as well: once a repay succeeded, the page shows what it did, and the target folds away behind
+  // Repay more, so that nothing on it reads as a second payment to make. With no target on the screen the run card is
+  // suggested no amount either. Repay more opens the target for this run; the next repay that succeeds folds it again.
+  // A Refund that went through repaid nothing, so the target stays open after one.
+  const [reopened, setReopened] = useState<string>();
+  const done = exec.status === 'SUCCESS' && !legs(exec.execution?.quote).isRefund && reopened !== exec.executionId;
+  const field = useRef<HTMLInputElement>(null);
+  const repayMore = () => {
+    setReopened(exec.executionId);
+    // a target the run reached asks for nothing more, so the field opens at Safe for the position as it is now, as a
+    // press of Safe would type it in; a target not reached yet stays
+    if (!amount || amount.atomic === '0') setTarget(presets[0].value);
+  };
+  useEffect(() => {
+    if (reopened) field.current?.focus();
+  }, [reopened]);
+
+  // On a phone the payment is a long way down, and Rescue draws a bar at the bottom of the screen that leads to it.
+  const bar: Bar | undefined = debt && ready.current && !done && suggested ? { amount: suggested, symbol: debt.symbol, busy: exec.isBusy } : undefined;
+  useEffect(() => onBar(bar), [bar?.amount, bar?.symbol, bar?.busy]);
+  useEffect(() => () => onBar(undefined), []);
 
   const outcome =
     debt &&
@@ -102,13 +132,15 @@ function Position({ obligation, url, onBusy }: { obligation: Obligation; url: st
     <>
       <div className={cn(LEFT, 'flex flex-col gap-6')}>
         {reread.loading && <ReadingAgain compact={!!latest} />}
-        {reread.error && <Failure error={reread.error} retry={reread.retry} />}
+        {reread.error && <Failure error={new Error(besideRetry(reread.error.message))} retry={reread.retry} />}
         {latest && <BeforeAfter before={obligation} after={latest} reading={reread.loading} onReadAgain={reread.retry} />}
 
-        <PositionCard position={position} target={debt ? t : null} after={landing}>
+        {/* once folded away, the target leaves the LTV bar too */}
+        <PositionCard position={position} target={debt && !done ? t : null} after={done ? null : landing}>
           {why && !ready.current && <NotRepayable why={why} />}
 
-          {debt && (
+          {debt && done && <RepayMore onRepayMore={repayMore} disabled={reread.loading} />}
+          {debt && !done && (
             <div className="flex flex-col gap-5 border-t border-border pt-6">
               <TargetLtv
                 value={target}
@@ -118,6 +150,7 @@ function Position({ obligation, url, onBusy }: { obligation: Obligation; url: st
                 liquidation={position.collateralUsd > 0 ? position.liquidationLtv : undefined}
                 presets={presets}
                 disabled={exec.isBusy}
+                fieldRef={field}
               />
               {amount && amount.atomic !== '0' && <RepaySummary usd={dollars(amount.usd)} amount={suggested!} symbol={debt.symbol} />}
               <div className="flex flex-col gap-3 empty:hidden">
@@ -129,29 +162,29 @@ function Position({ obligation, url, onBusy }: { obligation: Obligation; url: st
                 {t !== null && position.collateralUsd > 0 && t >= position.liquidationLtv && <TargetPastLiquidation liquidation={percent(position.liquidationLtv)} />}
                 {estimateCu(position, debt) > CU_LIMIT && <OverComputeLimit estimate={estimateCu(position, debt).toLocaleString('en-US')} limit={CU_LIMIT.toLocaleString('en-US')} />}
               </div>
-              <BeforeYouPay atLiquidation={position.collateralUsd > 0 && position.ltv >= position.liquidationLtv} />
+              <BeforeYouPay />
             </div>
           )}
         </PositionCard>
       </div>
 
-      <RunColumn>
+      <RunColumn id={payment}>
         {ready.current ? (
-          <Execute exec={exec} recipe={ready.current.recipe} stored={ready.current.stored} suggested={suggested} outcome={outcome} closed={why} />
+          <Execute exec={exec} recipe={ready.current.recipe} stored={ready.current.stored} suggested={done ? undefined : suggested} outcome={outcome} closed={why} />
         ) : (
           <RunPlaceholder kind="closed" />
         )}
       </RunColumn>
 
-      {/* under the position on a wide screen, after the payment on a phone */}
-      {debt && ready.current && (
+      {/* under the position on a wide screen, after the payment on a phone; it checks the next payment, so not after a run */}
+      {debt && ready.current && !done && (
         <div className={LEFT}>
           <ForkCheckCard
             check={fork.check}
             amount={fork.amount && `${fromAtomic(fork.amount, debt.decimals)} ${debt.symbol}`}
             steps={ready.current.stored.steps.map(step => step.ixName)}
             onRetry={fork.retry}
-            action={<OpenInBuilder stored={ready.current.stored} />}
+            action={<OpenInBuilder stored={ready.current.stored} disabled={exec.isBusy} />}
           />
         </div>
       )}
@@ -166,6 +199,8 @@ export function Rescue() {
   const [wallet, setWallet] = useState(linked.get('wallet') ?? '');
   const [chosen, setChosen] = useState(linked.get('obligation') ?? '');
   const [busy, setBusy] = useState(false);
+  const [bar, setBar] = useState<Bar>();
+  const payment = useId();
   const url = wallet ? `/api/kamino/${encodeURIComponent(wallet)}` : null;
   const found = useJson<Positions>(url);
   const obligations = found.data?.obligations;
@@ -225,7 +260,7 @@ export function Rescue() {
 
       {(!url || badAddress) && <HowItWorks />}
       {found.loading && <ReadingPositions />}
-      {found.error && !badAddress && <Failure error={found.error} retry={found.retry} />}
+      {found.error && !badAddress && <Failure error={new Error(besideRetry(found.error.message))} retry={found.retry} />}
       {obligations?.length === 0 && <NoPositions field={field} />}
       {ranked && ranked.length > 0 && (
         <div className={COLUMNS}>
@@ -235,7 +270,7 @@ export function Rescue() {
             </div>
           )}
           {position && url ? (
-            <Position key={position.address} obligation={position} url={url} onBusy={setBusy} />
+            <Position key={position.address} obligation={position} url={url} payment={payment} onBusy={setBusy} onBar={setBar} />
           ) : (
             <RunColumn>
               <RunPlaceholder kind="choose" />
@@ -243,6 +278,8 @@ export function Rescue() {
           )}
         </div>
       )}
+      {/* after the columns, so that it can stick to the bottom of the screen all the way down them */}
+      {bar && position && <PayBar to={payment} {...bar} />}
     </div>
   );
 }
