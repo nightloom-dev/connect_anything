@@ -3,6 +3,7 @@ import { createIntentsConnectApi } from '@aurora-is-near/intents-connect';
 import { IntentsConnectProvider } from '@aurora-is-near/intents-connect/react';
 import { AppKitProvider, useIntentsConnectWallet } from '@aurora-is-near/intents-connect-wallet/connect/appkit';
 import { retry503 } from '../connect.ts';
+import { AppKitNetwork } from './AppKitNetwork.tsx';
 import { AppKitTheme } from './AppKitTheme.tsx';
 
 // The wallet code: Reown AppKit, its adapters and the Intents Connect SDK, most of the JavaScript of the app. Root loads
@@ -32,6 +33,7 @@ export function WalletProviders({ children }: { children: ReactNode }) {
   return (
     <AppKitProvider appName="Connect Anything" themeMode="dark">
       <AppKitTheme />
+      <AppKitNetwork />
       <App>{children}</App>
     </AppKitProvider>
   );
