@@ -150,10 +150,8 @@ that what arrives first is the same every run.
 A new check that finds a bug gets `test.fixme(…, '…')` that says what is wrong; an existing test
 is never loosened. When the fix lands, remove the fixme in the same change.
 
-| Bug   | Test                                                                                                    |
-| ----- | ------------------------------------------------------------------------------------------------------- |
-| QA-02 | `keyboard.spec.ts`: the run card keeps the focus on its buttons while they work                         |
-| QA-09 | `wallet-network.spec.ts`: a wallet on Base stays on Base                                                |
+None is open now. Two known issues have no fixme: the SDK's line after a cancel is in the allowlist of `console.ts`,
+and the slow first load on a phone is measured by Lighthouse.
 
 ## What answers the page
 
