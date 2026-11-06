@@ -1,4 +1,5 @@
 import { test as base, expect, type Page, type Route } from '@playwright/test';
+import { counts, isKnownNoise } from './console.ts';
 import { ApiMocks } from './mocks/api.ts';
 import { FakeConnect } from './mocks/connect.ts';
 import { stubExternal } from './mocks/external.ts';
@@ -27,7 +28,8 @@ type Fixtures = {
   connect: FakeConnect;
   /** The mock EVM wallet, installed in the page before it loads. */
   wallet: MockWallet;
-  /** Console errors and uncaught exceptions of the page, in order. */
+  /** Console errors, warnings and failed asserts of the page, and its uncaught exceptions, in order: all but the known
+   * noise of console.ts. The test fails if there is any. */
   problems: string[];
   network: Network;
 };
@@ -67,12 +69,17 @@ export const test = base.extend<Fixtures>({
 
   page: async ({ page, problems, api, connect, network }, use, testInfo) => {
     page.on('console', message => {
-      if (message.type() === 'error') problems.push(`console: ${message.text()}`);
+      const type = message.type();
+      if (!counts(type)) return;
+      const text = message.text();
+      if (!isKnownNoise({ type, text, url: message.location().url })) problems.push(`console ${type}: ${text}`);
     });
     page.on('pageerror', error => problems.push(`uncaught: ${error.message}`));
     await use(page);
     if (problems.length) await testInfo.attach('console problems', { body: problems.join('\n'), contentType: 'text/plain' });
     const unmocked = [...network.unexpected, ...api.unexpected.map(call => `app ${call}`), ...connect.unexpected.map(call => `Connect ${call}`)];
+    // React's warnings are console errors of its development build; third-party noise is listed in console.ts
+    expect.soft(problems, 'console errors, warnings and uncaught exceptions').toEqual([]);
     expect(unmocked, 'requests no mock answered').toEqual([]);
   },
 

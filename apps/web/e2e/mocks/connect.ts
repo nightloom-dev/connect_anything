@@ -63,6 +63,8 @@ export class FakeConnect {
   networkFee = '20000';
   /** The next real create finds the market this many basis points lower, and later quotes stay there. */
   moveOnCreate = 0;
+  /** The clock of createdAt. Screenshots set it, so that the card's times are the same every run. */
+  now = () => new Date();
   /** Status scripts of the next real creates, in order. The others get `script`. */
   readonly scripts: Status[][] = [];
   script: Status[] = ['SUCCESS'];
@@ -251,7 +253,7 @@ export class FakeConnect {
     const message = JSON.stringify({ execution: id, intermediary: this.intermediary, steps: body.steps?.length ?? 0 });
     return {
       id,
-      createdAt: new Date().toISOString(),
+      createdAt: this.now().toISOString(),
       status: 'CREATED',
       type: 'solana',
       ...(kind === 'steps-only' ? { executionMode: 'steps_only' as const } : {}),

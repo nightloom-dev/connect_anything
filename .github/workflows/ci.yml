@@ -1,0 +1,145 @@
+# The checks of every push and pull request. What each one covers, and how to run it locally, is in
+# apps/web/e2e/README.md.
+#
+# Blocking: unit tests, the build, the bundle budget, the end-to-end tests (behaviour, axe, keyboard, layout).
+# Not blocking: the screenshots, whose baselines are drawn on the team's Linux machine, and Lighthouse, whose scores
+# move with the runner. Both upload what they saw.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      update-screenshots:
+        description: Draw the screenshot baselines on the runner and upload them, for a person to review and commit
+        type: boolean
+        default: false
+
+# a newer push to the same branch or pull request makes the run before it moot
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # the Node of the team's machines
+  NODE_VERSION: 22.23.4
+
+jobs:
+  check:
+    name: Unit tests, build, bundle budget
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Unit tests (packages/core, apps/web, recipes/kamino-rescue, apps/watch)
+        run: npm test
+      - run: npm run typecheck -w packages/core
+      - run: npm run build
+      - name: Bundle budget (first load of /, gzip)
+        run: npm run budget
+
+  e2e:
+    name: End-to-end tests (Chromium)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      # the Chromium build of the playwright-core that the root package.json pins
+      - run: npx playwright install --with-deps chromium
+      - name: Check that Playwright and its browser agree
+        run: npm run e2e:check -w apps/web
+      - run: npm run e2e:types -w apps/web
+      - name: End-to-end tests (desktop, mobile and dev projects)
+        run: npm run e2e
+      - name: Upload the report and the traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-report
+          path: |
+            apps/web/e2e/report/
+            apps/web/e2e/.results/
+          include-hidden-files: true
+          retention-days: 14
+
+  visual:
+    name: Screenshots (not blocking)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # A runner rasterizes font edges a little differently from the machine that drew the baselines, which the
+    # tolerance below lets through. A real change shows in the uploaded diffs; new baselines come from
+    # npm run e2e:update and a person looking at every picture (README.md), or from this job run by hand with
+    # update-screenshots, whose pictures are then reviewed and committed.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Compare the screenshots with the baselines
+        if: ${{ !inputs.update-screenshots }}
+        run: npm run e2e:visual
+        env:
+          E2E_PIXEL_TOLERANCE: '0.01'
+      - name: Draw new baselines
+        if: ${{ inputs.update-screenshots }}
+        run: npm run e2e:update
+      - name: Upload the diffs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: screenshot-diffs
+          path: |
+            apps/web/e2e/report/
+            apps/web/e2e/.results/
+          include-hidden-files: true
+          retention-days: 14
+      - name: Upload the new baselines
+        if: ${{ inputs.update-screenshots }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: screenshot-baselines
+          path: apps/web/e2e/__screenshots__/
+          retention-days: 14
+
+  lighthouse:
+    name: Lighthouse (not blocking)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      # Lighthouse drives Playwright's Chromium
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: Lighthouse on /, /kamino and /build, desktop and mobile
+        run: npm run lighthouse
+      - name: Upload the reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lighthouse
+          path: apps/web/e2e/lighthouse/
+          retention-days: 14

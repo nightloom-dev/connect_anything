@@ -1,0 +1,7 @@
+/* Applied while toHaveScreenshot takes a picture, and only then. What is hidden here would make two runs of the same
+   page differ without the page having changed. */
+
+/* toasts come and go on their own timers */
+[data-sonner-toaster] {
+  display: none !important;
+}

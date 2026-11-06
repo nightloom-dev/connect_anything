@@ -57,6 +57,9 @@ export async function stubExternal(route: Route, url: URL): Promise<boolean> {
   if (host === 'fonts.reown.com' || host === 'fonts.gstatic.com') return reply({ body: '', contentType: 'font/woff2' });
   if (host === 'fonts.googleapis.com') return reply({ body: '', contentType: 'text/css' });
   if (host === 'rpc.walletconnect.org' && path.startsWith('/v1/identity')) return reply({ json: { name: null, avatar: null } });
+  // WalletConnect's Verify, asked for an attestation of this origin when AppKit gets as far as a WalletConnect pairing:
+  // rarely, as the relay never answers here (seen once in a screenshot run). An empty answer is "not verified".
+  if (host === 'verify.walletconnect.org' || host === 'verify.walletconnect.com') return reply({ status: 204 });
 
   // a JSON-RPC call to a chain, from AppKit or a wallet library
   if (request.method() === 'POST') {

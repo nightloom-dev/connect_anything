@@ -29,8 +29,9 @@ for (const { name, path, ready } of pages) {
   });
 }
 
-// The wallet code (app/wallet.tsx: AppKit, the SDK) loads after the first paint, so the landing page draws without it
-const WALLET_CODE = /\/src\/app\/wallet\.tsx/;
+// The wallet code (app/wallet.tsx: AppKit, the SDK) loads after the first paint, so the landing page draws without it.
+// Its module on the dev server, its chunk in the build (not wallet-standard-…).
+const WALLET_CODE = /\/src\/app\/wallet\.tsx|\/assets\/wallet-[\w-]{8}\.js$/;
 // what only the wallet code and the pages that pay may bring
 const HEAVY = /intents-connect|reown|walletconnect|@coral-xyz|\/packages\/core\/|kamino-rescue|\/src\/connect\.ts|\/src\/recipe\.ts/;
 

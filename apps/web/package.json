@@ -10,8 +10,13 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "node --test '{server,src}/**/*.test.ts'",
-    "e2e": "playwright test -c e2e/playwright.config.ts",
-    "e2e:update": "playwright test -c e2e/playwright.config.ts --update-snapshots"
+    "e2e": "playwright test -c e2e/playwright.config.ts --project=desktop --project=mobile --project=dev",
+    "e2e:visual": "playwright test -c e2e/playwright.config.ts --project=visual-desktop --project=visual-tablet --project=visual-mobile",
+    "e2e:update": "playwright test -c e2e/playwright.config.ts --project=visual-desktop --project=visual-tablet --project=visual-mobile --update-snapshots=changed",
+    "e2e:types": "tsc -p e2e/tsconfig.json",
+    "e2e:check": "node scripts/check-playwright.ts",
+    "budget": "node scripts/bundle-budget.ts dist",
+    "lighthouse": "node scripts/lighthouse.ts"
   },
   "dependencies": {
     "@aurora-is-near/intents-connect": "7.28.0",

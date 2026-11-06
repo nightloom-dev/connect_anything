@@ -1,2 +1,4 @@
 /.results/
 /report/
+/.dist/
+/lighthouse/

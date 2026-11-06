@@ -1,28 +1,17 @@
-import AxeBuilder from '@axe-core/playwright';
-import type { Page, TestInfo } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
+import { audit } from './axe.ts';
 import { RECIPES } from './mocks/api.ts';
 import { BUILDER, KAMINO, LANDING, NOT_FOUND, shared } from './paths.ts';
 import { RECORDED_WALLET } from './mocks/kamino.ts';
 import { alertOf, expect, test } from './support.ts';
 
-// axe on every page, in a state with its forms on the screen. The whole report is attached to the test. Serious and
-// critical violations fail the test only with A11Y_STRICT=1, until the redesign has fixed what the old UI has; without
-// it they are listed as an annotation.
+// axe on every page, in a state with its forms on the screen (axe.ts: serious and critical violations fail the test).
+// a11y-states.spec.ts has the states a page reaches later, gallery.spec.ts every section of /dev/states.
 
 const KLEND_FILE = fileURLToPath(new URL('../../../recipes/kamino-rescue/klend.idl.json', import.meta.url));
-const STRICT = process.env.A11Y_STRICT === '1';
-
-async function audit(page: Page, testInfo: TestInfo, { idle = true } = {}) {
-  if (idle) await page.waitForLoadState('networkidle');
-  const results = await new AxeBuilder({ page }).analyze();
-  await testInfo.attach('axe results', { body: JSON.stringify(results, null, 2), contentType: 'application/json' });
-  const grave = results.violations
-    .filter(({ impact }) => impact === 'serious' || impact === 'critical')
-    .map(({ id, impact, help, nodes }) => `${impact} ${id}: ${help} (${nodes.length}× e.g. ${nodes[0]?.target.join(' ')})`);
-  if (STRICT) expect(grave, 'serious and critical axe violations').toEqual([]);
-  else if (grave.length) testInfo.annotations.push({ type: 'a11y', description: grave.join('\n') });
-}
+/** The code of /kamino: its module on the dev server, its chunk in the build (the only page chunk /kamino asks for). */
+const KAMINO_CODE = /\/src\/features\/kamino\/page\.tsx|\/assets\/page-[\w-]{8}\.js$/;
 
 test('the landing page', { tag: '@mobile' }, async ({ page }, testInfo) => {
   await page.goto(LANDING);
@@ -59,7 +48,7 @@ test('a page that does not exist', { tag: '@mobile' }, async ({ page }, testInfo
 test('a page while its code loads', async ({ page }, testInfo) => {
   let release = () => {};
   const held = new Promise<void>(resolve => (release = resolve));
-  await page.route(/\/src\/features\/kamino\/page\.tsx/, async route => {
+  await page.route(KAMINO_CODE, async route => {
     await held;
     await route.continue();
   });
