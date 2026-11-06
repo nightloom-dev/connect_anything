@@ -94,7 +94,7 @@ test('an uploaded IDL lists its instructions, and a repay is added once its acco
   await expect(repay).toHaveAccessibleName(`${REPAY} 1 argument, 13 accounts`);
   await repay.click();
   await expect(search).toHaveValue(REPAY);
-  await expect(page.getByRole('heading', { name: REPAY, level: 3 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: REPAY, level: 2 })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Arguments' })).toBeVisible();
   await expect(page.getByLabel('liquidity_amount')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Accounts', exact: true })).toBeVisible();
@@ -173,8 +173,8 @@ test('a simulation shows its verdict, compute units, bytes and logs: ok, warn, f
 
   api.simulate = 'offline';
   await simulate.click();
-  await expect(statusOf(page, 'Not checked — simulator offline. You can still export and run.')).toBeVisible();
-  await expect(statusOf(page, 'Not checked — simulator offline.')).toContainText('The simulator is offline: SIM_URL is not set');
+  await expect(statusOf(page, 'Not simulated: simulator offline. You can still export and run.')).toBeVisible();
+  await expect(statusOf(page, 'Not simulated: simulator offline.')).toContainText('The simulator is offline: SIM_URL is not set');
   // export does not wait for a verdict
   await expect(page.getByRole('button', { name: 'Create a link' })).toBeEnabled();
 
@@ -215,7 +215,7 @@ test('export makes a link that opens the recipe, and TypeScript for the SDK', as
   await page.getByRole('button', { name: 'Next: run it' }).click();
   await expect(page.getByRole('heading', { name: '4. Run' })).toBeVisible();
   await expect(stepper(page).getByRole('button', { name: 'Run' })).toHaveAttribute('aria-current', 'step');
-  await expect(page.getByRole('button', { name: 'Connect EVM wallet' })).toBeVisible();
+  await expect(page.getByRole('main').getByRole('button', { name: 'Connect wallet' })).toBeVisible();
 
   // the link opens what was posted, on a page of its own
   await page.goto(href);
@@ -519,7 +519,7 @@ test('every step fits a 360 px screen, and a long IDL name wraps after a dot or 
   await expect(statusOf(page, 'The recipe passed simulation.')).toBeVisible();
   expect(await sideways()).toBe(0);
   await page.getByRole('button', { name: 'Next: run it' }).click();
-  await expect(page.getByRole('button', { name: 'Connect EVM wallet' })).toBeVisible();
+  await expect(page.getByRole('main').getByRole('button', { name: 'Connect wallet' })).toBeVisible();
   expect(await sideways()).toBe(0);
 });
 

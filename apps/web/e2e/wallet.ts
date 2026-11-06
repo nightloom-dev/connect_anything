@@ -173,9 +173,9 @@ export class MockWallet {
     await this.page.addInitScript(install, { address: WALLET, chainId: BASE, name: WALLET_NAME, signature: SIGNATURE, txHash: TX_HASH });
   }
 
-  /** Clicks the page's own button, picks this wallet in the AppKit modal and waits for the page to show the address. */
+  /** Clicks the page's own button (in main: the header has one too), picks this wallet in the AppKit modal and waits for the page to show the address. */
   async connect() {
-    await this.page.getByRole('button', { name: 'Connect EVM wallet' }).click();
+    await this.page.getByRole('main').getByRole('button', { name: 'Connect wallet' }).click();
     await this.page.getByRole('button', { name: new RegExp(WALLET_NAME) }).click();
     await expect(this.page.getByText(WALLET, { exact: true })).toBeVisible();
   }
@@ -286,7 +286,7 @@ export class MockSolanaWallet {
   }
 
   async connect() {
-    await this.page.getByRole('button', { name: 'Connect EVM wallet' }).click();
+    await this.page.getByRole('main').getByRole('button', { name: 'Connect wallet' }).click();
     await this.page.getByRole('button', { name: new RegExp(SOLANA_WALLET_NAME) }).click();
     await expect(this.page.getByText(SOLANA_WALLET, { exact: true })).toBeVisible();
   }

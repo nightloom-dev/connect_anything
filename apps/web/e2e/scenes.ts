@@ -99,7 +99,7 @@ export const SCENES: Scene[] = [
       await search.fill(REPAY);
       await expect(page.getByRole('listbox')).not.toHaveAttribute('data-transition');
       await page.getByRole('option', { name: new RegExp(`^${REPAY}\\b`) }).click();
-      await expect(page.getByRole('heading', { name: REPAY, level: 3 })).toBeVisible();
+      await expect(page.getByRole('heading', { name: REPAY, level: 2 })).toBeVisible();
       await expect(page.getByRole('listbox')).toHaveCount(0);
     },
   },
@@ -127,7 +127,7 @@ export const SCENES: Scene[] = [
       await expect(status(page, 'The recipe passed simulation.')).toBeVisible();
       await page.getByRole('button', { name: 'Next: run it' }).click();
       await expect(page.getByRole('heading', { name: '4. Run' })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Connect EVM wallet' })).toBeVisible();
+      await expect(page.getByRole('main').getByRole('button', { name: 'Connect wallet' })).toBeVisible();
     },
   },
   {

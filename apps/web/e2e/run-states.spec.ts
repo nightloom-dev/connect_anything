@@ -50,7 +50,7 @@ test('state 01 no wallet: nothing is quoted until an EVM wallet connects', async
   await shows(page, 'Connect an EVM wallet to continue.');
   // the card's one button connects a wallet, and nothing that quotes is on the screen yet
   await expect(button(page, QUOTE)).toHaveCount(0);
-  await expect(button(page, 'Connect EVM wallet')).toBeEnabled();
+  await expect(page.getByRole('main').getByRole('button', { name: 'Connect wallet', exact: true })).toBeEnabled();
   expect(connect.requests).toEqual([]);
 });
 
@@ -451,7 +451,7 @@ test('state 14 while a run is in flight, the wallet it is followed with cannot b
   await expect(disconnect).toBeEnabled();
   await expect(menu.getByText('A run is in progress.')).toHaveCount(0);
   await disconnect.click();
-  await expect(page.getByRole('button', { name: 'Connect wallet' })).toBeVisible();
+  await expect(page.getByRole('banner').getByRole('button', { name: 'Connect wallet' })).toBeVisible();
 });
 
 test('state 15 another execution of this recipe is in flight: the page offers to resume it', async ({ page, connect, wallet }) => {

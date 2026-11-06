@@ -206,7 +206,7 @@ export const isQuoteMoved = (error: unknown) => code(error) === 'QUOTE_MOVED';
 export function explain(error: unknown): string {
   if (error instanceof ExecutionCancelledError) return '';
   if (isUserRejection(error)) return 'The request was rejected in the wallet.';
-  if (code(error) === 'NO_INTERMEDIARY') return 'Solana is not enabled for this Connect key yet.';
+  if (code(error) === 'NO_INTERMEDIARY') return 'Payments to Solana are not switched on for this site yet.';
   if (code(error) === 'FEE_EXCEEDS_AMOUNT') return 'The amount does not cover the network fee.';
   const message = error instanceof Error ? error.message : String(error);
   // the status panel says this already, along with what to do next

@@ -58,7 +58,7 @@ function IntermediaryRow({ address }: { address: string }) {
             </button>
           </p>
         )}
-        {data && (data.solana ? <Address value={data.solana} chain="sol" chars={6} /> : <p className="text-sm text-muted">Solana is not enabled for this Connect key yet.</p>)}
+        {data && (data.solana ? <Address value={data.solana} chain="sol" chars={6} /> : <p className="text-sm text-muted">Payments to Solana are not switched on for this site yet.</p>)}
       </div>
       <p className="mt-1.5 text-xs leading-4 text-muted">The account on Solana that runs instructions for this wallet. What a run does not spend stays there.</p>
     </div>

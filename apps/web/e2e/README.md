@@ -13,8 +13,8 @@ layout at 360 px, layout shifts and screenshots.
 | `shared.spec.ts`       | `/r/:id`: who made it, what will run, the published-IDL check, links that lead nowhere        |
 | `run-states.spec.ts`   | the payment panel, one test per state, `state 01` to `state 27`                               |
 | `a11y.spec.ts`         | axe on every page                                                                             |
-| `a11y-states.spec.ts`  | axe on every scene of `scenes.ts`: the states a page reaches after a few clicks               |
-| `gallery.spec.ts`      | axe on every section of `/dev/states`, one group of sections per test                         |
+| `a11y-states.spec.ts`  | axe and the heading outline on every scene of `scenes.ts`: the states a page reaches after a few clicks |
+| `gallery.spec.ts`      | axe on every section of `/dev/states`, one group of sections per test, and each group's heading outline |
 | `keyboard.spec.ts`     | `/kamino` and `/build` from the keyboard alone, the focus seen at every stop                  |
 | `layout.spec.ts`       | no sideways scroll at 360 px; a CLS of at most 0.01 while a page loads from its link          |
 | `wallet-network.spec.ts` | what the app asks of the wallet's network: a wallet on Base is asked for no switch        |
@@ -30,6 +30,7 @@ layout at 360 px, layout shifts and screenshots.
 | `gallery.ts`        | the groups of `/dev/states` and how to open one                                                |
 | `look.ts`           | a page that holds still (clock, fonts, images, its origin), and the measures of its layout     |
 | `focus.ts`          | the keyboard walk: presses keys and judges every stop of the focus                             |
+| `headings.ts`       | the heading outline: one h1, the page's title, and no level skipped                            |
 | `servers.ts`        | the two servers and their ports                                                                |
 | `visual.css`        | what a screenshot hides: the toasts                                                            |
 
@@ -151,7 +152,6 @@ is never loosened. When the fix lands, remove the fixme in the same change.
 
 | Bug   | Test                                                                                                    |
 | ----- | ------------------------------------------------------------------------------------------------------- |
-| QA-01 | `keyboard.spec.ts`: AppKit's modal takes the focus when the run card opens it                           |
 | QA-02 | `keyboard.spec.ts`: the run card keeps the focus on its buttons while they work                         |
 | QA-09 | `wallet-network.spec.ts`: a wallet on Base stays on Base                                                |
 | QA-08 | `gallery.spec.ts`: axe on the gallery section `kamino-fork`                                             |
@@ -252,8 +252,9 @@ The specs pin the words of the money flows on purpose: changing one is a change 
 
 4. Run `npm run e2e:update` and review the pictures the new words changed (Screenshots, above).
 
-The words the specs lean on most: "Connect EVM wallet", "Get exact amount and fee", "Sign and run", "Done: the
-instructions ran on Solana.", "Your intermediary on Solana:", the phase texts of `PHASE_TEXT` in `src/features/run/execute.tsx`, "This
-wallet already has an execution in flight…", "You started an execution from this browser:", "Resume it", "Delete it (a
-signature that moves no money)", "Your intermediary holds … USDC.", "Refund", "Sign and refund", the figures of the quote
-card ("at least 776.16 USDC, …"), and on `/kamino` "Read positions", "Target LTV, %" and "Repay $800.00, which is 800 USDC."
+The words the specs lean on most: "Connect wallet" (the run card's in `main`, the header's in the `banner`), "Get
+exact amount and fee", "Sign and run", "Done: the instructions ran on Solana.", "Your intermediary on Solana:", the
+phase texts of `PHASE_TEXT` in `src/features/run/execute.tsx`, "This wallet already has an execution in flight…", "You
+started an execution from this browser:", "Resume it", "Delete it (a signature that moves no money)", "Your
+intermediary holds … USDC.", "Refund", "Sign and refund", the figures of the quote card ("at least 776.16 USDC, …"),
+and on `/kamino` "Read positions", "Target LTV, %" and "Repay $800.00, which is 800 USDC."

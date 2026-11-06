@@ -367,7 +367,7 @@ function Consent({ given }: { given: boolean }) {
 
 const CONNECT = (
   <Button variant="primary" size="lg" block icon={<Wallet />}>
-    Connect EVM wallet
+    Connect wallet
   </Button>
 );
 const SWITCH = (
@@ -979,7 +979,7 @@ export const sections: DevSection[] = [
         <Notice kind="error">The made-up recipe did not build: {RECIPE.problem}</Notice>
       ) : (
         <section className="mx-auto flex w-full max-w-run min-w-0 flex-col gap-5 lg:max-w-none">
-          <SharedHeader />
+          <SharedHeader level={3} />
           <div className={SHARED_COLUMNS}>
             <div className={SHARED_LEFT}>
               <TrustPanel stored={RECIPE.stored} instructions={RECIPE.stored.steps.length} check={() => <IdlCheck state="match" />} />

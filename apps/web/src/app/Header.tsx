@@ -90,13 +90,14 @@ export function Header({ wallet, walletSlot }: HeaderProps) {
   return (
     <header className="group/header sticky top-0 z-40 border-b border-border bg-bg/75 backdrop-blur-lg backdrop-saturate-150">
       <div className="mx-auto flex h-14 max-w-content items-center gap-2 px-4 sm:px-6">
-        <h1 className="mr-2 shrink-0 text-[15px] leading-none font-semibold tracking-tight sm:mr-4">
+        {/* not a heading: each page's own title is its h1 */}
+        <div className="mr-2 shrink-0 text-[15px] leading-none font-semibold tracking-tight sm:mr-4">
           <Link href="/" className="flex items-center gap-2.5 rounded-md text-text outline-offset-4">
             <LogoMark size={26} />
             {/* on a narrow phone a connected wallet needs the room, and the name stays for screen readers */}
             <span className="max-[27.5rem]:group-has-data-[wallet=connected]/header:sr-only">Connect Anything</span>
           </Link>
-        </h1>
+        </div>
         <nav aria-label="Main" className="hidden items-center gap-0.5 md:flex">
           {NAV.map(({ href, label }) => (
             <NavLink key={href} href={href}>

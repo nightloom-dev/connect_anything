@@ -137,10 +137,10 @@ export function RecipeTray({ tokens, targets, token, onTarget, steps, onUp, onDo
   return (
     <Card as="aside" aria-labelledby="recipe-title" padding="none" className={cn('flex min-w-0 flex-col', className)}>
       <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
-        <h3 id="recipe-title" className="flex items-center gap-2 text-base font-semibold text-text">
+        <h2 id="recipe-title" className="flex items-center gap-2 text-base font-semibold text-text">
           <ListOrdered className="size-[18px] text-muted" aria-hidden />
           Recipe
-        </h3>
+        </h2>
         <span className="text-xs text-muted nums">{steps.length === 1 ? '1 step' : `${steps.length} steps`}</span>
       </div>
 

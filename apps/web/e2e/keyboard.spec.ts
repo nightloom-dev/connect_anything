@@ -46,9 +46,9 @@ async function backUp(page: Page) {
   return walk;
 }
 
-/** The run card's Connect EVM wallet, then the mock wallet in AppKit's modal: Enter on each, Tab between. */
+/** The run card's Connect wallet, then the mock wallet in AppKit's modal: Enter on each, Tab between. */
 async function connectByKeyboard(page: Page, walk: KeyboardWalk) {
-  await walk.tabTo(page.getByRole('button', { name: 'Connect EVM wallet' }));
+  await walk.tabTo(page.getByRole('main').getByRole('button', { name: 'Connect wallet' }));
   await walk.press('Enter');
   await walk.tabTo(page.getByRole('button', { name: new RegExp(WALLET_NAME) }));
   await walk.press('Enter');
@@ -109,7 +109,7 @@ test('/build from the keyboard: an example, the instruction search, its accounts
   await expect(page.getByRole('option', { name: new RegExp(`^${REPAY}\\b`) })).toBeVisible();
   await walk.press('ArrowDown');
   await walk.press('Enter');
-  await expect(page.getByRole('heading', { name: REPAY, level: 3 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: REPAY, level: 2 })).toBeVisible();
 
   // the argument first, as the form has it, then the accounts
   const delivered = page.getByLabel('Uses the amount delivered');
@@ -143,17 +143,43 @@ test('/build from the keyboard: an example, the instruction search, its accounts
   await expectSeen(walk);
 });
 
+/** The element of the page that has the focus: AppKit's modal is one, <w3m-modal>, whatever has it inside. */
+const focusedTag = (page: Page) => page.evaluate(() => document.activeElement?.localName);
+
 test("AppKit's modal takes the focus when the run card opens it, and the page behind it is out of reach", async ({ page, wallet: _ }) => {
-  test.fixme(true, "QA-01: the focus stays on the page behind AppKit's modal, and Tab walks six links and buttons under it before it reaches the modal");
   const walk = await KeyboardWalk.on(page);
   await page.goto(`${KAMINO}?wallet=${RECORDED_WALLET}`);
   await position(page);
-  await walk.tabTo(page.getByRole('button', { name: 'Connect EVM wallet' }));
+  await walk.tabTo(page.getByRole('main').getByRole('button', { name: 'Connect wallet' }));
   await walk.press('Enter');
+  // the modal draws its card a moment after it opens, and the card takes the focus (app/AppKitFocus.tsx)
+  await expect.poll(() => focusedTag(page)).toBe('w3m-modal');
   const first = await walk.press('Tab');
   expect(first.thirdParty, `the first Tab after the modal opened went to ${first.name}`).toBe(true);
   await walk.tabTo(page.getByRole('button', { name: new RegExp(WALLET_NAME) }));
   expect(walk.underModal()).toEqual([]);
+
+  // the wallet picked, the focus comes back to the card's button, which now asks for the quote
+  await walk.press('Enter');
+  await expect(page.getByText(WALLET, { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: QUOTE })).toBeFocused();
+});
+
+test("closing AppKit's modal gives the focus back to the button that opened it", async ({ page, wallet: _ }) => {
+  const walk = await KeyboardWalk.on(page);
+  await page.goto(`${KAMINO}?wallet=${RECORDED_WALLET}`);
+  await position(page);
+  const header = page.getByRole('banner').getByRole('button', { name: 'Connect wallet' });
+  await walk.tabTo(header);
+  await walk.press('Enter');
+  await expect.poll(() => focusedTag(page)).toBe('w3m-modal');
+  await walk.press('Escape');
+  await expect(page.getByRole('button', { name: new RegExp(WALLET_NAME) })).toHaveCount(0);
+  await expect(header).toBeFocused();
+  // and Tab goes on from there, into the page
+  await walk.press('Tab');
+  await expect(page.getByLabel('Wallet address')).toBeFocused();
+  await expectSeen(walk);
 });
 
 test('the sticky header never covers the focus as Shift+Tab goes back up the page', async ({ page }) => {

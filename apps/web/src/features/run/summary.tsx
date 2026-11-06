@@ -76,7 +76,7 @@ export function TrustPanel({ stored, instructions, check }: TrustPanelProps) {
         </div>
       </div>
       <div className="border-t border-warning/20 bg-surface/70 px-4 py-3.5">
-        <h3 className="text-xs font-medium tracking-wide text-muted uppercase">What you can check</h3>
+        <h2 className="text-xs font-medium tracking-wide text-muted uppercase">What you can check</h2>
         <ul className="mt-3 flex flex-col gap-3.5">
           {programs.map(program => (
             <li key={program} className="flex min-w-0 flex-col gap-1">
@@ -108,7 +108,7 @@ type SummaryProps = {
   open?: boolean;
 };
 
-const H4 = 'text-xs font-medium tracking-wide text-muted uppercase';
+const H3 = 'text-xs font-medium tracking-wide text-muted uppercase';
 
 /** Lists longer than this wait behind their count below 1200px, so that the steps of a recipe read one after another. */
 const FOLD_OVER = 4;
@@ -154,7 +154,7 @@ export function Summary({ stored, steps, intermediary, real, amountKnown, shared
         {/* on a shared link the panel above lists the programs, with their checks */}
         {!shared && (
           <section className="flex flex-col gap-2.5">
-            <h4 className={H4}>{programs.length === 1 ? 'Program' : 'Programs'}</h4>
+            <h3 className={H3}>{programs.length === 1 ? 'Program' : 'Programs'}</h3>
             <ul className="flex flex-col gap-2">
               {programs.map(program => (
                 <li key={program} className="flex min-w-0 flex-col gap-0.5">
@@ -166,7 +166,7 @@ export function Summary({ stored, steps, intermediary, real, amountKnown, shared
           </section>
         )}
         <section className="flex flex-col gap-3">
-          <h4 className={H4}>Instructions, in this order</h4>
+          <h3 className={H3}>Instructions, in this order</h3>
           <ol className="flex flex-col gap-3">
             {steps.map((step, index) => (
               <li key={index} className="min-w-0 rounded-lg border border-border bg-surface-2/40">
@@ -178,9 +178,14 @@ export function Summary({ stored, steps, intermediary, real, amountKnown, shared
                   <span className="text-xs text-muted">on {short(step.program)}</span>
                 </div>
                 <div className="flex min-w-0 flex-col gap-3 p-3.5">
-                  <pre className="min-w-0 rounded-md border border-border bg-bg/70 px-3 py-2.5 font-mono text-xs leading-5 whitespace-pre-wrap text-text [overflow-wrap:anywhere]">
-                    {JSON.stringify(step.amountArg !== undefined && !amountKnown ? { ...step.args, [step.amountArg]: 'the amount delivered, known after the quote' } : step.args, null, 2)}
-                  </pre>
+                  {/* words, not an empty "{}", for an instruction without arguments, as the builder says it */}
+                  {step.amountArg === undefined && Object.keys(step.args).length === 0 ? (
+                    <p className="text-xs leading-5 text-muted">This instruction takes no arguments.</p>
+                  ) : (
+                    <pre className="min-w-0 rounded-md border border-border bg-bg/70 px-3 py-2.5 font-mono text-xs leading-5 whitespace-pre-wrap text-text [overflow-wrap:anywhere]">
+                      {JSON.stringify(step.amountArg !== undefined && !amountKnown ? { ...step.args, [step.amountArg]: 'the amount delivered, known after the quote' } : step.args, null, 2)}
+                    </pre>
+                  )}
                   <p className="text-xs leading-5 text-muted">
                     Data sent: <code className="font-mono break-all text-text/85">{step.instruction.data.toString('hex')}</code>
                     {step.amountArg !== undefined && !amountKnown && ' (0 in place of the amount)'}
@@ -195,7 +200,7 @@ export function Summary({ stored, steps, intermediary, real, amountKnown, shared
         </section>
         {stored.lookupTables?.length ? (
           <section className="flex flex-col gap-2.5">
-            <h4 className={H4}>Lookup tables</h4>
+            <h3 className={H3}>Lookup tables</h3>
             <ul className="flex flex-col gap-1.5">
               {stored.lookupTables.map(table => (
                 <li key={table} className="min-w-0">

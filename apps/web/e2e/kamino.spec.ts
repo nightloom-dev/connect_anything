@@ -177,7 +177,7 @@ test('the recorded wallet: two positions, and neither owes USDC', async ({ page,
   await expect(page.getByRole('status').filter({ hasText: 'This position owes USDT. Only a USDC debt can be repaid here for now, so this one is not supported yet.' })).toBeVisible();
   // nothing to pay for
   await expect(page.getByRole('heading', { name: 'Target LTV' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Connect EVM wallet' })).toHaveCount(0);
+  await expect(page.getByRole('main').getByRole('button', { name: 'Connect wallet' })).toHaveCount(0);
   await expect(page.getByText('No payment for this position', { exact: true })).toBeVisible();
 
   await cash.click();
@@ -300,7 +300,7 @@ test('what can stop a repay: USDC short of the target, other debts, no collatera
   ]);
   await expect(warning('This repay would take about 213,000 compute units by estimate, over the roughly 200,000 Connect allows, so it is likely to fail on Solana. The money would then stay with your intermediary.')).toBeVisible();
   // a warning, not a stop
-  await expect(page.getByRole('button', { name: 'Connect EVM wallet' })).toBeVisible();
+  await expect(page.getByRole('main').getByRole('button', { name: 'Connect wallet' })).toBeVisible();
 });
 
 test('positions that cannot be repaid here say why, and offer no payment', async ({ page, api }) => {
@@ -314,7 +314,7 @@ test('positions that cannot be repaid here say why, and offer no payment', async
     await read(page);
     await expect(page.getByRole('status').filter({ hasText: why })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Target LTV' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Connect EVM wallet' })).toHaveCount(0);
+    await expect(page.getByRole('main').getByRole('button', { name: 'Connect wallet' })).toHaveCount(0);
   }
 });
 
@@ -359,7 +359,7 @@ test('the repay is checked on a fork for the amount of the target, and the check
 
   // none of it reaches the payment
   await expect(page.getByLabel('Amount')).toHaveValue('1600');
-  await expect(page.getByRole('button', { name: 'Connect EVM wallet' })).toBeEnabled();
+  await expect(page.getByRole('main').getByRole('button', { name: 'Connect wallet' })).toBeEnabled();
   // and a target with nothing to repay asks for no simulation
   const asked = simulations().length;
   await target.fill('60');

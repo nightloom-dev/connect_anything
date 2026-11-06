@@ -15,9 +15,9 @@ export function RunCard({ children, className }: { children: ReactNode; classNam
   return (
     <Card as="section" elevated padding="none" aria-labelledby={id} className={cn('min-w-0', className)}>
       <div className="flex flex-col gap-4 p-4 sm:p-5">
-        <h3 id={id} className="text-base leading-6 font-semibold text-text">
+        <h2 id={id} className="text-base leading-6 font-semibold text-text">
           Pay and run
-        </h3>
+        </h2>
         {children}
       </div>
     </Card>
@@ -344,7 +344,7 @@ export function QuoteBox({ title, action, children }: { title: ReactNode; action
   return (
     <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-border bg-surface-2/30 px-3.5 pt-2.5 pb-3.5">
       <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <h4 className="text-xs font-medium tracking-wide text-muted uppercase">{title}</h4>
+        <h3 className="text-xs font-medium tracking-wide text-muted uppercase">{title}</h3>
         {action}
       </div>
       {children}

@@ -16,7 +16,7 @@ function Crash({ error }: { error: Error }) {
           <OctagonAlert className="size-5" />
         </span>
         <div>
-          <h2 className="text-lg font-semibold text-text">This page stopped working</h2>
+          <h1 className="text-lg font-semibold text-text">This page stopped working</h1>
           <p className="mt-1.5 text-sm text-muted">
             Something on it failed to show. Reloading usually fixes it. A payment you already sent keeps going without this page, and you can follow it again after the reload.
           </p>

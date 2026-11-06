@@ -23,7 +23,8 @@ const pages = [
 for (const { name, path, ready } of pages) {
   test(`${name} renders without errors`, { tag: '@mobile' }, async ({ page, problems }) => {
     await page.goto(path);
-    await expect(page.getByRole('heading', { name: 'Connect Anything', exact: true })).toBeVisible();
+    // the logo leads home, and is not a heading: the page's own title is its h1 (a11y-states.spec.ts checks the outline)
+    await expect(page.getByRole('banner').getByRole('link', { name: 'Connect Anything', exact: true })).toBeVisible();
     await expect(ready(page)).toBeVisible();
     // what loads after the first paint: the token list, the recipe, AppKit
     await page.waitForLoadState('networkidle');
@@ -113,7 +114,7 @@ test('the header connects a wallet in one click, even before the wallet code is 
     await route.continue();
   });
   await page.goto(LANDING);
-  await page.getByRole('button', { name: 'Connect wallet' }).click();
+  await page.getByRole('banner').getByRole('button', { name: 'Connect wallet' }).click();
   release();
   // AppKit's modal opens by itself once the wallet code is up: no second click on the header. The modal is still growing
   // then, and a click can land on the row that has just moved under it, so the wallet is picked from the keyboard

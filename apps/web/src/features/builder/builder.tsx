@@ -121,7 +121,7 @@ function FormSection({ title, aside, description, children }: { title: string; a
     <div className="flex min-w-0 flex-col gap-4">
       <div>
         <div className="flex items-baseline justify-between gap-3">
-          <h4 className="text-base font-semibold text-text">{title}</h4>
+          <h3 className="text-base font-semibold text-text">{title}</h3>
           {aside !== undefined && <span className="text-xs text-muted nums">{aside}</span>}
         </div>
         {description && <p className="mt-1 text-sm text-muted">{description}</p>}
@@ -238,9 +238,9 @@ export function InstructionForm({ idl, ixName, mint, symbol, onAdd }: { idl: Idl
   return (
     <Card as="section" aria-labelledby="instruction-name" padding="lg" className="flex flex-col gap-8 max-sm:[--card-p:1rem]">
       <header className="flex flex-col gap-1.5">
-        <h3 id="instruction-name" className="font-mono text-lg font-semibold [overflow-wrap:anywhere] text-text">
+        <h2 id="instruction-name" className="font-mono text-lg font-semibold [overflow-wrap:anywhere] text-text">
           {breakable(ixName)}
-        </h3>
+        </h2>
         {instruction.docs && <Docs text={instruction.docs.join(' ')} />}
       </header>
 
@@ -265,7 +265,7 @@ export function InstructionForm({ idl, ixName, mint, symbol, onAdd }: { idl: Idl
                   amountArg === field.name
                     ? 'Filled in when the recipe runs, with what Connect delivers.'
                     : !amountArg && field === canTakeAmount[0]
-                      ? 'Off, this step spends a fixed amount, and any rest stays with the intermediary.'
+                      ? 'Off: this step spends a fixed amount, and what it does not spend stays with the intermediary.'
                       : undefined
                 }
                 checked={amountArg === field.name}
@@ -418,7 +418,7 @@ function InstructionScreen({ idl, idls, list, targets, token, onTarget, steps, o
                 </Boundary>
               )}
               {!ixName && instructions.length > 0 && (
-                <EmptyState compact icon={<SquareMousePointer />} title="Pick an instruction above">
+                <EmptyState compact level={2} icon={<SquareMousePointer />} title="Pick an instruction above">
                   Its arguments and accounts show here, with the accounts the IDL can find already filled in.
                 </EmptyState>
               )}
@@ -466,9 +466,9 @@ function Export({ stored }: { stored: StoredRecipe }) {
 
   return (
     <Card as="section" aria-labelledby="export-title" padding="lg" className="flex flex-col gap-4 max-sm:[--card-p:1rem]">
-      <h3 id="export-title" className="text-base font-semibold text-text">
+      <h2 id="export-title" className="text-base font-semibold text-text">
         Export
-      </h3>
+      </h2>
       <ExportTabs url={url} working={working} error={error} onCreate={create} code={code} />
     </Card>
   );
@@ -500,6 +500,7 @@ function SimulateScreen({ stored, token, pending, onBack, onRun, heading }: Simu
       <StepHeader ref={heading} number={3} title="Simulation" description="A run on a fork of mainnet, as an intermediary that holds just the amount delivered. Then share it as a link, or as code." />
       {pending ?? (!stored || !token ? (
         <EmptyState
+          level={2}
           icon={<ListPlus />}
           title="The recipe is empty."
           action={
@@ -734,6 +735,7 @@ export function Builder() {
             </div>
           ) : (
             <EmptyState
+              level={2}
               icon={<ListPlus />}
               title="The recipe is empty."
               action={

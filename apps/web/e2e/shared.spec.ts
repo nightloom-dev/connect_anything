@@ -27,13 +27,16 @@ test('a shared recipe says who made it, and opens what will run', { tag: '@mobil
   await expect(page.getByRole('main')).toContainText(/refresh_reserve[\s\S]*refresh_reserve[\s\S]*refresh_obligation[\s\S]*repay_obligation_liquidity_v2/);
   // the amount is the quote's, and nobody knows it yet
   await expect(page.getByText('"liquidity_amount": "the amount delivered, known after the quote"')).toBeVisible();
+  // the three refreshes take no arguments, and say so in words rather than as an empty {}
+  await expect(page.getByText('This instruction takes no arguments.')).toHaveCount(3);
+  await expect(page.getByText('{}', { exact: true })).toHaveCount(0);
 
   // consent comes before anything else is asked (run-states state 08 has the rest)
   await expect(page.getByRole('checkbox', { name: CONSENT })).not.toBeChecked();
   await expect(page.getByText('Connect an EVM wallet to continue.')).toBeVisible();
   // and until a wallet connects, connecting one is the only thing to do
   await expect(page.getByRole('button', { name: QUOTE })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Connect EVM wallet' })).toBeEnabled();
+  await expect(page.getByRole('main').getByRole('button', { name: 'Connect wallet' })).toBeEnabled();
 });
 
 test('the IDL a recipe carries is checked against the one the program publishes', async ({ page, api }) => {
@@ -63,7 +66,7 @@ test('a link that leads to no recipe, or to a malformed one, runs nothing', asyn
   for (const id of [RECIPES.missing, 'not-a-recipe-id']) {
     await page.goto(shared(id));
     await expect(alertOf(page, 'This link does not lead to a recipe.')).toContainText('Ask the sender for a new link.');
-    await expect(page.getByRole('button', { name: 'Connect EVM wallet' })).toHaveCount(0);
+    await expect(page.getByRole('main').getByRole('button', { name: 'Connect wallet' })).toHaveCount(0);
   }
   // and it is no dead end: the two ways on of the 404 page
   await expect(alertOf(page, 'This link does not lead to a recipe.').getByRole('link', { name: 'Rescue Kamino' })).toHaveAttribute('href', '/kamino');
@@ -72,5 +75,5 @@ test('a link that leads to no recipe, or to a malformed one, runs nothing', asyn
   await page.goto(shared(RECIPES.corrupt));
   await expect(alertOf(page, 'This recipe is malformed: it is not a version 1 recipe. Nothing can run from this link.')).toContainText('Ask the sender for a new link.');
   await expect(page.getByText('What will run')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Connect EVM wallet' })).toHaveCount(0);
+  await expect(page.getByRole('main').getByRole('button', { name: 'Connect wallet' })).toHaveCount(0);
 });

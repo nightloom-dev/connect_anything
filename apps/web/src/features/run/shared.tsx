@@ -13,6 +13,7 @@ export function Dead({ icon, title, children }: { icon: ReactNode; title: string
   return (
     <div role="alert" className="rounded-xl border border-border bg-surface">
       <EmptyState
+        level={2}
         icon={icon}
         title={title}
         action={
@@ -54,11 +55,12 @@ export function Loading() {
   );
 }
 
-/** The heading of /r/:id. */
-export function SharedHeader() {
+/** The heading of /r/:id: the page's h1, and a lower level where the gallery shows it inside a section. */
+export function SharedHeader({ level = 1 }: { level?: 1 | 3 }) {
+  const Heading = `h${level}` as const;
   return (
     <header className="flex flex-col gap-1.5">
-      <h2 className="text-2xl leading-tight font-semibold tracking-tight text-text">A recipe someone shared with you</h2>
+      <Heading className="text-2xl leading-tight font-semibold tracking-tight text-text">A recipe someone shared with you</Heading>
       <p className="text-sm text-muted">Read what it runs on Solana, then pay for it from an EVM wallet with one signature.</p>
     </header>
   );

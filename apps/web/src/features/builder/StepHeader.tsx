@@ -18,10 +18,10 @@ export const StepHeader = forwardRef<HTMLHeadingElement, StepHeaderProps>(functi
   return (
     <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
       <div className="min-w-0">
-        <h2 ref={ref} id={id} tabIndex={-1} className="text-xl font-semibold tracking-tight text-text outline-none sm:text-2xl">
+        <h1 ref={ref} id={id} tabIndex={-1} className="text-xl font-semibold tracking-tight text-text outline-none sm:text-2xl">
           <span className="sr-only">{number}. </span>
           {title}
-        </h2>
+        </h1>
         {description && <p className="mt-1.5 max-w-2xl text-md text-muted">{description}</p>}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}

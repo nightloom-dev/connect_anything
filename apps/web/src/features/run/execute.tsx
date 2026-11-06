@@ -917,7 +917,7 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
               <div className="flex flex-col gap-2.5">
                 {!wallet ? (
                   <Button variant="primary" size="lg" block icon={<Wallet />} disabled={isConnecting} onClick={() => connect()}>
-                    {isConnecting ? 'Connecting…' : 'Connect EVM wallet'}
+                    {isConnecting ? 'Connecting…' : 'Connect wallet'}
                   </Button>
                 ) : !isEvm ? (
                   <Button
@@ -1036,7 +1036,8 @@ export function Execute({ exec, recipe, stored, shared = false, suggested, outco
                     <>
                       {' '}
                       <span className="min-w-0 text-muted">
-                        (contract <Address value={depositToken.contractAddress} chain={depositToken.blockchain} kind="token" copy={false} />)
+                        {/* the explorer link is a 24 px target around a 14 px arrow: the bracket comes in over its spare edge */}
+                        (contract <Address value={depositToken.contractAddress} chain={depositToken.blockchain} kind="token" copy={false} className="-mr-1.5" />)
                       </span>
                     </>
                   )}{' '}

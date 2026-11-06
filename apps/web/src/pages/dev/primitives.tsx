@@ -167,7 +167,7 @@ function Badges() {
             Simulated
           </Badge>
           <Badge size="md" variant="warn" dot>
-            Not checked
+            Not simulated
           </Badge>
           <Badge size="md" variant="bad" dot>
             Not supported

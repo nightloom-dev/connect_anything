@@ -26,9 +26,9 @@ export default function OgImage() {
           <span className="text-[26px] font-semibold tracking-tight">Connect Anything</span>
         </div>
         <div>
-          <h2 className="text-[54px] leading-[1.08] font-semibold tracking-[-0.03em]">
+          <h1 className="text-[54px] leading-[1.08] font-semibold tracking-[-0.03em]">
             Any Solana program. <span className="text-brand">One signature from any EVM chain.</span>
-          </h2>
+          </h1>
           <p className="mt-6 text-[22px] leading-snug text-muted">Built on Aurora Intents Connect</p>
         </div>
         <ul className="flex items-center gap-6 text-[20px] font-medium">

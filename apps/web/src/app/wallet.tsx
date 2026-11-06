@@ -3,6 +3,7 @@ import { createIntentsConnectApi } from '@aurora-is-near/intents-connect';
 import { IntentsConnectProvider } from '@aurora-is-near/intents-connect/react';
 import { AppKitProvider, useIntentsConnectWallet } from '@aurora-is-near/intents-connect-wallet/connect/appkit';
 import { retry503 } from '../connect.ts';
+import { AppKitFocus } from './AppKitFocus.tsx';
 import { AppKitNetwork } from './AppKitNetwork.tsx';
 import { AppKitTheme } from './AppKitTheme.tsx';
 
@@ -34,6 +35,7 @@ export function WalletProviders({ children }: { children: ReactNode }) {
     <AppKitProvider appName="Connect Anything" themeMode="dark">
       <AppKitTheme />
       <AppKitNetwork />
+      <AppKitFocus />
       <App>{children}</App>
     </AppKitProvider>
   );

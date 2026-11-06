@@ -113,7 +113,7 @@ export function SimulationPending() {
 /** A 503: nothing was checked, and nothing stops the export or the run. */
 export function SimulatorOffline({ reason }: { reason: string }) {
   return (
-    <Alert kind="warning" icon={<CloudOff strokeWidth={2.1} />} title={<>Not checked — simulator offline. </>}>
+    <Alert kind="warning" icon={<CloudOff strokeWidth={2.1} />} title={<>Not simulated: simulator offline. </>}>
       You can still export and run.
       <span className="mt-1 block text-xs text-text/60">{reason}</span>
     </Alert>

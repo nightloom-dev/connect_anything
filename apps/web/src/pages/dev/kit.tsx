@@ -5,7 +5,7 @@ import { cn } from '../../ui/index.ts';
 export function Demo({ title, children, className, wide = false }: { title: string; children: ReactNode; className?: string; wide?: boolean }) {
   return (
     <div className={cn('flex min-w-0 flex-col gap-3', wide && 'md:col-span-2', className)}>
-      <h4 className="text-xs font-medium tracking-wide text-muted uppercase">{title}</h4>
+      <h3 className="text-xs font-medium tracking-wide text-muted uppercase">{title}</h3>
       {children}
     </div>
   );

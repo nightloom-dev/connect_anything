@@ -1,5 +1,6 @@
 import { audit } from './axe.ts';
 import { GALLERY, GROUPS, galleryShown, openGroup, sectionIds } from './gallery.ts';
+import { expectOutline } from './headings.ts';
 import { expect, test } from './support.ts';
 
 // The gallery, /dev/states, on the dev server (the dev project): every component and every state of the run card on
@@ -29,6 +30,8 @@ for (const { prefix, title } of GROUPS) {
       // one axe run per section, up to 16 in a test
       test.slow();
       const ids = (await openGroup(page, connect, prefix)).filter((_, index) => index % parts === part);
+      // one h1, the gallery's, and no level skipped: each section's components fit under its h2 as on their pages
+      if (part === 0) await expectOutline(page);
       for (const id of ids.filter(id => !(id in KNOWN))) await audit(page, testInfo, { idle: false, include: `section[id="${id}"]`, name: id });
     });
   }

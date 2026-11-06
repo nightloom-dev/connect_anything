@@ -21,7 +21,7 @@ export function Footer() {
             Build
           </Link>
           <a href={DOCS_URL} target="_blank" rel="noreferrer" className={external}>
-            README
+            Docs
             <ArrowUpRight className="size-3.5" aria-hidden />
             <span className="sr-only"> (opens in a new tab)</span>
           </a>

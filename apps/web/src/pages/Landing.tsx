@@ -59,9 +59,9 @@ function Hero() {
           <span className="size-1.5 rounded-full bg-brand" aria-hidden />
           Built on Aurora Intents Connect
         </p>
-        <h2 id="hero-title" className="mt-5 text-[2rem] leading-[1.12] font-semibold tracking-[-0.025em] sm:text-3xl sm:leading-[1.06]">
+        <h1 id="hero-title" className="mt-5 text-[2rem] leading-[1.12] font-semibold tracking-[-0.025em] sm:text-3xl sm:leading-[1.06]">
           Any Solana program. <span className="text-brand">One signature from any EVM chain.</span>
-        </h2>
+        </h1>
         <p className="mt-5 max-w-xl text-base text-muted sm:text-lg sm:leading-8">
           Turn an Anchor program into a button anyone can press from Base, Arbitrum or Ethereum. Aurora Intents Connect bridges the money and runs the instructions on Solana.
         </p>

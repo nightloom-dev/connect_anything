@@ -33,7 +33,7 @@ export default function DevStates() {
           <Badge variant="warn" className="self-start">
             Development only
           </Badge>
-          <h2 className="text-2xl font-semibold tracking-tight text-text">States</h2>
+          <h1 className="text-2xl font-semibold tracking-tight text-text">States</h1>
           <p className="max-w-2xl text-muted">
             Every component in every state, on fake data. Link a section with its anchor, or show only some with <code className="font-mono text-[13px] text-text">?only=ui-</code>.
           </p>
@@ -41,12 +41,12 @@ export default function DevStates() {
         {shown.map(section => (
           <section key={section.id} id={section.id} aria-labelledby={`${section.id}-title`} className="flex scroll-mt-20 flex-col gap-6">
             <div className="flex flex-col gap-1 border-b border-border pb-3">
-              <h3 id={`${section.id}-title`} className="group flex items-center gap-2 text-lg font-semibold text-text">
+              <h2 id={`${section.id}-title`} className="group flex items-center gap-2 text-lg font-semibold text-text">
                 {section.title}
                 <a href={`#${section.id}`} className="text-faint opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100" aria-label={`Link to ${section.title}`}>
                   #
                 </a>
-              </h3>
+              </h2>
               {section.description && <p className="text-sm text-muted">{section.description}</p>}
             </div>
             {section.render()}

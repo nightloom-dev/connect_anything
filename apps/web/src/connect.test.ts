@@ -149,7 +149,7 @@ test('errors the screens act on are told apart', () => {
   assert.ok(!isQuoteMoved(undefined));
   assert.equal(explain(new Error('execution OPERATION_FAILED')), '');
   assert.equal(explain(new Error('boom')), 'boom');
-  assert.match(explain(Object.assign(new Error('x'), { code: 'NO_INTERMEDIARY' })), /not enabled/);
+  assert.match(explain(Object.assign(new Error('x'), { code: 'NO_INTERMEDIARY' })), /not switched on/);
   assert.match(explain({ code: 4001 }), /rejected/);
 });
 

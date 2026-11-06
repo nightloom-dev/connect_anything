@@ -11,7 +11,7 @@ export function NotFound() {
         404
       </p>
       <div role="alert" className="mt-6">
-        <h2 className="text-xl font-semibold text-text">There is no such page.</h2>
+        <h1 className="text-xl font-semibold text-text">There is no such page.</h1>
         <p className="mt-2 text-balance text-muted">
           The link may be cut short or mistyped. <Link href="/" className="link">Start here</Link>, or go straight to a task.
         </p>

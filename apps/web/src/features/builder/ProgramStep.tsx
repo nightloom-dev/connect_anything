@@ -184,9 +184,9 @@ export function Examples({ examples, onPick, loading, disabled = false }: Exampl
   return (
     <section aria-labelledby="examples-title" className="flex flex-col gap-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h3 id="examples-title" className="text-sm font-medium text-text">
+        <h2 id="examples-title" className="text-sm font-medium text-text">
           Start from an example
-        </h3>
+        </h2>
         <p className="text-xs text-muted">The IDL ships with this page, so nothing is fetched.</p>
       </div>
       <ul className="grid gap-2 sm:grid-cols-2">
@@ -237,10 +237,10 @@ export function RecentPrograms({ recent, onPick, onClear, disabled = false, load
   return (
     <section aria-labelledby="recent-title" className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-4">
-        <h3 id="recent-title" className="flex items-center gap-2 text-sm font-medium text-text">
+        <h2 id="recent-title" className="flex items-center gap-2 text-sm font-medium text-text">
           <Clock className="size-4 text-muted" aria-hidden />
           Recent programs
-        </h3>
+        </h2>
         <IconButton label="Forget recent programs" icon={<X />} size="xs" onClick={onClear} />
       </div>
       <ul className="flex flex-wrap gap-2">
@@ -277,9 +277,9 @@ export function HowItWorks() {
   return (
     <Card as="aside" aria-labelledby="flow-title" padding="lg" className="flex flex-col gap-5 max-sm:[--card-p:1rem]">
       <div>
-        <h3 id="flow-title" className="text-base font-semibold text-text">
+        <h2 id="flow-title" className="text-base font-semibold text-text">
           From an IDL to a run
-        </h3>
+        </h2>
         <p className="mt-1 text-sm text-muted">Any Anchor program, with no code written for it.</p>
       </div>
       <ol className="flex flex-col">
