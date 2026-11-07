@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { cn } from '../../ui/cn.ts';
 import { siteAddress } from './site.ts';
+import { useDrawOnView } from './useDrawOnView.ts';
 
 // The Telegram watcher of apps/watch at work, drawn as a plot: the LTV of a Kamino position over 40 minutes, the line
 // where the bot rings, its alert, and the repay that brings the position back. The alert's words are the bot's own
@@ -55,8 +56,8 @@ type Frame = {
 const path = ({ x, y }: Frame) => LTV.map(([minute, ltv], index) => `${index ? 'L' : 'M'}${x(minute).toFixed(1)} ${y(ltv).toFixed(1)}`).join('');
 
 /**
- * How far along the line a minute is, as a share of its length: the plot is drawn as it scrolls in (landing.css), and
- * the mark of that minute comes when the line gets to it.
+ * How far along the line a minute is, as a share of its length: the plot is drawn once it comes up the screen
+ * (landing.css), and the mark of that minute comes when the line gets to it.
  */
 const along = ({ x, y }: Frame, minute: number): CSSProperties => {
   const points = LTV.map(([m, ltv]) => [x(m), y(ltv)]);
@@ -70,8 +71,9 @@ function PlotWide() {
   const f: Frame = { box: '0 120 1000 300', x: m => 60 + 22 * m, y: ltv => 390 - ((ltv - 40) * 16) / 3, className: 'hidden md:block' };
   const { x, y } = f;
   const line = path(f);
+  const drawing = useDrawOnView<SVGSVGElement>();
   return (
-    <svg viewBox={f.box} role="img" aria-label={PLOT_LABEL} className={cn('ltv h-auto w-full overflow-visible', f.className)}>
+    <svg ref={drawing} viewBox={f.box} role="img" aria-label={PLOT_LABEL} className={cn('ltv h-auto w-full overflow-visible', f.className)}>
       <path className="lt-grid" d={`M60 ${y(50)}H940M60 ${y(60)}H940`} />
       <path className="lt-liq" d={`M60 ${y(LIQUIDATED_AT)}H940`} />
       <path className="lt-watch" d={`M60 ${y(LINE)}H940`} />
@@ -115,8 +117,9 @@ function PlotNarrow() {
   const f: Frame = { box: '0 0 400 250', x: m => 44 + 8.5 * m, y: ltv => 220 - (ltv - 40) * 4.5, className: 'md:hidden' };
   const { x, y } = f;
   const line = path(f);
+  const drawing = useDrawOnView<SVGSVGElement>();
   return (
-    <svg viewBox={f.box} role="img" aria-label={PLOT_LABEL} className={cn('ltv ltv-narrow h-auto w-full overflow-visible', f.className)}>
+    <svg ref={drawing} viewBox={f.box} role="img" aria-label={PLOT_LABEL} className={cn('ltv ltv-narrow h-auto w-full overflow-visible', f.className)}>
       <path className="lt-grid" d={`M44 ${y(50)}H384M44 ${y(60)}H384`} />
       <path className="lt-liq" d={`M44 ${y(LIQUIDATED_AT)}H384`} />
       <path className="lt-watch" d={`M44 ${y(LINE)}H384`} />

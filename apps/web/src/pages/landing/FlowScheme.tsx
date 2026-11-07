@@ -9,7 +9,8 @@ import { cn } from '../../ui/cn.ts';
 // Everything is drawn at the first paint; only the run itself plays. The payment rides the head of the line as it is
 // drawn, Intents Connect rings when it arrives, the program's instructions get their checks, and each callout lights as
 // the run passes what it names. At the first paint it is over in 1.2 s. Run again plays it slower (`slow`), and a run
-// from another chain (`source`) takes that chain's way to the junction.
+// from another chain (`source`) takes that chain's way to the junction. The chains' boxes are the control that picks it:
+// SourcePicker lays a button over each.
 
 export const SCHEME_TITLE =
   'One payment from Base, Arbitrum or Ethereum goes through Intents Connect to a program on Solana: here the four instructions of a Kamino repay.';
@@ -28,6 +29,16 @@ const INSTRUCTIONS = ['refresh_reserve ×2', 'refresh_obligation', 'repay_obliga
 const CU_SHARE = 115_948 / 200_000;
 /** How much slower Run again plays, so that the eye can follow the callouts. */
 const SLOW = 1.8;
+
+/** The top of each chain's box in the route across, which the callouts push 70 down, and the left of each in the narrow one. */
+const ROWS = [52, 127, 202];
+const ROUTE_TOP = 70;
+const COLUMNS = [10, 150, 290];
+/** The chains' boxes as [x, y, width, height] on each drawing's viewBox: where SourcePicker puts its buttons. */
+const BOXES = {
+  across: { width: 1000, height: 440, boxes: ROWS.map(y => [20, y + ROUTE_TOP, 180, 46]) },
+  narrow: { width: 420, height: 312, boxes: COLUMNS.map(x => [x, 10, 120, 36]) },
+};
 
 /** The run, in seconds from the first paint: when each part starts and how long it takes. The last ends at 1.18 s. */
 const RUN = {
@@ -92,8 +103,7 @@ const Check = ({ x, y, at, still }: { x: number; y: number; at: readonly [number
 
 /** The route across, 1000 × 300: Base, Arbitrum and Ethereum, Intents Connect, the program. */
 function RouteAcross({ source, still }: { source: Source; still?: boolean }) {
-  // the middle of each chain's box, where its way to the junction starts
-  const rows = [52, 127, 202];
+  const rows = ROWS;
   const from = SOURCES.indexOf(source);
   return (
     <>
@@ -220,7 +230,7 @@ export function FlowScheme({ source = 'Base', slow = false, still = false, callo
       <title id={id}>{SCHEME_TITLE}</title>
       {callouts ? (
         <>
-          <g transform="translate(0 70)">
+          <g transform={`translate(0 ${ROUTE_TOP})`}>
             <RouteAcross source={source} still={still} />
           </g>
           <Leader d="M150 122V66H470" x={150} y={122} at={RUN.sign} still={still} />
@@ -261,7 +271,7 @@ export function FlowScheme({ source = 'Base', slow = false, still = false, callo
 export function FlowSchemeNarrow({ source = 'Base', slow = false, className }: Omit<SchemeProps, 'still'>) {
   const id = useId();
   // the left edge of each chain's box; its way down starts from the middle, 60 further
-  const columns = [10, 150, 290];
+  const columns = COLUMNS;
   const from = SOURCES.indexOf(source);
   return (
     <svg
@@ -321,5 +331,36 @@ export function FlowSchemeNarrow({ source = 'Base', slow = false, className }: O
       ))}
       <Num x={28} y={248} n={3} r={10} at={RUN.program} />
     </svg>
+  );
+}
+
+const share = (part: number, whole: number) => `${((part / whole) * 100).toFixed(3)}%`;
+
+/**
+ * The chains' boxes of a drawing as buttons, laid over it: pressing one plays the run from that chain. They are not in
+ * the drawing, which a new run draws anew, so that the focus stays on the button that was pressed. The caller puts the
+ * drawing and this in a `relative` box as large as the drawing.
+ */
+export function SourcePicker({ layout, source, onSource }: { layout: keyof typeof BOXES; source: Source; onSource: (source: Source) => void }) {
+  const { width, height, boxes } = BOXES[layout];
+  return (
+    <div role="group" aria-label="Pay from" className="pointer-events-none absolute inset-0">
+      {SOURCES.map((chain, index) => {
+        const [x, y, w, h] = boxes[index];
+        return (
+          <button
+            key={chain}
+            type="button"
+            aria-pressed={chain === source}
+            onClick={() => onSource(chain)}
+            // the chosen one is edged in cobalt, as its run is; a phone gets 6 px more above and below to tap
+            className="pointer-events-auto absolute cursor-pointer transition-[background-color,box-shadow] duration-120 ease-out before:absolute before:inset-x-0 before:-inset-y-1.5 hover:bg-accent/6 aria-pressed:shadow-[inset_0_0_0_1.5px_var(--color-accent)] md:before:hidden"
+            style={{ left: share(x, width), top: share(y, height), width: share(w, width), height: share(h, height) }}
+          >
+            <span className="sr-only">{chain}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }

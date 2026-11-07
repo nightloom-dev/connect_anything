@@ -2,6 +2,11 @@ import { cn } from '../ui/cn.ts';
 
 export const REPO_URL = 'https://github.com/nightloom-dev/connect_anything';
 export const DOCS_URL = `${REPO_URL}#readme`;
+/** How to run the Telegram watcher, which the landing page and the footer link to. */
+export const WATCHER_URL = `${REPO_URL}#telegram-watcher`;
+/** How to run the app and its server from a clone. */
+export const SELF_HOST_URL = `${REPO_URL}#run-from-zero`;
+export const ISSUES_URL = `${REPO_URL}/issues`;
 
 /**
  * The mark, "Slot": the corner marks of a drawing field around a filled block, a slot that takes any program. On a

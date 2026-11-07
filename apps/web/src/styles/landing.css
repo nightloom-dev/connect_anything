@@ -361,168 +361,163 @@
 }
 
 /*
- * Sheets 2 to 5 are drawn as they scroll in: lines, marks and bars, never words. The scroll moves the pen, so a drawing
- * goes back as the page does. As in the hero, each element's own style is the finished drawing, and the animation only
- * says where it comes from: with motion reduced, or in a browser without scroll timelines, the sheets are complete.
- * Where a part starts and ends is a share of its sheet's way across the screen ("cover 20%": a fifth of the way from
- * coming in at the bottom to leaving at the top).
+ * Sheets 2 to 5 are drawn once, as each drawing comes up the screen: lines, marks and bars, never words. Until then a
+ * drawing waits on its first frame; then it plays in its own time and stays drawn, whichever way the page scrolls
+ * (useDrawOnView.ts sets data-draw, "wait" then "play"). As in the hero, each element's own style is the finished
+ * drawing and the animation only says where it comes from: with motion reduced, or before the script runs, the sheets
+ * are complete.
  */
 @layer components {
   @media (prefers-reduced-motion: no-preference) {
-    @supports (animation-timeline: view()) {
-      /* Sheet 2. Without Connect Anything the line goes stop by stop, a fifth at a time from 20% to 45%; each stop
-         comes when the line gets to it. With it, the line is one stroke from 20% to 30%. */
-      .track {
-        view-timeline: --track;
-      }
-      .track::before,
-      .track > li > i {
-        animation-fill-mode: both;
-        animation-timeline: --track;
-      }
-      .track:not(.track-on)::before {
-        animation-name: track-steps-y;
-        animation-timing-function: step-end;
-        animation-range: cover 20% cover 45%;
-      }
-      .track-on::before {
-        transform-origin: top;
-        animation-name: sheet-draw-y;
-        animation-timing-function: linear;
-        animation-range: cover 20% cover 30%;
-      }
-      .track > li > i {
-        animation-name: sheet-pop;
-        animation-timing-function: var(--ease-out);
-        animation-range: cover 18% cover 21%;
-      }
-      .track:not(.track-on) > li:nth-child(2) > i {
-        animation-range: cover 25% cover 28%;
-      }
-      .track:not(.track-on) > li:nth-child(3) > i {
-        animation-range: cover 30% cover 33%;
-      }
-      .track:not(.track-on) > li:nth-child(4) > i {
-        animation-range: cover 35% cover 38%;
-      }
-      .track:not(.track-on) > li:nth-child(5) > i {
-        animation-range: cover 40% cover 43%;
-      }
-      .track:not(.track-on) > li:nth-child(6) > i {
-        animation-range: cover 45% cover 48%;
-      }
-      .track-on > li:last-child > i {
-        animation-range: cover 30% cover 33%;
-      }
-      @media (width >= 60rem) {
-        .track:not(.track-on)::before {
-          animation-name: track-steps-x;
-        }
-        .track-on::before {
-          transform-origin: left;
-          animation-name: sheet-draw-x;
-        }
-      }
+    [data-draw] {
+      --draw: paused;
+    }
+    [data-draw='play'] {
+      --draw: running;
+    }
 
-      /* Sheet 3: the axis, then a tick as it gets to each step, then the arrow. On a phone the axis runs down the
-         page, and each tick comes as it scrolls up to four fifths of the screen. */
-      .steps {
-        view-timeline: --steps;
+    /* Sheet 2. Without Connect Anything the line goes stop by stop, a quarter of a second each, and each stop comes
+       when the line gets to it; with it, the line is one stroke and its last stop comes at half a second. */
+    [data-draw] .track::before,
+    [data-draw] .track > li > i {
+      animation-fill-mode: both;
+      animation-play-state: var(--draw);
+    }
+    [data-draw] .track:not(.track-on)::before {
+      animation-name: track-steps-y;
+      animation-duration: 1250ms;
+      animation-delay: 150ms;
+      animation-timing-function: step-end;
+    }
+    [data-draw] .track-on::before {
+      transform-origin: top;
+      animation-name: sheet-draw-y;
+      animation-duration: 500ms;
+      animation-delay: 150ms;
+      animation-timing-function: var(--ease-run);
+    }
+    [data-draw] .track > li > i {
+      animation-name: sheet-pop;
+      animation-duration: 180ms;
+      animation-timing-function: var(--ease-out);
+    }
+    [data-draw] .track:not(.track-on) > li:nth-child(2) > i {
+      animation-delay: 400ms;
+    }
+    [data-draw] .track:not(.track-on) > li:nth-child(3) > i {
+      animation-delay: 650ms;
+    }
+    [data-draw] .track:not(.track-on) > li:nth-child(4) > i {
+      animation-delay: 900ms;
+    }
+    [data-draw] .track:not(.track-on) > li:nth-child(5) > i {
+      animation-delay: 1150ms;
+    }
+    [data-draw] .track:not(.track-on) > li:nth-child(6) > i {
+      animation-delay: 1400ms;
+    }
+    [data-draw] .track-on > li:last-child > i {
+      animation-delay: 650ms;
+    }
+    @media (width >= 60rem) {
+      [data-draw] .track:not(.track-on)::before {
+        animation-name: track-steps-x;
       }
-      .steps::before {
-        transform-origin: top;
-        animation-name: sheet-draw-y;
-        animation-timing-function: linear;
-        animation-fill-mode: both;
-        animation-timeline: --steps;
-        animation-range: cover 15% cover 50%;
-      }
-      .steps .step-tick {
+      [data-draw] .track-on::before {
         transform-origin: left;
         animation-name: sheet-draw-x;
-        animation-timing-function: var(--ease-out);
-        animation-fill-mode: both;
-        animation-timeline: view();
-        animation-range: cover 18% cover 24%;
       }
-      @media (width >= 60rem) {
-        /* across, the ticks are where the columns start: k/4 of the axis and 8 px for each gap before them */
-        .steps::before {
-          transform-origin: left;
-          animation-name: sheet-draw-x;
-          animation-range: cover 20% cover 45%;
-        }
-        .steps::after {
-          animation-name: sheet-arrive;
-          animation-timing-function: var(--ease-out);
-          animation-fill-mode: both;
-          animation-timeline: --steps;
-          animation-range: cover 44% cover 47%;
-        }
-        .steps .step-tick {
-          transform-origin: top;
-          animation-name: sheet-draw-y;
-          animation-timeline: --steps;
-          animation-range: cover 20% cover 23%;
-        }
-        .steps > li:nth-child(2) .step-tick {
-          animation-range: cover 26.5% cover 29.5%;
-        }
-        .steps > li:nth-child(3) .step-tick {
-          animation-range: cover 33% cover 36%;
-        }
-        .steps > li:nth-child(4) .step-tick {
-          animation-range: cover 39.5% cover 42.5%;
-        }
-      }
+    }
 
-      /* Sheet 4: each gauge fills to its figure as its row comes up the screen */
-      .gauge-fill {
+    /* Sheet 3: the axis in a second, a tick as it gets to each step (a quarter of the way each), then the arrow */
+    .steps[data-draw]::before,
+    .steps[data-draw]::after,
+    .steps[data-draw] .step-tick {
+      animation-fill-mode: both;
+      animation-play-state: var(--draw);
+    }
+    .steps[data-draw]::before {
+      transform-origin: top;
+      animation-name: sheet-draw-y;
+      animation-duration: 1s;
+      animation-timing-function: linear;
+    }
+    .steps[data-draw] .step-tick {
+      transform-origin: left;
+      animation-name: sheet-draw-x;
+      animation-duration: 180ms;
+      animation-timing-function: var(--ease-out);
+    }
+    .steps[data-draw] > li:nth-child(2) .step-tick {
+      animation-delay: 260ms;
+    }
+    .steps[data-draw] > li:nth-child(3) .step-tick {
+      animation-delay: 520ms;
+    }
+    .steps[data-draw] > li:nth-child(4) .step-tick {
+      animation-delay: 780ms;
+    }
+    @media (width >= 60rem) {
+      .steps[data-draw]::before {
         transform-origin: left;
         animation-name: sheet-draw-x;
-        animation-timing-function: var(--ease-out);
-        animation-fill-mode: both;
-        animation-timeline: view();
-        animation-range: cover 10% cover 35%;
       }
+      .steps[data-draw]::after {
+        animation-name: sheet-arrive;
+        animation-duration: 180ms;
+        animation-delay: 960ms;
+        animation-timing-function: var(--ease-out);
+      }
+      .steps[data-draw] .step-tick {
+        transform-origin: top;
+        animation-name: sheet-draw-y;
+      }
+    }
 
-      /* Sheet 5: the LTV is drawn from 12:00 to 12:40 between 15% and 45%. --at, set on a mark, is how far along the
-         line its minute is (WatcherPlot.tsx): /watch and the alert come when the line gets there, then the leader
-         rises from the alert to the bot's message. The tint under the line comes last. */
-      .ltv {
-        --ltv-from: 15%;
-        --ltv-span: 30%;
-        view-timeline: --ltv;
-      }
-      .ltv :is(.lt-line, .lt-leader, .lt-area, .lt-hollow, .lt-alert) {
-        animation-fill-mode: both;
-        animation-timeline: --ltv;
-      }
-      .ltv :is(.lt-line, .lt-leader) {
-        stroke-dasharray: 1;
-      }
-      .ltv .lt-line {
-        animation-name: sheet-line;
-        animation-timing-function: linear;
-        animation-range: cover var(--ltv-from) cover calc(var(--ltv-from) + var(--ltv-span));
-      }
-      .ltv :is(.lt-hollow, .lt-alert) {
-        transform-box: fill-box;
-        transform-origin: center;
-        animation-name: sheet-pop;
-        animation-timing-function: var(--ease-out);
-        animation-range: cover calc(var(--ltv-from) + var(--at) * var(--ltv-span)) cover calc(var(--ltv-from) + var(--at) * var(--ltv-span) + 2.5%);
-      }
-      .ltv .lt-leader {
-        animation-name: sheet-line-back;
-        animation-timing-function: var(--ease-out);
-        animation-range: cover calc(var(--ltv-from) + var(--at) * var(--ltv-span) + 2%) cover calc(var(--ltv-from) + var(--at) * var(--ltv-span) + 7%);
-      }
-      .ltv .lt-area {
-        animation-name: sheet-fade;
-        animation-timing-function: linear;
-        animation-range: cover calc(var(--ltv-from) + var(--ltv-span) - 4%) cover calc(var(--ltv-from) + var(--ltv-span) + 4%);
-      }
+    /* Sheet 4: each gauge fills to its figure as its row comes up */
+    [data-draw] .gauge-fill {
+      transform-origin: left;
+      animation: sheet-draw-x var(--duration-draw) var(--ease-out) both;
+      animation-play-state: var(--draw);
+    }
+
+    /* Sheet 5: the LTV is drawn from 12:00 to 12:40 in 1.5 s. --at, set on a mark, is how far along the line its
+       minute is (WatcherPlot.tsx): /watch and the alert come when the line gets there, then the leader rises from the
+       alert to the bot's message. The tint under the line comes last. */
+    .ltv[data-draw] {
+      --ltv-time: 1500ms;
+    }
+    .ltv[data-draw] :is(.lt-line, .lt-leader, .lt-area, .lt-hollow, .lt-alert) {
+      animation-fill-mode: both;
+      animation-play-state: var(--draw);
+    }
+    .ltv[data-draw] :is(.lt-line, .lt-leader) {
+      stroke-dasharray: 1;
+    }
+    .ltv[data-draw] .lt-line {
+      animation-name: sheet-line;
+      animation-duration: var(--ltv-time);
+      animation-timing-function: linear;
+    }
+    .ltv[data-draw] :is(.lt-hollow, .lt-alert) {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation-name: sheet-pop;
+      animation-duration: 200ms;
+      animation-delay: calc(var(--at) * var(--ltv-time));
+      animation-timing-function: var(--ease-out);
+    }
+    .ltv[data-draw] .lt-leader {
+      animation-name: sheet-line-back;
+      animation-duration: 320ms;
+      animation-delay: calc(var(--at) * var(--ltv-time) + 120ms);
+      animation-timing-function: var(--ease-out);
+    }
+    .ltv[data-draw] .lt-area {
+      animation-name: sheet-fade;
+      animation-duration: 500ms;
+      animation-delay: calc(var(--ltv-time) - 200ms);
+      animation-timing-function: linear;
     }
   }
 }

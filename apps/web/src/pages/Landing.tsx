@@ -5,7 +5,8 @@ import { usePageTitle } from '../app/title.ts';
 import { buttonClass } from '../ui/Button.tsx';
 import { cn } from '../ui/cn.ts';
 import { Tooltip } from '../ui/Tooltip.tsx';
-import { CALLOUTS, FlowScheme, FlowSchemeNarrow, SOURCES, type Source } from './landing/FlowScheme.tsx';
+import { CALLOUTS, FlowScheme, FlowSchemeNarrow, SourcePicker, type Source } from './landing/FlowScheme.tsx';
+import { useDrawOnView } from './landing/useDrawOnView.ts';
 import { WatcherPlot } from './landing/WatcherPlot.tsx';
 import { CU_LIMIT, FIXTURES_URL, PROOF_RUNS, SOLSCAN, SOURCE_CHAINS, TX_BYTES_LIMIT, VERIFIED, WATCHER_URL, type ProofRun, type VerifiedProgram } from './landing/facts.ts';
 
@@ -61,37 +62,18 @@ function Sheet({ n, id, label, title, lead, children, className }: { n: number; 
 }
 
 /**
- * Under the drawing: the chain the run starts from, and Run again. Each plays the run once more, slower, so that the
- * callouts can be followed; for reduced motion the drawing only changes its way.
+ * Under the drawing: how to pick the chain (its boxes in the drawing are buttons, SourcePicker), and Run again, which
+ * plays the same run once more, slower, so that the callouts can be followed. With motion reduced there is no run to
+ * play again, and a chain only changes the way.
  */
-function RunControls({ source, onSource, onAgain }: { source: Source; onSource: (source: Source) => void; onAgain: () => void }) {
+function RunControls({ onAgain }: { onAgain: () => void }) {
   return (
-    <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-3 md:mt-3">
-      <div role="group" aria-labelledby="hero-source" className="flex items-center gap-2.5">
-        <span id="hero-source" className="label-caps text-muted">
-          Pay from
-        </span>
-        <span className="inline-flex rounded-md border border-border-strong bg-surface p-0.5">
-          {SOURCES.map(chain => (
-            <button
-              key={chain}
-              type="button"
-              aria-pressed={chain === source}
-              onClick={() => onSource(chain)}
-              className={cn(
-                'h-7 rounded-sm px-2.5 text-[0.8125rem] font-medium transition-colors duration-120',
-                chain === source ? 'bg-accent-solid text-white' : 'text-muted hover:bg-text/6 hover:text-text',
-              )}
-            >
-              {chain}
-            </button>
-          ))}
-        </span>
-      </div>
+    <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 md:mt-3">
+      <p className="text-sm text-muted">Press Base, Arbitrum or Ethereum on the drawing to pay from it.</p>
       <button
         type="button"
         onClick={onAgain}
-        className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[0.8125rem] font-medium text-accent transition-colors duration-120 hover:bg-accent/8 hover:text-accent-hover motion-reduce:hidden"
+        className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md px-2 text-[0.8125rem] font-medium text-accent transition-colors duration-120 hover:bg-accent/8 hover:text-accent-hover motion-reduce:hidden"
       >
         <RotateCcw className="size-3.5" aria-hidden />
         Run again
@@ -107,6 +89,11 @@ function Hero() {
   const key = `${source}-${runs}`;
   const slow = runs > 0;
   const again = () => setRuns(count => count + 1);
+  // a chain, even the one it is on, plays the run from it
+  const pick = (chain: Source) => {
+    setSource(chain);
+    again();
+  };
   return (
     <section aria-labelledby="hero-title" className="bg-grid">
       <div className={cn(WIDTH, 'flex flex-col pt-6 pb-10 sm:pt-10 md:pb-12')}>
@@ -130,9 +117,15 @@ function Hero() {
           </p>
         </div>
         <figure className="hero-figure mt-10 flex min-w-0 flex-col md:mt-7 md:mb-6 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-x-6">
-          <FlowScheme key={key} source={source} slow={slow} className="hidden md:col-span-2 md:block" />
+          <div className="relative hidden md:col-span-2 md:block">
+            <FlowScheme key={key} source={source} slow={slow} className="block" />
+            <SourcePicker layout="across" source={source} onSource={pick} />
+          </div>
           <div className="grid items-center gap-x-10 gap-y-8 sm:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] md:hidden">
-            <FlowSchemeNarrow key={key} source={source} slow={slow} className="mx-auto max-w-[26rem]" />
+            <div className="relative mx-auto w-full max-w-[26rem]">
+              <FlowSchemeNarrow key={key} source={source} slow={slow} />
+              <SourcePicker layout="narrow" source={source} onSource={pick} />
+            </div>
             {/* the callouts, as words: under the narrow drawing, and for screen readers beside the wide one */}
             <ol className="flex flex-col gap-4">
               {CALLOUTS.map((lines, index) => (
@@ -150,14 +143,7 @@ function Hero() {
               <li key={lines[0]}>{lines.join(' ')}</li>
             ))}
           </ol>
-          <RunControls
-            source={source}
-            onSource={chain => {
-              setSource(chain);
-              again();
-            }}
-            onAgain={again}
-          />
+          <RunControls onAgain={again} />
           {/* says the new way when the chain changes */}
           <figcaption aria-live="polite" className="label-caps mt-4 text-muted md:mt-3 md:text-right">
             Fig. 1 — one run, from {source} to Kamino
@@ -192,9 +178,10 @@ function Track({ name, title, tally, note, children, accent = false }: { name: s
 const stop = 'relative z-10 grid grid-cols-[0.75rem_minmax(0,1fr)] items-center gap-3 text-[0.8125rem] leading-snug md:flex md:flex-[0_1_6.5rem] md:flex-col md:items-center md:gap-2.5 md:text-center md:first:items-start md:first:text-left md:last:items-end md:last:text-right';
 
 function Problem() {
+  const drawing = useDrawOnView<HTMLDivElement>();
   return (
     <Sheet n={2} id="problem-title" label="The problem" title={['The money is on Base.', 'The program is on Solana.']}>
-      <div className="mt-10 border-t border-border">
+      <div ref={drawing} className="mt-10 border-t border-border">
         <Track name="track-without" title="Without Connect Anything" tally="4 stops" note="several signatures, three apps">
           {WITHOUT.map(item => (
             <li key={item} className={stop}>
@@ -231,6 +218,7 @@ const STEPS = [
 ];
 
 function HowItWorks() {
+  const drawing = useDrawOnView<HTMLOListElement>();
   return (
     <Sheet
       n={3}
@@ -239,7 +227,7 @@ function HowItWorks() {
       title={['From an IDL to a run', 'in four steps']}
       lead={<>The builder reads the program&apos;s IDL and walks you through the rest. Nothing is written for a program in particular.</>}
     >
-      <ol className="steps relative mt-10 grid gap-6 pl-6 md:grid-cols-4 md:gap-8 md:pl-0">
+      <ol ref={drawing} className="steps relative mt-10 grid gap-6 pl-6 md:grid-cols-4 md:gap-8 md:pl-0">
         {STEPS.map(({ step, title, text, out }, index) => (
           <li
             key={step}
@@ -281,12 +269,13 @@ function ExplorerLink({ href, value, explorer, chars }: { href: string; value: s
 
 /** A figure against its limit: the numbers, and a bar ruled in quarters. */
 function Gauge({ value, max, unit }: { value: number; max: number; unit: string }) {
+  const drawing = useDrawOnView<HTMLSpanElement>();
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
       <span className="font-mono text-[0.8125rem] text-text nums">
         {grouped.format(value)} <span className="text-xs text-muted">/ {grouped.format(max)} {unit}</span>
       </span>
-      <span aria-hidden className="relative h-2 border border-text bg-[linear-gradient(90deg,var(--color-border-strong)_1px,transparent_1px)] bg-size-[25%_100%]">
+      <span ref={drawing} aria-hidden className="relative h-2 border border-text bg-[linear-gradient(90deg,var(--color-border-strong)_1px,transparent_1px)] bg-size-[25%_100%]">
         <span className="gauge-fill absolute inset-y-0 left-0 bg-accent" style={{ width: `${(Math.min(value / max, 1) * 100).toFixed(1)}%` }} />
       </span>
     </div>
