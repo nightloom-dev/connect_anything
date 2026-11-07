@@ -2,8 +2,8 @@
    (pages/landing/WatcherPlot.tsx). Lines are ink and cobalt on white, labels are IBM Plex Mono, as on a drawing.
 
    Each element's own style is its final state and the animation only says where it comes from, so with no animation
-   at all the picture is complete. It plays once, and is over 1.2 s after the first paint: the delays are in
-   FlowScheme.tsx. */
+   at all the picture is complete. At the first paint the run is over in 1.2 s: when each part starts and how long it
+   takes are in FlowScheme.tsx, as inline styles that --flow-k stretches for Run again. */
 @layer components {
   /* The drawing of the hero gets smaller on a short screen, so that both ways in, under it, stay on the first one:
      28rem is what the header, the headline and the buttons take, 2.27 the drawing's width to its height */
@@ -144,11 +144,29 @@
   .flow .flow-pop {
     animation: flow-pop 220ms var(--ease-out) backwards;
   }
-  /* pathLength="1" on the path, so one unit is its whole length */
+  /* pathLength="1" on the path, so one unit is its whole length. The line and the payment share their timing, so the
+     payment stays at the head of the line as it is drawn, and is gone once it arrives. */
   .flow .flow-draw {
     stroke-dasharray: 1;
     stroke-dashoffset: 0;
-    animation: flow-draw 420ms var(--ease-out) backwards;
+    animation: flow-draw 420ms var(--ease-run) backwards;
+  }
+  .flow .fs-packet {
+    fill: none;
+    stroke: var(--color-accent);
+    stroke-width: 6;
+    stroke-dasharray: var(--bead) 2;
+    stroke-dashoffset: -1;
+  }
+  .flow .flow-packet {
+    animation: flow-packet 420ms var(--ease-run) backwards;
+  }
+  /* a callout, its leader and its anchor light while the run is at what it names */
+  .flow .flow-light {
+    animation: flow-light 450ms linear backwards;
+  }
+  .flow .flow-light-line {
+    animation: flow-light-line 450ms linear backwards;
   }
   .flow .flow-ping {
     opacity: 0;
@@ -244,6 +262,34 @@
     stroke-dashoffset: 1;
   }
 }
+@keyframes flow-packet {
+  from {
+    stroke-dashoffset: var(--bead);
+  }
+  to {
+    stroke-dashoffset: calc(var(--bead) - 1);
+  }
+}
+@keyframes flow-light {
+  0%,
+  100% {
+    fill: var(--color-text);
+  }
+  20%,
+  75% {
+    fill: var(--color-accent);
+  }
+}
+@keyframes flow-light-line {
+  0%,
+  100% {
+    stroke: var(--color-text);
+  }
+  20%,
+  75% {
+    stroke: var(--color-accent);
+  }
+}
 @keyframes flow-ping {
   0% {
     opacity: 0;
@@ -311,5 +357,252 @@
       border-bottom: 5px solid transparent;
       border-left: 9px solid var(--color-text);
     }
+  }
+}
+
+/*
+ * Sheets 2 to 5 are drawn as they scroll in: lines, marks and bars, never words. The scroll moves the pen, so a drawing
+ * goes back as the page does. As in the hero, each element's own style is the finished drawing, and the animation only
+ * says where it comes from: with motion reduced, or in a browser without scroll timelines, the sheets are complete.
+ * Where a part starts and ends is a share of its sheet's way across the screen ("cover 20%": a fifth of the way from
+ * coming in at the bottom to leaving at the top).
+ */
+@layer components {
+  @media (prefers-reduced-motion: no-preference) {
+    @supports (animation-timeline: view()) {
+      /* Sheet 2. Without Connect Anything the line goes stop by stop, a fifth at a time from 20% to 45%; each stop
+         comes when the line gets to it. With it, the line is one stroke from 20% to 30%. */
+      .track {
+        view-timeline: --track;
+      }
+      .track::before,
+      .track > li > i {
+        animation-fill-mode: both;
+        animation-timeline: --track;
+      }
+      .track:not(.track-on)::before {
+        animation-name: track-steps-y;
+        animation-timing-function: step-end;
+        animation-range: cover 20% cover 45%;
+      }
+      .track-on::before {
+        transform-origin: top;
+        animation-name: sheet-draw-y;
+        animation-timing-function: linear;
+        animation-range: cover 20% cover 30%;
+      }
+      .track > li > i {
+        animation-name: sheet-pop;
+        animation-timing-function: var(--ease-out);
+        animation-range: cover 18% cover 21%;
+      }
+      .track:not(.track-on) > li:nth-child(2) > i {
+        animation-range: cover 25% cover 28%;
+      }
+      .track:not(.track-on) > li:nth-child(3) > i {
+        animation-range: cover 30% cover 33%;
+      }
+      .track:not(.track-on) > li:nth-child(4) > i {
+        animation-range: cover 35% cover 38%;
+      }
+      .track:not(.track-on) > li:nth-child(5) > i {
+        animation-range: cover 40% cover 43%;
+      }
+      .track:not(.track-on) > li:nth-child(6) > i {
+        animation-range: cover 45% cover 48%;
+      }
+      .track-on > li:last-child > i {
+        animation-range: cover 30% cover 33%;
+      }
+      @media (width >= 60rem) {
+        .track:not(.track-on)::before {
+          animation-name: track-steps-x;
+        }
+        .track-on::before {
+          transform-origin: left;
+          animation-name: sheet-draw-x;
+        }
+      }
+
+      /* Sheet 3: the axis, then a tick as it gets to each step, then the arrow. On a phone the axis runs down the
+         page, and each tick comes as it scrolls up to four fifths of the screen. */
+      .steps {
+        view-timeline: --steps;
+      }
+      .steps::before {
+        transform-origin: top;
+        animation-name: sheet-draw-y;
+        animation-timing-function: linear;
+        animation-fill-mode: both;
+        animation-timeline: --steps;
+        animation-range: cover 15% cover 50%;
+      }
+      .steps .step-tick {
+        transform-origin: left;
+        animation-name: sheet-draw-x;
+        animation-timing-function: var(--ease-out);
+        animation-fill-mode: both;
+        animation-timeline: view();
+        animation-range: cover 18% cover 24%;
+      }
+      @media (width >= 60rem) {
+        /* across, the ticks are where the columns start: k/4 of the axis and 8 px for each gap before them */
+        .steps::before {
+          transform-origin: left;
+          animation-name: sheet-draw-x;
+          animation-range: cover 20% cover 45%;
+        }
+        .steps::after {
+          animation-name: sheet-arrive;
+          animation-timing-function: var(--ease-out);
+          animation-fill-mode: both;
+          animation-timeline: --steps;
+          animation-range: cover 44% cover 47%;
+        }
+        .steps .step-tick {
+          transform-origin: top;
+          animation-name: sheet-draw-y;
+          animation-timeline: --steps;
+          animation-range: cover 20% cover 23%;
+        }
+        .steps > li:nth-child(2) .step-tick {
+          animation-range: cover 26.5% cover 29.5%;
+        }
+        .steps > li:nth-child(3) .step-tick {
+          animation-range: cover 33% cover 36%;
+        }
+        .steps > li:nth-child(4) .step-tick {
+          animation-range: cover 39.5% cover 42.5%;
+        }
+      }
+
+      /* Sheet 4: each gauge fills to its figure as its row comes up the screen */
+      .gauge-fill {
+        transform-origin: left;
+        animation-name: sheet-draw-x;
+        animation-timing-function: var(--ease-out);
+        animation-fill-mode: both;
+        animation-timeline: view();
+        animation-range: cover 10% cover 35%;
+      }
+
+      /* Sheet 5: the LTV is drawn from 12:00 to 12:40 between 15% and 45%. --at, set on a mark, is how far along the
+         line its minute is (WatcherPlot.tsx): /watch and the alert come when the line gets there, then the leader
+         rises from the alert to the bot's message. The tint under the line comes last. */
+      .ltv {
+        --ltv-from: 15%;
+        --ltv-span: 30%;
+        view-timeline: --ltv;
+      }
+      .ltv :is(.lt-line, .lt-leader, .lt-area, .lt-hollow, .lt-alert) {
+        animation-fill-mode: both;
+        animation-timeline: --ltv;
+      }
+      .ltv :is(.lt-line, .lt-leader) {
+        stroke-dasharray: 1;
+      }
+      .ltv .lt-line {
+        animation-name: sheet-line;
+        animation-timing-function: linear;
+        animation-range: cover var(--ltv-from) cover calc(var(--ltv-from) + var(--ltv-span));
+      }
+      .ltv :is(.lt-hollow, .lt-alert) {
+        transform-box: fill-box;
+        transform-origin: center;
+        animation-name: sheet-pop;
+        animation-timing-function: var(--ease-out);
+        animation-range: cover calc(var(--ltv-from) + var(--at) * var(--ltv-span)) cover calc(var(--ltv-from) + var(--at) * var(--ltv-span) + 2.5%);
+      }
+      .ltv .lt-leader {
+        animation-name: sheet-line-back;
+        animation-timing-function: var(--ease-out);
+        animation-range: cover calc(var(--ltv-from) + var(--at) * var(--ltv-span) + 2%) cover calc(var(--ltv-from) + var(--at) * var(--ltv-span) + 7%);
+      }
+      .ltv .lt-area {
+        animation-name: sheet-fade;
+        animation-timing-function: linear;
+        animation-range: cover calc(var(--ltv-from) + var(--ltv-span) - 4%) cover calc(var(--ltv-from) + var(--ltv-span) + 4%);
+      }
+    }
+  }
+}
+
+/* the line of a track down a phone, and across from 960 px, a fifth at a time: from the first stop to the second is a
+   quarter of the line less 3 px across (the outer stops sit on the ends, the others in the middle of their column) */
+@keyframes track-steps-y {
+  0% {
+    clip-path: inset(0 0 100% 0);
+  }
+  20% {
+    clip-path: inset(0 0 80% 0);
+  }
+  40% {
+    clip-path: inset(0 0 60% 0);
+  }
+  60% {
+    clip-path: inset(0 0 40% 0);
+  }
+  80% {
+    clip-path: inset(0 0 20% 0);
+  }
+  100% {
+    clip-path: inset(0);
+  }
+}
+@keyframes track-steps-x {
+  0% {
+    clip-path: inset(0 100% 0 0);
+  }
+  20% {
+    clip-path: inset(0 calc(75% + 3px) 0 0);
+  }
+  40% {
+    clip-path: inset(0 calc(58.333% + 1px) 0 0);
+  }
+  60% {
+    clip-path: inset(0 calc(41.667% - 1px) 0 0);
+  }
+  80% {
+    clip-path: inset(0 calc(25% - 3px) 0 0);
+  }
+  100% {
+    clip-path: inset(0);
+  }
+}
+@keyframes sheet-draw-x {
+  from {
+    scale: 0 1;
+  }
+}
+@keyframes sheet-draw-y {
+  from {
+    scale: 1 0;
+  }
+}
+@keyframes sheet-pop {
+  from {
+    scale: 0;
+  }
+}
+@keyframes sheet-arrive {
+  from {
+    opacity: 0;
+    translate: -8px 0;
+  }
+}
+@keyframes sheet-fade {
+  from {
+    opacity: 0;
+  }
+}
+/* pathLength="1": from nothing to the whole line, from its start; -back from its end */
+@keyframes sheet-line {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+@keyframes sheet-line-back {
+  from {
+    stroke-dashoffset: -1;
   }
 }

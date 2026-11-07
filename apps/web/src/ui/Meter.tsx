@@ -49,7 +49,10 @@ export function Meter({ label, value, max, warnAt = 0.85, format = grouped, unit
         aria-valuetext={`${format(value)} of ${format(max)}${tail}${state === 'over' ? ', over the limit' : ''}`}
         className={cn('relative mt-2 overflow-hidden rounded-full bg-surface-3', size === 'sm' ? 'h-1.5' : 'h-2')}
       >
-        <div className={cn('h-full rounded-full transition-[width,background-color] duration-500 ease-out motion-reduce:transition-none', FILL[state])} style={{ width: `${Math.min(share, 1) * 100}%` }} />
+        <div
+          className={cn('h-full transition-[clip-path,background-color] duration-600 ease-out motion-reduce:transition-none', FILL[state])}
+          style={{ clipPath: `inset(0 ${100 - Math.min(share, 1) * 100}% 0 0 round 999px)` }}
+        />
         {/* where amber starts */}
         <span aria-hidden className="absolute inset-y-0 w-px bg-bg/70" style={{ left: `${warnAt * 100}%` }} />
       </div>

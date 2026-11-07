@@ -1,9 +1,13 @@
 /* What the primitives in src/ui cannot say with utilities: vendor pseudo-elements, highlighter colors, toasts. */
 @layer components {
+  /* what is still coming, hatched as on a drawing, the hatching drifting while it loads. In an 8 px tile at 45 degrees the
+     gradient line is 8 * sqrt(2) long, so 50% of it is one line and its gap and the tile repeats without a seam; moving
+     it 8 px brings it back where it was. With motion reduced it stands still. */
   .skeleton {
-    background: linear-gradient(90deg, var(--color-surface-2) 25%, var(--color-surface-3) 50%, var(--color-surface-2) 75%);
-    background-size: 200% 100%;
-    animation: var(--animate-shimmer);
+    background-color: var(--color-surface-2);
+    background-image: repeating-linear-gradient(45deg, var(--color-border) 0 1px, transparent 1px 50%);
+    background-size: 8px 8px;
+    animation: var(--animate-hatch);
   }
 
   /* Slider: the filled part of the track follows --fill, set from the value */

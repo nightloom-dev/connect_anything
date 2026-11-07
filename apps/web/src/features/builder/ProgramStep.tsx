@@ -212,7 +212,7 @@ export function Examples({ examples, onPick, loading, disabled = false }: Exampl
                   <span className="font-mono">{truncateMiddle(program)}</span>
                 </span>
               </span>
-              <ArrowRight className="size-4 shrink-0 text-faint transition-[color,transform] duration-120 group-enabled:group-hover:translate-x-0.5 group-enabled:group-hover:text-text" aria-hidden />
+              <ArrowRight className="size-4 shrink-0 text-faint transition-[color,translate] duration-120 group-enabled:group-hover:translate-x-0.5 group-enabled:group-hover:text-text" aria-hidden />
             </button>
           </li>
         ))}

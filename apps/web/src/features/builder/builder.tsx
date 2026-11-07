@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type Ref } from 'react';
 import { useExecution } from '@aurora-is-near/intents-connect/react';
 import { argFields, buildInstruction, flatten, listInstructions, type Idl, type SimResult } from '@connect-anything/core';
 import { ArrowRight, CircleCheck, ListPlus, Play, Plus, SquareMousePointer } from 'lucide-react';
@@ -610,6 +610,13 @@ export function Builder() {
   const list = useJson<TokenList>('/api/tokens');
   const [initial] = useState(start);
   const [screen, setScreen] = useState(initial.screen);
+  // the side a new step comes in from: 1 from the right (forward), -1 from the left (back), 0 for the one the page opens on
+  const [seen, setSeen] = useState(screen);
+  const [from, setFrom] = useState(0);
+  if (seen !== screen) {
+    setSeen(screen);
+    setFrom(screen > seen ? 1 : -1);
+  }
   const [idl, setIdl] = useState<Idl | undefined>(() => {
     const last = initial.imported?.steps.at(-1);
     return last ? initial.imported!.idls[last.program] : initial.saved?.idl;
@@ -704,51 +711,54 @@ export function Builder() {
           {problem}
         </Alert>
       )}
-      {screen === 1 && <ProgramScreen onLoad={onLoad} heading={heading} hint={idl || !initial.asked ? undefined : NOTHING_YET[initial.asked]} />}
-      {screen === 2 && (
-        <Boundary>
-          <InstructionScreen
-            idl={idl}
-            idls={idls}
-            list={list}
-            targets={targets}
-            token={token}
-            onTarget={setTarget}
-            steps={steps}
-            onSteps={onSteps}
-            lookupTables={lookupTables}
-            destination={destination}
-            onBack={() => setScreen(1)}
-            onNext={() => setScreen(3)}
-            heading={heading}
-          />
-        </Boundary>
-      )}
-      {screen === 3 && <SimulateScreen stored={stored} token={token} pending={pending} onBack={() => setScreen(idl ? 2 : 1)} onRun={() => setScreen(4)} heading={heading} />}
-      {screen === 4 && (
-        <section aria-labelledby="builder-step" className="flex flex-col gap-6">
-          <StepHeader ref={heading} number={4} title="Run" description="Pay from Base, Arbitrum or Ethereum with one signature. Intents Connect delivers the token on Solana and runs the recipe." />
-          {pending ?? (stored && recipe ? (
-            // the run card is as wide as on a shared link, and starts where the heading does
-            <div className="w-full max-w-run min-w-0">
-              <Execute exec={exec} recipe={recipe} stored={stored} />
-            </div>
-          ) : (
-            <EmptyState
-              level={2}
-              icon={<ListPlus />}
-              title="The recipe is empty."
-              action={
-                <Button variant="primary" onClick={() => setScreen(idl ? 2 : 1)}>
-                  Add an instruction
-                </Button>
-              }
-            >
-              Add an instruction, and it runs here.
-            </EmptyState>
-          ))}
-        </section>
-      )}
+      {/* a new screen for each step, which slides in from the side of the step it comes from */}
+      <div key={screen} className={cn(from !== 0 && 'animate-step-in motion-reduce:animate-none')} style={{ '--step-from': `${from * 0.75}rem` } as CSSProperties}>
+        {screen === 1 && <ProgramScreen onLoad={onLoad} heading={heading} hint={idl || !initial.asked ? undefined : NOTHING_YET[initial.asked]} />}
+        {screen === 2 && (
+          <Boundary>
+            <InstructionScreen
+              idl={idl}
+              idls={idls}
+              list={list}
+              targets={targets}
+              token={token}
+              onTarget={setTarget}
+              steps={steps}
+              onSteps={onSteps}
+              lookupTables={lookupTables}
+              destination={destination}
+              onBack={() => setScreen(1)}
+              onNext={() => setScreen(3)}
+              heading={heading}
+            />
+          </Boundary>
+        )}
+        {screen === 3 && <SimulateScreen stored={stored} token={token} pending={pending} onBack={() => setScreen(idl ? 2 : 1)} onRun={() => setScreen(4)} heading={heading} />}
+        {screen === 4 && (
+          <section aria-labelledby="builder-step" className="flex flex-col gap-6">
+            <StepHeader ref={heading} number={4} title="Run" description="Pay from Base, Arbitrum or Ethereum with one signature. Intents Connect delivers the token on Solana and runs the recipe." />
+            {pending ?? (stored && recipe ? (
+              // the run card is as wide as on a shared link, and starts where the heading does
+              <div className="w-full max-w-run min-w-0">
+                <Execute exec={exec} recipe={recipe} stored={stored} />
+              </div>
+            ) : (
+              <EmptyState
+                level={2}
+                icon={<ListPlus />}
+                title="The recipe is empty."
+                action={
+                  <Button variant="primary" onClick={() => setScreen(idl ? 2 : 1)}>
+                    Add an instruction
+                  </Button>
+                }
+              >
+                Add an instruction, and it runs here.
+              </EmptyState>
+            ))}
+          </section>
+        )}
+      </div>
     </div>
   );
 }

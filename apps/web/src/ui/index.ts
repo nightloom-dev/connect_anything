@@ -36,3 +36,4 @@ export { ChainIcon, TokenIcon } from './TokenIcon.tsx';
 export { TokenAmount } from './TokenAmount.tsx';
 export { Tooltip } from './Tooltip.tsx';
 export { TxLink } from './TxLink.tsx';
+export { useFlash } from './useFlash.ts';

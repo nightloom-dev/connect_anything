@@ -17,7 +17,7 @@ type PopoverProps = {
 };
 
 export const popoverPanel =
-  'z-60 rounded-xl border border-border-strong bg-surface shadow-popover outline-none transition duration-150 ease-out [--anchor-padding:8px] data-closed:-translate-y-1 data-closed:opacity-0 motion-reduce:transition-none';
+  'z-60 rounded-xl border border-border-strong bg-surface shadow-popover outline-none transition duration-200 ease-out [--anchor-padding:8px] data-closed:-translate-y-1 data-closed:opacity-0 motion-reduce:transition-none';
 
 /**
  * Click to open, Escape or a click outside to close, focus returns to the trigger. The panel sits in a portal next to its

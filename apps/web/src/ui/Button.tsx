@@ -6,7 +6,7 @@ export type ButtonVariant = 'primary' | 'secondary' | 'soft' | 'ghost' | 'danger
 export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg';
 
 const BASE =
-  'relative inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md border select-none transition-[background-color,border-color,color,box-shadow,transform] duration-120 ease-out enabled:active:translate-y-px disabled:cursor-not-allowed aria-busy:cursor-progress';
+  'relative inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md border select-none transition-[background-color,border-color,color,box-shadow,translate] duration-120 ease-out enabled:active:translate-y-px [&:is(a)]:active:translate-y-px disabled:cursor-not-allowed aria-busy:cursor-progress';
 
 const VARIANT: Record<ButtonVariant, string> = {
   primary:

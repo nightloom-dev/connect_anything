@@ -1,11 +1,11 @@
-import type { ReactNode } from 'react';
-import { ArrowRight, ArrowUpRight, Blocks, Check, LifeBuoy } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { ArrowRight, ArrowUpRight, Blocks, Check, LifeBuoy, RotateCcw } from 'lucide-react';
 import { Link } from 'wouter';
 import { usePageTitle } from '../app/title.ts';
 import { buttonClass } from '../ui/Button.tsx';
 import { cn } from '../ui/cn.ts';
 import { Tooltip } from '../ui/Tooltip.tsx';
-import { CALLOUTS, FlowScheme, FlowSchemeNarrow } from './landing/FlowScheme.tsx';
+import { CALLOUTS, FlowScheme, FlowSchemeNarrow, SOURCES, type Source } from './landing/FlowScheme.tsx';
 import { WatcherPlot } from './landing/WatcherPlot.tsx';
 import { CU_LIMIT, FIXTURES_URL, PROOF_RUNS, SOLSCAN, SOURCE_CHAINS, TX_BYTES_LIMIT, VERIFIED, WATCHER_URL, type ProofRun, type VerifiedProgram } from './landing/facts.ts';
 
@@ -60,7 +60,53 @@ function Sheet({ n, id, label, title, lead, children, className }: { n: number; 
   );
 }
 
+/**
+ * Under the drawing: the chain the run starts from, and Run again. Each plays the run once more, slower, so that the
+ * callouts can be followed; for reduced motion the drawing only changes its way.
+ */
+function RunControls({ source, onSource, onAgain }: { source: Source; onSource: (source: Source) => void; onAgain: () => void }) {
+  return (
+    <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-3 md:mt-3">
+      <div role="group" aria-labelledby="hero-source" className="flex items-center gap-2.5">
+        <span id="hero-source" className="label-caps text-muted">
+          Pay from
+        </span>
+        <span className="inline-flex rounded-md border border-border-strong bg-surface p-0.5">
+          {SOURCES.map(chain => (
+            <button
+              key={chain}
+              type="button"
+              aria-pressed={chain === source}
+              onClick={() => onSource(chain)}
+              className={cn(
+                'h-7 rounded-sm px-2.5 text-[0.8125rem] font-medium transition-colors duration-120',
+                chain === source ? 'bg-accent-solid text-white' : 'text-muted hover:bg-text/6 hover:text-text',
+              )}
+            >
+              {chain}
+            </button>
+          ))}
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={onAgain}
+        className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[0.8125rem] font-medium text-accent transition-colors duration-120 hover:bg-accent/8 hover:text-accent-hover motion-reduce:hidden"
+      >
+        <RotateCcw className="size-3.5" aria-hidden />
+        Run again
+      </button>
+    </div>
+  );
+}
+
 function Hero() {
+  const [source, setSource] = useState<Source>('Base');
+  // each run after the first is a new drawing, which plays from the start
+  const [runs, setRuns] = useState(0);
+  const key = `${source}-${runs}`;
+  const slow = runs > 0;
+  const again = () => setRuns(count => count + 1);
   return (
     <section aria-labelledby="hero-title" className="bg-grid">
       <div className={cn(WIDTH, 'flex flex-col pt-6 pb-10 sm:pt-10 md:pb-12')}>
@@ -83,10 +129,10 @@ function Hero() {
             Turn an Anchor program into a button anyone can press from Base, Arbitrum or Ethereum.
           </p>
         </div>
-        <figure className="hero-figure mt-10 flex min-w-0 flex-col md:mt-7 md:mb-6">
-          <FlowScheme className="hidden md:block" />
+        <figure className="hero-figure mt-10 flex min-w-0 flex-col md:mt-7 md:mb-6 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-x-6">
+          <FlowScheme key={key} source={source} slow={slow} className="hidden md:col-span-2 md:block" />
           <div className="grid items-center gap-x-10 gap-y-8 sm:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] md:hidden">
-            <FlowSchemeNarrow className="mx-auto max-w-[26rem]" />
+            <FlowSchemeNarrow key={key} source={source} slow={slow} className="mx-auto max-w-[26rem]" />
             {/* the callouts, as words: under the narrow drawing, and for screen readers beside the wide one */}
             <ol className="flex flex-col gap-4">
               {CALLOUTS.map((lines, index) => (
@@ -104,7 +150,18 @@ function Hero() {
               <li key={lines[0]}>{lines.join(' ')}</li>
             ))}
           </ol>
-          <figcaption className="label-caps mt-6 text-muted md:mt-3 md:text-right">Fig. 1 — one run, from Base to Kamino</figcaption>
+          <RunControls
+            source={source}
+            onSource={chain => {
+              setSource(chain);
+              again();
+            }}
+            onAgain={again}
+          />
+          {/* says the new way when the chain changes */}
+          <figcaption aria-live="polite" className="label-caps mt-4 text-muted md:mt-3 md:text-right">
+            Fig. 1 — one run, from {source} to Kamino
+          </figcaption>
         </figure>
       </div>
     </section>
@@ -120,7 +177,8 @@ function Track({ name, title, tally, note, children, accent = false }: { name: s
       <h3 id={name} className={cn('label-caps', accent ? 'text-accent' : 'text-muted')}>
         {title}
       </h3>
-      <ol aria-labelledby={name} className={cn('track relative flex flex-col gap-4 md:flex-row md:justify-between md:gap-0', accent && 'track-on')}>
+      {/* without Connect Anything the stops are six equal columns from 960 px, so that the drawing of the line can stop at each */}
+      <ol aria-labelledby={name} className={cn('track relative flex flex-col gap-4 md:gap-0', accent ? 'track-on md:flex-row md:justify-between' : 'md:grid md:grid-cols-6')}>
         {children}
       </ol>
       <p className="text-sm leading-snug text-muted">
@@ -187,7 +245,7 @@ function HowItWorks() {
             key={step}
             className="group relative flex min-w-0 flex-col rounded-xs has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-4 has-[a:focus-visible]:outline-accent md:pt-12"
           >
-            <span aria-hidden className="absolute top-2 -left-6 h-0.5 w-3 bg-accent md:top-5 md:left-0 md:h-5 md:w-0.5" />
+            <span aria-hidden className="step-tick absolute top-2 -left-6 h-0.5 w-3 bg-accent md:top-5 md:left-0 md:h-5 md:w-0.5" />
             <span className="label-caps text-muted transition-colors duration-120 group-hover:text-accent md:absolute md:top-0 md:left-0" aria-hidden>
               <span className="nums">0{index + 1}</span> · {step}
             </span>
@@ -199,7 +257,7 @@ function HowItWorks() {
             <p className="mt-1.5 grow text-sm text-muted">{text}</p>
             <p className="mt-3.5 flex items-center justify-between gap-2 border-t border-dashed border-border-strong pt-2.5 font-mono text-xs text-accent">
               <span>{out}</span>
-              <ArrowRight aria-hidden className="size-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-120 group-hover:translate-x-0.5 group-hover:opacity-100" />
+              <ArrowRight aria-hidden className="size-3.5 shrink-0 opacity-0 transition-[opacity,translate] duration-120 group-hover:translate-x-0.5 group-hover:opacity-100" />
             </p>
           </li>
         ))}
@@ -229,7 +287,7 @@ function Gauge({ value, max, unit }: { value: number; max: number; unit: string 
         {grouped.format(value)} <span className="text-xs text-muted">/ {grouped.format(max)} {unit}</span>
       </span>
       <span aria-hidden className="relative h-2 border border-text bg-[linear-gradient(90deg,var(--color-border-strong)_1px,transparent_1px)] bg-size-[25%_100%]">
-        <span className="absolute inset-y-0 left-0 bg-accent" style={{ width: `${(Math.min(value / max, 1) * 100).toFixed(1)}%` }} />
+        <span className="gauge-fill absolute inset-y-0 left-0 bg-accent" style={{ width: `${(Math.min(value / max, 1) * 100).toFixed(1)}%` }} />
       </span>
     </div>
   );

@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { cn } from '../../ui/cn.ts';
 import { siteAddress } from './site.ts';
 
@@ -53,6 +54,17 @@ type Frame = {
 
 const path = ({ x, y }: Frame) => LTV.map(([minute, ltv], index) => `${index ? 'L' : 'M'}${x(minute).toFixed(1)} ${y(ltv).toFixed(1)}`).join('');
 
+/**
+ * How far along the line a minute is, as a share of its length: the plot is drawn as it scrolls in (landing.css), and
+ * the mark of that minute comes when the line gets to it.
+ */
+const along = ({ x, y }: Frame, minute: number): CSSProperties => {
+  const points = LTV.map(([m, ltv]) => [x(m), y(ltv)]);
+  const steps = points.map(([px, py], index) => (index ? Math.hypot(px - points[index - 1][0], py - points[index - 1][1]) : 0));
+  const upTo = steps.slice(0, LTV.findIndex(([m]) => m === minute) + 1).reduce((sum, step) => sum + step, 0);
+  return { '--at': (upTo / steps.reduce((sum, step) => sum + step, 0)).toFixed(3) } as CSSProperties;
+};
+
 /** Across, 1000 wide, from 960 px: every label. */
 function PlotWide() {
   const f: Frame = { box: '0 120 1000 300', x: m => 60 + 22 * m, y: ltv => 390 - ((ltv - 40) * 16) / 3, className: 'hidden md:block' };
@@ -64,7 +76,7 @@ function PlotWide() {
       <path className="lt-liq" d={`M60 ${y(LIQUIDATED_AT)}H940`} />
       <path className="lt-watch" d={`M60 ${y(LINE)}H940`} />
       <path className="lt-area" d={`${line}V${y(40)}H60Z`} />
-      <path className="lt-line" d={line} />
+      <path className="lt-line" d={line} pathLength={1} />
       <path className="lt-axis" d={`M60 150V${y(40)}H940`} />
       {[40, 50, 60, 70, 80].map(ltv => (
         <text key={ltv} x="50" y={y(ltv) + 4} textAnchor="end">
@@ -82,12 +94,12 @@ function PlotWide() {
           12:{String(minute).padStart(2, '0')}
         </text>
       ))}
-      <circle className="lt-hollow" cx={x(WATCHED)} cy={y(at(WATCHED))} r="5" />
+      <circle className="lt-hollow" cx={x(WATCHED)} cy={y(at(WATCHED))} r="5" style={along(f, WATCHED)} />
       <text className="lt-ink" x={x(WATCHED)} y={y(at(WATCHED)) - 15} textAnchor="middle">
         /watch · {pct(at(WATCHED))}
       </text>
-      <path className="lt-leader" d={`M${x(ALERTED)} 120V${y(at(ALERTED)) - 8}`} />
-      <circle className="lt-alert" cx={x(ALERTED)} cy={y(at(ALERTED))} r="6" />
+      <path className="lt-leader" d={`M${x(ALERTED)} 120V${y(at(ALERTED)) - 8}`} pathLength={1} style={along(f, ALERTED)} />
+      <circle className="lt-alert" cx={x(ALERTED)} cy={y(at(ALERTED))} r="6" style={along(f, ALERTED)} />
       <text className="lt-ink" x={x(30) - 12} y={y(56)} textAnchor="end">
         repay lands ≈3 min after the tap
       </text>
@@ -109,7 +121,7 @@ function PlotNarrow() {
       <path className="lt-liq" d={`M44 ${y(LIQUIDATED_AT)}H384`} />
       <path className="lt-watch" d={`M44 ${y(LINE)}H384`} />
       <path className="lt-area" d={`${line}V${y(40)}H44Z`} />
-      <path className="lt-line" d={line} />
+      <path className="lt-line" d={line} pathLength={1} />
       <path className="lt-axis" d={`M44 20V${y(40)}H384`} />
       {[40, 50, 60, 70, 80].map(ltv => (
         <text key={ltv} x="36" y={y(ltv) + 4} textAnchor="end">
@@ -127,9 +139,9 @@ function PlotNarrow() {
           12:{String(minute).padStart(2, '0')}
         </text>
       ))}
-      <circle className="lt-hollow" cx={x(WATCHED)} cy={y(at(WATCHED))} r="4" />
-      <path className="lt-leader" d={`M${x(ALERTED)} 0V${y(at(ALERTED)) - 7}`} />
-      <circle className="lt-alert" cx={x(ALERTED)} cy={y(at(ALERTED))} r="5" />
+      <circle className="lt-hollow" cx={x(WATCHED)} cy={y(at(WATCHED))} r="4" style={along(f, WATCHED)} />
+      <path className="lt-leader" d={`M${x(ALERTED)} 0V${y(at(ALERTED)) - 7}`} pathLength={1} style={along(f, ALERTED)} />
+      <circle className="lt-alert" cx={x(ALERTED)} cy={y(at(ALERTED))} r="5" style={along(f, ALERTED)} />
       <text className="lt-ink" x={x(30) - 8} y={y(56)} textAnchor="end">
         repay lands, ≈3 min
       </text>

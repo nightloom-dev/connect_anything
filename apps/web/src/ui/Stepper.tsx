@@ -66,7 +66,17 @@ export function Stepper({ steps, onSelect, label = 'Steps', className }: Stepper
           return (
             <li key={step.id} className={cn('flex min-w-0 items-center', !last && 'flex-1')}>
               {step.state === 'locked' && step.reason ? <Tooltip content={step.reason}>{button}</Tooltip> : button}
-              {!last && <span aria-hidden className={cn('mx-2 h-px min-w-4 flex-1 sm:mx-3', step.state === 'done' ? 'bg-accent/50' : 'bg-border-strong')} />}
+              {!last && (
+                // the line to the next step fills from the left once this one is done, and empties if it is not any more
+                <span aria-hidden className="relative mx-2 h-px min-w-4 flex-1 bg-border-strong sm:mx-3">
+                  <span
+                    className={cn(
+                      'absolute inset-0 origin-left bg-accent transition-transform duration-600 ease-run motion-reduce:transition-none',
+                      step.state === 'done' ? 'scale-x-100' : 'scale-x-0',
+                    )}
+                  />
+                </span>
+              )}
             </li>
           );
         })}

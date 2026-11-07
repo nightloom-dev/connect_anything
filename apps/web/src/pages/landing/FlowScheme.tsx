@@ -1,10 +1,15 @@
-import { useId } from 'react';
+import { useId, type CSSProperties } from 'react';
 import { cn } from '../../ui/cn.ts';
 
 // The hero drawing of the landing page: the route of one run, from the EVM chain you sign on, through Intents Connect,
 // to the program on Solana. Two drawings of the same route: across, with three numbered callouts, from 960 px; top to
 // bottom on a narrower screen, where the callouts are a list under it (Landing.tsx). Its styles are in
-// styles/landing.css. Everything is drawn at the first paint; only the run itself plays, once, and is over in 1.2 s.
+// styles/landing.css.
+//
+// Everything is drawn at the first paint; only the run itself plays. The payment rides the head of the line as it is
+// drawn, Intents Connect rings when it arrives, the program's instructions get their checks, and each callout lights as
+// the run passes what it names. At the first paint it is over in 1.2 s. Run again plays it slower (`slow`), and a run
+// from another chain (`source`) takes that chain's way to the junction.
 
 export const SCHEME_TITLE =
   'One payment from Base, Arbitrum or Ethereum goes through Intents Connect to a program on Solana: here the four instructions of a Kamino repay.';
@@ -15,23 +20,81 @@ export const CALLOUTS = [
   ['Any Anchor program runs on Solana.', 'Here, a Kamino repay in 4 instructions.'],
 ] as const;
 
-const CHAINS = ['Base', 'Arbitrum', 'Ethereum'];
+export const SOURCES = ['Base', 'Arbitrum', 'Ethereum'] as const;
+export type Source = (typeof SOURCES)[number];
+
 const INSTRUCTIONS = ['refresh_reserve ×2', 'refresh_obligation', 'repay_obligation_liquidity_v2'];
 // 115,948 of the 200,000 compute units Connect allows for one transaction
 const CU_SHARE = 115_948 / 200_000;
-/** When each instruction gets its check, in seconds. */
-const CHECKED_AT = [0.7, 0.8, 0.9];
+/** How much slower Run again plays, so that the eye can follow the callouts. */
+const SLOW = 1.8;
 
-const delay = (seconds: number) => ({ animationDelay: `${seconds}s` });
+/** The run, in seconds from the first paint: when each part starts and how long it takes. The last ends at 1.18 s. */
+const RUN = {
+  /** The chain's dot, and callout 1. */
+  sign: [0, 0.45],
+  /** The line from the chain to Intents Connect, and the payment at its head. */
+  toHub: [0, 0.42],
+  /** Intents Connect rings as the payment arrives. */
+  hub: [0.4, 0.6],
+  /** Callout 2. */
+  bridge: [0.4, 0.45],
+  /** The line on to the program. */
+  toProgram: [0.48, 0.3],
+  /** One check per instruction. */
+  checks: [
+    [0.78, 0.22],
+    [0.86, 0.22],
+    [0.94, 0.22],
+  ],
+  /** The compute units the instructions took. */
+  units: [0.8, 0.36],
+  /** Callout 3. */
+  program: [0.73, 0.45],
+} satisfies Record<string, [number, number] | [number, number][]>;
+
+/** The animation's start and length as an inline style: `--flow-k` on the drawing stretches both. */
+const play = ([start, length]: readonly [number, number]): CSSProperties => ({
+  animationDelay: `calc(${start}s * var(--flow-k, 1))`,
+  animationDuration: `calc(${length}s * var(--flow-k, 1))`,
+});
+
+type Point = readonly [number, number];
+
+/** A path of straight lines through the points, and its length, for a payment the same size on any of them. */
+function route(points: Point[]) {
+  const kept = points.filter((point, index) => index === 0 || point[0] !== points[index - 1][0] || point[1] !== points[index - 1][1]);
+  const length = kept.slice(1).reduce((sum, [x, y], index) => sum + Math.hypot(x - kept[index][0], y - kept[index][1]), 0);
+  return { d: `M${kept.map(point => point.join(' ')).join('L')}`, length };
+}
+
+/** The payment: a short bead at the head of the line as it is drawn, gone once it arrives. */
+function Packet({ d, length, at }: { d: string; length: number; at: readonly [number, number] }) {
+  const bead = Math.min(11 / length, 0.4).toFixed(4);
+  return <path className="fs-packet flow-packet" pathLength={1} d={d} style={{ ...play(at), '--bead': bead } as CSSProperties} />;
+}
+
+/** A line of the run, drawn as the payment goes, with the payment on it. */
+function Run({ points, at, still }: { points: Point[]; at: readonly [number, number]; still?: boolean }) {
+  const { d, length } = route(points);
+  return (
+    <>
+      <path className={cn('fs-run', !still && 'flow-draw')} style={still ? undefined : play(at)} pathLength={1} d={d} />
+      {!still && <Packet d={d} length={length} at={at} />}
+    </>
+  );
+}
 
 /** A check mark whose short arm starts at (x, y). */
-const Check = ({ x, y, at, still }: { x: number; y: number; at: number; still?: boolean }) => (
-  <path className={cn('fs-ok', !still && 'flow-pop')} style={delay(at)} d={`M${x} ${y}l4 4 8-8`} />
+const Check = ({ x, y, at, still }: { x: number; y: number; at: readonly [number, number]; still?: boolean }) => (
+  <path className={cn('fs-ok', !still && 'flow-pop')} style={still ? undefined : play(at)} d={`M${x} ${y}l4 4 8-8`} />
 );
 
 /** The route across, 1000 × 300: Base, Arbitrum and Ethereum, Intents Connect, the program. */
-function RouteAcross({ still }: { still?: boolean }) {
+function RouteAcross({ source, still }: { source: Source; still?: boolean }) {
+  // the middle of each chain's box, where its way to the junction starts
   const rows = [52, 127, 202];
+  const from = SOURCES.indexOf(source);
   return (
     <>
       <text className="fs-col" x="20" y="18">
@@ -48,20 +111,20 @@ function RouteAcross({ still }: { still?: boolean }) {
       {rows.map((y, index) => (
         <g key={y}>
           <rect className="fs-node" x="20" y={y} width="180" height="46" />
-          <circle className={index === 0 ? 'fs-dot-on' : 'fs-dot'} cx="44" cy={y + 23} r="6" />
+          <circle className={cn(index === from ? 'fs-dot-on' : 'fs-dot', index === from && !still && 'flow-pop')} style={index === from && !still ? play(RUN.sign) : undefined} cx="44" cy={y + 23} r="6" />
           <text className="fs-chain" x="60" y={y + 28}>
-            {CHAINS[index]}
+            {SOURCES[index]}
           </text>
         </g>
       ))}
 
-      {/* the bus every chain can take, and over it the run from Base */}
-      <path className="fs-bus" d="M200 150H290M200 225H290V150" />
-      <path className={cn('fs-run', !still && 'flow-draw')} pathLength={1} d="M200 75H290V150H400" />
+      {/* the ways every other chain could take, dashed, and over them the run from the one it takes */}
+      <path className="fs-bus" d={rows.filter((_, index) => index !== from).map(y => `M200 ${y + 23}H290V150`).join('')} />
+      <Run points={[[200, rows[from] + 23], [290, rows[from] + 23], [290, 150], [400, 150]]} at={RUN.toHub} still={still} />
       <circle className="fs-junction" cx="290" cy="150" r="3.5" />
 
       <rect className="fs-hub" x="400" y="118" width="200" height="64" />
-      {!still && <rect className="fs-ping flow-ping" style={delay(0.42)} x="400" y="118" width="200" height="64" />}
+      {!still && <rect className="fs-ping flow-ping" style={play(RUN.hub)} x="400" y="118" width="200" height="64" />}
       <text className="fs-hub-t" x="500" y="146" textAnchor="middle">
         Intents Connect
       </text>
@@ -69,7 +132,7 @@ function RouteAcross({ still }: { still?: boolean }) {
         bridge + MPC signature
       </text>
 
-      <path className={cn('fs-run', !still && 'flow-draw')} style={delay(0.45)} pathLength={1} d="M600 150H696" />
+      <Run points={[[600, 150], [696, 150]]} at={RUN.toProgram} still={still} />
       <path className="fs-arrow" d="M687 144L698 150L687 156" />
 
       {/* dimension lines: the time after the deposit, and the one signature it takes */}
@@ -95,7 +158,7 @@ function RouteAcross({ still }: { still?: boolean }) {
           <text x="718" y={120 + index * 24}>
             {name}
           </text>
-          <Check x={944} y={115 + index * 24} at={CHECKED_AT[index]} still={still} />
+          <Check x={944} y={115 + index * 24} at={RUN.checks[index]} still={still} />
         </g>
       ))}
       <path className="fs-hair" d="M700 186H980" />
@@ -106,27 +169,45 @@ function RouteAcross({ still }: { still?: boolean }) {
         934 / 1,232 B
       </text>
       <rect className="fs-bar" x="718" y="219" width="244" height="8" />
-      <rect className={cn('fs-barfill', !still && 'flow-grow')} style={delay(0.72)} x="718.5" y="219.5" width={(243 * CU_SHARE).toFixed(1)} height="7" />
+      <rect className={cn('fs-barfill', !still && 'flow-grow')} style={still ? undefined : play(RUN.units)} x="718.5" y="219.5" width={(243 * CU_SHARE).toFixed(1)} height="7" />
     </>
   );
 }
 
-/** A numbered circle, as the callouts and the list under the narrow drawing have. */
-const Num = ({ x, y, n, r = 11 }: { x: number; y: number; n: number; r?: number }) => (
+/** A numbered circle, as the callouts and the list under the narrow drawing have. It lights while the run is at it. */
+const Num = ({ x, y, n, r = 11, at, still }: { x: number; y: number; n: number; r?: number; at: readonly [number, number]; still?: boolean }) => (
   <>
-    <circle className="fs-num" cx={x} cy={y} r={r} />
+    <circle className={cn('fs-num', !still && 'flow-light')} style={still ? undefined : play(at)} cx={x} cy={y} r={r} />
     <text className="fs-num-t" x={x} y={y + 4} textAnchor="middle">
       {n}
     </text>
   </>
 );
 
+/** A callout's leader and the dot it starts from, lit with its number. */
+const Leader = ({ d, x, y, at, still }: { d: string; x: number; y: number; at: readonly [number, number]; still?: boolean }) => (
+  <>
+    <path className={cn('fs-leader', !still && 'flow-light-line')} style={still ? undefined : play(at)} d={d} />
+    <circle className={cn('fs-anchor', !still && 'flow-light')} style={still ? undefined : play(at)} cx={x} cy={y} r="3.5" />
+  </>
+);
+
+type SchemeProps = {
+  /** The chain the run starts from. */
+  source?: Source;
+  /** Run again: the same run, slower. */
+  slow?: boolean;
+  /** No run at all, for a picture. */
+  still?: boolean;
+  className?: string;
+};
+
 /**
  * The route across with its three callouts, 1000 × 440. `callouts={false}` draws the route alone, 1000 × 300, for the
- * link preview (pages/OgImage.tsx). `still` leaves out the run, for a picture. Its display is the caller's: block, or
- * hidden under a breakpoint.
+ * link preview (pages/OgImage.tsx). Its display is the caller's: block, or hidden under a breakpoint. A new key plays the
+ * run again.
  */
-export function FlowScheme({ still = false, callouts = true, className }: { still?: boolean; callouts?: boolean; className?: string }) {
+export function FlowScheme({ source = 'Base', slow = false, still = false, callouts = true, className }: SchemeProps & { callouts?: boolean }) {
   const id = useId();
   return (
     <svg
@@ -134,16 +215,16 @@ export function FlowScheme({ still = false, callouts = true, className }: { stil
       role="img"
       aria-labelledby={id}
       className={cn('flow h-auto w-full overflow-visible', still && 'flow-still', className)}
+      style={slow ? ({ '--flow-k': SLOW } as CSSProperties) : undefined}
     >
       <title id={id}>{SCHEME_TITLE}</title>
       {callouts ? (
         <>
           <g transform="translate(0 70)">
-            <RouteAcross still={still} />
+            <RouteAcross source={source} still={still} />
           </g>
-          <path className="fs-leader" d="M150 122V66H470" />
-          <circle className="fs-anchor" cx="150" cy="122" r="3.5" />
-          <Num x={162} y={30} n={1} />
+          <Leader d="M150 122V66H470" x={150} y={122} at={RUN.sign} still={still} />
+          <Num x={162} y={30} n={1} at={RUN.sign} still={still} />
           <text className="fs-call" x="182" y="35">
             {CALLOUTS[0][0]}
           </text>
@@ -151,9 +232,8 @@ export function FlowScheme({ still = false, callouts = true, className }: { stil
             {CALLOUTS[0][1]}
           </text>
 
-          <path className="fs-leader" d="M520 252V372H880" />
-          <circle className="fs-anchor" cx="520" cy="252" r="3.5" />
-          <Num x={546} y={400} n={2} />
+          <Leader d="M520 252V372H880" x={520} y={252} at={RUN.bridge} still={still} />
+          <Num x={546} y={400} n={2} at={RUN.bridge} still={still} />
           <text className="fs-call" x="566" y="405">
             {CALLOUTS[1][0]}
           </text>
@@ -161,9 +241,8 @@ export function FlowScheme({ still = false, callouts = true, className }: { stil
             {CALLOUTS[1][1]}
           </text>
 
-          <path className="fs-leader" d="M900 122V66H580" />
-          <circle className="fs-anchor" cx="900" cy="122" r="3.5" />
-          <Num x={592} y={30} n={3} />
+          <Leader d="M900 122V66H580" x={900} y={122} at={RUN.program} still={still} />
+          <Num x={592} y={30} n={3} at={RUN.program} still={still} />
           <text className="fs-call" x="612" y="35">
             {CALLOUTS[2][0]}
           </text>
@@ -172,44 +251,52 @@ export function FlowScheme({ still = false, callouts = true, className }: { stil
           </text>
         </>
       ) : (
-        <RouteAcross still={still} />
+        <RouteAcross source={source} still={still} />
       )}
     </svg>
   );
 }
 
 /** The same route top to bottom, 420 × 312, for a screen under 960 px: the numbers point to the list under it. */
-export function FlowSchemeNarrow({ className }: { className?: string }) {
+export function FlowSchemeNarrow({ source = 'Base', slow = false, className }: Omit<SchemeProps, 'still'>) {
   const id = useId();
+  // the left edge of each chain's box; its way down starts from the middle, 60 further
   const columns = [10, 150, 290];
+  const from = SOURCES.indexOf(source);
   return (
-    <svg viewBox="0 0 420 312" role="img" aria-labelledby={id} className={cn('flow flow-narrow block h-auto w-full overflow-visible', className)}>
+    <svg
+      viewBox="0 0 420 312"
+      role="img"
+      aria-labelledby={id}
+      className={cn('flow flow-narrow block h-auto w-full overflow-visible', className)}
+      style={slow ? ({ '--flow-k': SLOW } as CSSProperties) : undefined}
+    >
       <title id={id}>{SCHEME_TITLE}</title>
-      <path className="fs-bus" d="M210 46V73M350 46V73H210" />
-      <path className="fs-run flow-draw" pathLength={1} d="M70 46V73H210V100" />
+      <path className="fs-bus" d={columns.filter((_, index) => index !== from).map(x => `M${x + 60} 46V73H210`).join('')} />
+      <Run points={[[columns[from] + 60, 46], [columns[from] + 60, 73], [210, 73], [210, 100]]} at={RUN.toHub} />
       <circle className="fs-junction" cx="210" cy="73" r="3" />
       {columns.map((x, index) => (
         <g key={x}>
           <rect className="fs-node" x={x} y="10" width="120" height="36" />
-          <circle className={index === 0 ? 'fs-dot-on' : 'fs-dot'} cx={x + 20} cy="28" r="6" />
+          <circle className={cn(index === from ? 'fs-dot-on flow-pop' : 'fs-dot')} style={index === from ? play(RUN.sign) : undefined} cx={x + 20} cy="28" r="6" />
           <text className="fs-chain" x={x + 34} y="33">
-            {CHAINS[index]}
+            {SOURCES[index]}
           </text>
         </g>
       ))}
-      <Num x={34} y={73} n={1} r={10} />
+      <Num x={34} y={73} n={1} r={10} at={RUN.sign} />
 
       <rect className="fs-hub" x="105" y="100" width="210" height="50" />
-      <rect className="fs-ping flow-ping" style={delay(0.42)} x="105" y="100" width="210" height="50" />
+      <rect className="fs-ping flow-ping" style={play(RUN.hub)} x="105" y="100" width="210" height="50" />
       <text className="fs-hub-t" x="210" y="122" textAnchor="middle">
         Intents Connect
       </text>
       <text className="fs-sub" x="210" y="140" textAnchor="middle">
         bridge + MPC signature
       </text>
-      <Num x={80} y={125} n={2} r={10} />
+      <Num x={80} y={125} n={2} r={10} at={RUN.bridge} />
 
-      <path className="fs-run flow-draw" style={delay(0.45)} pathLength={1} d="M210 150V189" />
+      <Run points={[[210, 150], [210, 189]]} at={RUN.toProgram} />
       <path className="fs-arrow" d="M204 182L210 192L216 182" />
       <path className="fs-dim" d="M244 155V187M239 155H249M239 187H249" />
       <text className="fs-dim-t" x="256" y="175">
@@ -229,10 +316,10 @@ export function FlowSchemeNarrow({ className }: { className?: string }) {
           <text className="fs-ix" x="68" y={252 + index * 20}>
             {name}
           </text>
-          <Check x={343} y={247 + index * 20} at={CHECKED_AT[index]} />
+          <Check x={343} y={247 + index * 20} at={RUN.checks[index]} />
         </g>
       ))}
-      <Num x={28} y={248} n={3} r={10} />
+      <Num x={28} y={248} n={3} r={10} at={RUN.program} />
     </svg>
   );
 }
