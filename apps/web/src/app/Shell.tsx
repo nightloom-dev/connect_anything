@@ -17,13 +17,15 @@ type ShellProps = {
   pageSlot?: (element: HTMLElement | null) => void;
   /** The page will fill more than a screen: the footer starts below the first one (WalletPage.fills). */
   fills?: boolean;
+  /** The page lays out its own width, edge to edge: the landing page, whose sheets span the window. */
+  bleed?: boolean;
 };
 
 /**
  * Header, the page, footer and toasts. A page that throws is caught here, and the next route clears it. It never
  * remounts: the wallet providers render beside it, into the two slots (see Root).
  */
-export function Shell({ children, wallet, walletSlot, pageSlot, fills }: ShellProps) {
+export function Shell({ children, wallet, walletSlot, pageSlot, fills, bleed }: ShellProps) {
   const [location] = useLocation();
   // a new page starts at its top, as it would after a full load (braces: scrollTo returns a promise in newer browsers)
   useEffect(() => {
@@ -37,14 +39,17 @@ export function Shell({ children, wallet, walletSlot, pageSlot, fills }: ShellPr
       >
         Skip to content
       </a>
-      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[34rem] bg-[radial-gradient(52rem_22rem_at_50%_-6rem,color-mix(in_oklab,var(--color-accent)_16%,transparent),transparent_70%)]" />
       <Header wallet={wallet} walletSlot={walletSlot} />
       <main
         id="main"
         tabIndex={-1}
         // 3.5625rem: the header, h-14 and its 1 px border; lvh, so that the footer stays off the screen when a phone's
         // address bar hides
-        className={cn('mx-auto w-full max-w-content flex-1 px-4 pt-8 pb-16 outline-none sm:px-6 sm:pt-10', fills && 'min-h-[calc(100lvh-3.5625rem)]')}
+        className={cn(
+          'w-full flex-1 outline-none',
+          !bleed && 'mx-auto max-w-content px-4 pt-8 pb-16 sm:px-6 sm:pt-10',
+          fills && 'min-h-[calc(100lvh-3.5625rem)]',
+        )}
       >
         <ErrorBoundary resetKey={location}>{children}</ErrorBoundary>
         <div ref={pageSlot} className="contents" />

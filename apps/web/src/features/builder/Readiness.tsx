@@ -53,7 +53,7 @@ export function Readiness({ items, ready }: ReadinessProps) {
                     className="group flex min-w-0 items-start gap-2.5 px-3 py-2 text-sm transition-colors duration-120 hover:bg-warning/8 focus-visible:outline-offset-[-2px]"
                   >
                     <Line item={item} />
-                    <ArrowRight className="mt-0.5 size-3.5 shrink-0 text-faint transition-[color,transform] duration-120 group-hover:translate-x-0.5 group-hover:text-text motion-reduce:transition-none" aria-hidden />
+                    <ArrowRight className="mt-0.5 size-3.5 shrink-0 text-faint transition-[color,translate] duration-120 group-hover:translate-x-0.5 group-hover:text-text motion-reduce:transition-none" aria-hidden />
                   </a>
                 ) : (
                   <div className="flex min-w-0 items-start gap-2.5 px-3 py-2 text-sm">

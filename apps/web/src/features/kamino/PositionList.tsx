@@ -32,7 +32,7 @@ export function PositionList({ positions, chosen, disabled, onChoose }: Position
                 onClick={() => onChoose(item.address)}
                 className={cn(
                   'flex w-full min-w-0 flex-col gap-2.5 rounded-lg border px-4 py-3 text-left transition-[background-color,border-color,box-shadow] duration-120 disabled:cursor-not-allowed disabled:opacity-60',
-                  pressed ? 'border-accent/70 bg-accent/8 shadow-[inset_0_0_0_1px_var(--color-accent-line)]' : 'border-border bg-surface enabled:hover:border-border-strong enabled:hover:bg-surface-2',
+                  pressed ? 'border-accent/70 bg-accent-wash shadow-[inset_0_0_0_1px_var(--color-accent-line)]' : 'border-border bg-surface enabled:hover:border-border-strong enabled:hover:bg-surface-2',
                 )}
               >
                 <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">

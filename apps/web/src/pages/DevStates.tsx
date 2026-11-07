@@ -21,7 +21,7 @@ export default function DevStates() {
         <ul className="sticky top-20 flex flex-col gap-0.5 text-sm">
           {shown.map(section => (
             <li key={section.id}>
-              <a href={`#${section.id}`} className="block truncate rounded-md px-2.5 py-1.5 text-muted hover:bg-white/5 hover:text-text">
+              <a href={`#${section.id}`} className="block truncate rounded-md px-2.5 py-1.5 text-muted hover:bg-text/5 hover:text-text">
                 {section.title}
               </a>
             </li>

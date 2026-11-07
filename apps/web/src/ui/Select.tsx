@@ -45,12 +45,12 @@ export const fieldButton = ({ size = 'md', invalid = false, disabled = false }: 
     disabled
       ? 'cursor-not-allowed border-border-strong bg-surface text-muted'
       : invalid
-        ? 'border-danger/70 bg-surface-2 data-focus:border-danger data-focus:shadow-[0_0_0_4px_rgb(255_92_108/0.18)] data-open:border-danger'
-        : 'border-border-control bg-surface-2 [&[data-hover]:not([data-focus],[data-open])]:border-border-control-hover data-focus:border-accent data-focus:shadow-glow data-open:border-accent',
+        ? 'border-danger/70 bg-surface data-focus:border-danger data-focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-danger)_16%,transparent)] data-open:border-danger'
+        : 'border-border-control bg-surface [&[data-hover]:not([data-focus],[data-open])]:border-border-control-hover data-focus:border-accent data-focus:shadow-glow data-open:border-accent',
   );
 
 export const optionRow =
-  'group/option flex cursor-default items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-text select-none data-disabled:cursor-not-allowed data-disabled:opacity-45 data-focus:bg-white/6';
+  'group/option flex cursor-default items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-text select-none data-disabled:cursor-not-allowed data-disabled:opacity-45 data-focus:bg-accent/8';
 
 /** A list to pick one from, with the keyboard of a native select: arrows, Home, End, typing a letter, Escape. */
 export function Select<T>({ value, onChange, options, label, hint, error, placeholder = 'Choose…', size = 'md', disabled, by, name, className, wide, ...rest }: SelectProps<T>) {

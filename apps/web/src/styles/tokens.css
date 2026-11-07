@@ -1,12 +1,16 @@
 /*
- * Design tokens: one dark theme. Tailwind reads them through @theme (bg-surface, text-muted, border-border,
- * rounded-lg…), plain CSS through var(--color-surface) and the like. `static` keeps every variable on :root
- * even when no utility uses it, so inline styles can count on them.
+ * Design tokens: one light theme, "Blueprint". Tailwind reads them through @theme (bg-surface, text-muted,
+ * border-border, rounded-lg…), plain CSS through var(--color-surface) and the like. `static` keeps every variable on
+ * :root even when no utility uses it, so inline styles can count on them.
  *
- * The scales are ours, not Tailwind's defaults: text-lg is 20px, rounded-lg is 12px, md starts at 960px.
- * Contrast, measured on surface (#12151c): text 15.4:1, muted 5.9:1, accent 5.2:1, white on accent-solid
- * 4.9:1. faint is 3.1:1, so it is for decoration and disabled things only, never for text that has to be read.
- * border-control is 3.4:1 on surface and 3.2:1 on surface-2, the fill of a field: the edge is what shows where a
+ * The look is a technical drawing: white sheets on a paper ground, hairlines instead of shadows, one ink and one
+ * cobalt, corners of 2 to 4 px, IBM Plex Sans for words and IBM Plex Mono for figures, addresses and labels.
+ *
+ * The scales are ours, not Tailwind's defaults: text-lg is 20px, rounded-lg is 4px, md starts at 960px.
+ * Contrast, measured on surface (#fff): text 17.5:1, muted 6.4:1, accent 7.8:1, white on accent-solid 7.8:1,
+ * success 6.5:1, warning 6.3:1, danger 6.4:1, info 6.7:1, and each status keeps 5.2:1 on its own 12% tint.
+ * placeholder is 4.6:1. faint is 3.2:1, so it is for decoration and disabled things only, never for text that has to
+ * be read. border-control is 3.5:1 on surface, 3.2:1 on surface-2 and 3.3:1 on bg: the edge is what shows where a
  * field, a checkbox or a switch is, so it keeps 3:1 (WCAG 1.4.11). border and border-strong only part areas.
  */
 @theme static {
@@ -14,56 +18,58 @@
   --color-white: #fff;
   --color-black: #000;
 
-  /* surfaces, from the page down to a hovered control */
-  --color-bg: #0b0d12;
-  --color-surface: #12151c;
-  --color-surface-2: #181c25;
-  --color-surface-3: #1f2430;
-  --color-border: #242a36;
-  --color-border-strong: #323a4a;
+  /* the paper the sheets lie on, the sheets, and the fills of what sits on a sheet */
+  --color-bg: #f6f8fb;
+  --color-surface: #ffffff;
+  --color-surface-2: #f2f5f9;
+  --color-surface-3: #e6ebf2;
+  --color-border: #d3dbe6;
+  --color-border-strong: #b1bdcd;
   /* the edge of a field, a checkbox or a switch: 3:1 against its fill and the surfaces around it */
-  --color-border-control: #626b7f;
-  --color-border-control-hover: #7b8499;
+  --color-border-control: #7a8aa1;
+  --color-border-control-hover: #5e6e86;
   /* the edge of a button under the pointer, which its label already identifies */
-  --color-border-hover: #3b4457;
+  --color-border-hover: #8e9db3;
+  /* the drawing grid of the landing page: a line every 20 px and a stronger one every 100 */
+  --color-grid: #e3e9f1;
+  --color-grid-fine: #edf1f6;
 
-  --color-text: #e8ecf3;
-  --color-muted: #8a93a6;
-  --color-faint: #5c6578;
-  --color-placeholder: #6b7488;
+  --color-text: #0e1a2b;
+  --color-muted: #536073;
+  --color-faint: #8592a6;
+  --color-placeholder: #6a7689;
 
-  /* accent for links, focus and highlights; accent-solid carries white text at AA */
-  --color-accent: #6e7bff;
-  --color-accent-hover: #8590ff;
-  --color-accent-solid: #5560ee;
-  --color-accent-solid-hover: #5965f0;
-  --color-accent-solid-active: #4c56da;
-  /* the identity gradient: logo, hero, the bridge line. Not for buttons. */
-  --color-brand-from: #6e7bff;
-  --color-brand-to: #3dd6d0;
+  /* cobalt: links, focus, the one color of the drawings; accent-solid carries white text at AAA */
+  --color-accent: #1f3fd1;
+  --color-accent-hover: #1832a8;
+  --color-accent-solid: #1f3fd1;
+  --color-accent-solid-hover: #1a37bb;
+  --color-accent-solid-active: #162fa1;
 
-  --color-success: #3bd67f;
-  --color-warning: #f5b544;
-  --color-danger: #ff5c6c;
-  --color-info: #5aa9ff;
-  /* text on a danger tint, where #ff5c6c reads 5.3:1 and this 6.8:1 */
-  --color-danger-text: #ff8591;
+  --color-success: #0b6b4a;
+  --color-warning: #8a5300;
+  --color-danger: #b42a25;
+  --color-info: #0b5cad;
+  /* text on a danger tint: danger itself keeps 5.2:1 there, so it is the same color */
+  --color-danger-text: #b42a25;
 
   /* each status gets a 12% fill and a 32% edge: bg-success/12 border-success/32 in Tailwind, these in CSS */
-  --color-success-soft: color-mix(in srgb, var(--color-success) 12%, transparent);
+  --color-success-soft: color-mix(in srgb, var(--color-success) 10%, transparent);
   --color-success-line: color-mix(in srgb, var(--color-success) 32%, transparent);
-  --color-warning-soft: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  --color-warning-soft: color-mix(in srgb, var(--color-warning) 10%, transparent);
   --color-warning-line: color-mix(in srgb, var(--color-warning) 32%, transparent);
-  --color-danger-soft: color-mix(in srgb, var(--color-danger) 12%, transparent);
+  --color-danger-soft: color-mix(in srgb, var(--color-danger) 9%, transparent);
   --color-danger-line: color-mix(in srgb, var(--color-danger) 32%, transparent);
-  --color-info-soft: color-mix(in srgb, var(--color-info) 12%, transparent);
+  --color-info-soft: color-mix(in srgb, var(--color-info) 9%, transparent);
   --color-info-line: color-mix(in srgb, var(--color-info) 32%, transparent);
-  --color-accent-soft: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  --color-accent-soft: color-mix(in srgb, var(--color-accent) 8%, transparent);
   --color-accent-line: color-mix(in srgb, var(--color-accent) 36%, transparent);
+  /* a chosen card: the sheet washed with cobalt, opaque, so that a badge on it keeps 4.5:1 on the paper as on a sheet */
+  --color-accent-wash: color-mix(in srgb, var(--color-accent) 6%, var(--color-surface));
 
-  --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-sans--font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-sans: 'IBM Plex Sans Variable', 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-sans--font-feature-settings: normal;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   /* 12 / 14 / 15 (body) / 16 / 20 / 24 / 32 / 48 */
   --text-*: initial;
@@ -84,23 +90,31 @@
   --text-3xl: 3rem;
   --text-3xl--line-height: 3.25rem;
 
-  /* 8 for fields and buttons, 12 for cards, 16 for the main card of a screen */
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --radius-2xl: 20px;
+  /* a drawing has square corners: 2 for chips and fields, 3 for buttons, 4 for sheets and dialogs */
+  --radius-xs: 2px;
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 4px;
+  --radius-2xl: 6px;
 
-  --shadow-popover: 0 16px 40px -12px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.03);
-  --shadow-card: inset 0 1px 0 0 rgb(255 255 255 / 0.03), 0 12px 32px -16px rgb(0 0 0 / 0.6);
-  --shadow-glow: 0 0 0 4px color-mix(in srgb, var(--color-accent) 20%, transparent);
-  --shadow-button: inset 0 1px 0 0 rgb(255 255 255 / 0.14), 0 1px 2px 0 rgb(0 0 0 / 0.4);
+  /* no shadows on the sheet: only what floats over it (a menu, a dialog, a toast) casts one */
+  --shadow-popover: 0 1px 2px 0 rgb(14 26 43 / 0.06), 0 12px 32px -12px rgb(14 26 43 / 0.22);
+  --shadow-card: 0 0 #0000;
+  --shadow-glow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent);
+  --shadow-button: 0 0 #0000;
 
+  /*
+   * Motion, four lengths: 120 ms for what answers the pointer (a hover, a press), 200 ms for what opens and closes,
+   * 320 ms for a mark that moves or a state that changes, 600 ms for a line that is drawn or a bar that fills. ease-out
+   * for what arrives, ease-run for what travels from one place to another (a payment, the fill of a line).
+   */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-run: cubic-bezier(0.65, 0, 0.35, 1);
   --duration-fast: 120ms;
   --duration-base: 200ms;
   --duration-slow: 320ms;
+  --duration-draw: 600ms;
 
   --breakpoint-*: initial;
   --breakpoint-sm: 40rem;
@@ -112,21 +126,20 @@
   --container-prose: 45rem;
 
   --animate-spin: spin 0.8s linear infinite;
-  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-hatch: hatch 1.2s linear infinite;
   --animate-pulse-dot: pulse-dot 1.6s var(--ease-out) infinite;
   --animate-fade-in: fade-in var(--duration-base) var(--ease-out);
+  --animate-run-bead: run-bead 1.6s var(--ease-run) infinite;
+  --animate-step-in: step-in var(--duration-slow) var(--ease-out);
 
   @keyframes spin {
     to {
       transform: rotate(360deg);
     }
   }
-  @keyframes shimmer {
-    from {
-      background-position: 100% 0;
-    }
+  @keyframes hatch {
     to {
-      background-position: -100% 0;
+      background-position: 8px 0;
     }
   }
   @keyframes pulse-dot {
@@ -142,6 +155,27 @@
     from {
       opacity: 0;
       transform: translateY(4px);
+    }
+  }
+  /* down the line of a stage at work, from its node to the next; translateY(100%) is the height of the line */
+  @keyframes run-bead {
+    from {
+      transform: translateY(-0.375rem);
+      opacity: 0;
+    }
+    15%,
+    85% {
+      opacity: 1;
+    }
+    to {
+      transform: translateY(100%);
+      opacity: 0;
+    }
+  }
+  /* a builder step as it opens, from the side of the step it comes from; no fade, so its words keep their contrast */
+  @keyframes step-in {
+    from {
+      transform: translateX(var(--step-from, 0));
     }
   }
 }

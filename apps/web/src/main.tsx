@@ -1,7 +1,7 @@
 import { createRoot } from 'react-dom/client';
-import '@fontsource-variable/inter';
-import '@fontsource/jetbrains-mono/400.css';
-import '@fontsource/jetbrains-mono/500.css';
+import '@fontsource-variable/ibm-plex-sans/wght.css';
+import '@fontsource/ibm-plex-mono/400.css';
+import '@fontsource/ibm-plex-mono/500.css';
 import { Root } from './app/Root.tsx';
 import './styles/index.css';
 

@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUpRight, ChevronDown, CircleCheck, CircleMinus, HandCoi
 import { BACKEND_PLACEHOLDERS, type ExecutionStep } from '@aurora-is-near/intents-connect';
 import type { ExecutionStatus } from '@aurora-is-near/intents-connect';
 import type { UseExecutionResult } from '@aurora-is-near/intents-connect/react';
-import { Address, Alert, Button, Card, ChainIcon, CopyButton, Spinner, TokenIcon, cn, toast } from '../../ui/index.ts';
+import { Address, Alert, Button, Card, ChainIcon, CopyButton, Spinner, TokenIcon, cn, toast, useFlash } from '../../ui/index.ts';
 import { INTERMEDIARY_NOTE, SIGNED_WAITING, STATUS_WORDS } from './words.ts';
 
 // The run card's presentational parts. Each takes ready values and works nothing out: the conditions, the figures and the
@@ -87,7 +87,7 @@ export function Panel({ label, htmlFor, aside, children, footer, idle = false }:
         </Label>
         {aside}
       </div>
-      <div className="flex min-h-13 min-w-0 items-center gap-3 px-3.5 pt-1 pb-3 group-data-idle/panel:opacity-60">{children}</div>
+      <div className="flex min-h-13 min-w-0 items-center gap-3 px-3.5 pt-1 pb-3 group-data-idle/panel:[&_img]:opacity-55">{children}</div>
       {footer && <div className="flex min-w-0 flex-col gap-1.5 border-t border-border/70 px-3.5 py-2.5 text-xs leading-5 text-muted">{footer}</div>}
     </div>
   );
@@ -250,11 +250,14 @@ const smallShare = new Intl.NumberFormat('en-US', { style: 'percent', maximumSig
 export function Arrives({ amount, symbol, kept }: { amount: ReactNode; symbol: ReactNode; kept: number | null }) {
   // a bridge between two stablecoins keeps well under a percent, so more is worth a look before signing
   const notable = kept !== null && kept >= 0.01;
+  const figure = useFlash<HTMLSpanElement>();
   return (
     <p className="flex min-w-0 flex-col">
       <span className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
         <span className="text-xs font-medium text-muted">at least</span>{' '}
-        <span className="text-[1.75rem] leading-9 font-semibold tracking-tight break-all text-text nums">{amount}</span>
+        <span ref={figure} className="rounded-xs text-[1.75rem] leading-9 font-semibold tracking-tight break-all text-text nums">
+          {amount}
+        </span>
         {/* the token's tag beside the figure shows it */}
         <span className="sr-only"> {symbol}</span>
       </span>
@@ -293,10 +296,14 @@ export function Figures({ children, className }: { children: ReactNode; classNam
  * right. A note runs under both, small and from the left.
  */
 export function FigureRow({ term, children, note, total = false }: { term: ReactNode; children: ReactNode; note?: ReactNode; total?: boolean }) {
+  // a new quote washes the figures it changed
+  const figure = useFlash<HTMLElement>();
   return (
     <div className={cn('flex min-w-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-1', total && 'mt-1 border-t border-border-strong pt-3')}>
       <dt className={cn('min-w-0', total ? 'font-medium text-text' : 'text-muted')}>{term}</dt>
-      <dd className={cn('ml-auto min-w-0 text-right text-pretty break-words text-text nums', total ? 'text-base font-semibold' : 'font-medium')}>{children}</dd>
+      <dd ref={figure} className={cn('ml-auto min-w-0 rounded-xs text-right text-pretty break-words text-text nums', total ? 'text-base font-semibold' : 'font-medium')}>
+        {children}
+      </dd>
       {note && <dd className="basis-full text-xs leading-5 text-muted">{note}</dd>}
     </div>
   );
@@ -561,7 +568,7 @@ export function Facts({ children }: { children: ReactNode }) {
 export function Details({ open, summary, children, className }: { open?: boolean; summary: ReactNode; children: ReactNode; className?: string }) {
   return (
     <details open={open} className={cn('group/details min-w-0 rounded-lg border border-border bg-surface', className)}>
-      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-lg px-3.5 py-2.5 text-sm font-medium text-text transition-colors duration-120 select-none hover:bg-white/3 [&::-webkit-details-marker]:hidden">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-lg px-3.5 py-2.5 text-sm font-medium text-text transition-colors duration-120 select-none hover:bg-surface-2 [&::-webkit-details-marker]:hidden">
         <span className="min-w-0 flex-1">{summary}</span>
         <ChevronDown aria-hidden className="size-4 shrink-0 text-muted transition-transform duration-200 group-open/details:rotate-180" />
       </summary>

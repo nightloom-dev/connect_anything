@@ -33,7 +33,7 @@ export function Checkbox({ checked, onChange, label, description, indeterminate 
           aria-describedby={description ? `${id}-description` : undefined}
           onChange={event => onChange(event.target.checked)}
           className={cn(
-            'peer absolute inset-0 m-0 cursor-pointer appearance-none rounded-xs border border-border-control bg-surface-2 transition-colors duration-120',
+            'peer absolute inset-0 m-0 cursor-pointer appearance-none rounded-xs border border-border-control bg-surface transition-colors duration-120',
             'hover:border-border-control-hover checked:border-accent-solid checked:bg-accent-solid indeterminate:border-accent-solid indeterminate:bg-accent-solid disabled:cursor-not-allowed disabled:opacity-50',
           )}
         />

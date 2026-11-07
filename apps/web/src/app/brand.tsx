@@ -1,24 +1,40 @@
-import { useId } from 'react';
+import { cn } from '../ui/cn.ts';
 
 export const REPO_URL = 'https://github.com/nightloom-dev/connect_anything';
 export const DOCS_URL = `${REPO_URL}#readme`;
+/** How to run the Telegram watcher, which the landing page and the footer link to. */
+export const WATCHER_URL = `${REPO_URL}#telegram-watcher`;
+/** How to run the app and its server from a clone. */
+export const SELF_HOST_URL = `${REPO_URL}#run-from-zero`;
+export const ISSUES_URL = `${REPO_URL}/issues`;
 
-/** Two chains and the path between them, in the identity gradient. */
+/**
+ * The mark, "Slot": the corner marks of a drawing field around a filled block, a slot that takes any program. On a
+ * 32 grid: corners 4 thick with arms of 10, in ink, and a cobalt block of 12. public/favicon.svg is the same drawing,
+ * and the PNGs beside it are drawn from it.
+ */
 export function LogoMark({ size = 28, className }: { size?: number; className?: string }) {
-  const id = `mark${useId().replace(/:/g, '')}`;
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden className={className}>
-      <defs>
-        <linearGradient id={id} x1="2" y1="30" x2="30" y2="2" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#6E7BFF" />
-          <stop offset="1" stopColor="#3DD6D0" />
-        </linearGradient>
-      </defs>
-      <rect width="32" height="32" rx="9" fill={`url(#${id})`} />
-      <rect x="0.5" y="0.5" width="31" height="31" rx="8.5" stroke="#fff" strokeOpacity="0.18" />
-      <path d="M10 21.5c0-5.5 12-5.5 12-11" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" />
-      <circle cx="10" cy="22" r="3.4" fill="#fff" />
-      <circle cx="22" cy="10" r="3.2" fill="#262c6e" stroke="#fff" strokeWidth="2.2" />
+      <path d="M4 14V4h10M28 18v10H18" strokeWidth="4" className="stroke-text" />
+      <rect x="10" y="10" width="12" height="12" className="fill-accent" />
+    </svg>
+  );
+}
+
+/**
+ * The name with the device built in: "Anything" stands in the corner marks of the mark, in cobalt. IBM Plex Sans 600
+ * at 28 on a 240 × 42 box, sized by its height: at 42 it is drawn 1:1, with its strokes on whole pixels. The link
+ * preview (OgImage) carries it; the header keeps the mark beside the name in words.
+ */
+export function Wordmark({ height = 42, className }: { height?: number; className?: string }) {
+  return (
+    <svg viewBox="0 0 240 42" width={(height * 240) / 42} height={height} role="img" aria-label="Connect Anything" className={cn('overflow-visible', className)}>
+      <g className="fill-text font-sans text-[28px] font-semibold tracking-[-0.02em]">
+        <text y="28">Connect</text>
+        <text x="120.2" y="28">Anything</text>
+      </g>
+      <path d="M114.5 16V2.5H128M237.5 26v13.5H224" fill="none" strokeWidth="3" className="stroke-accent" />
     </svg>
   );
 }

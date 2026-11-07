@@ -62,7 +62,7 @@ export function Address({ value, chain = 'sol', kind = 'account', label, chars =
             target="_blank"
             rel="noreferrer"
             aria-label={`Open in ${meta!.explorer} (new tab)`}
-            className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-white/6 hover:text-text"
+            className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-text/6 hover:text-text"
           >
             <ArrowUpRight className="size-3.5" aria-hidden />
           </a>

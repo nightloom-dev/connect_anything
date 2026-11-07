@@ -35,7 +35,7 @@ const TAB = {
   underline:
     'relative flex h-10 shrink-0 items-center gap-2 text-sm font-medium whitespace-nowrap text-muted transition-colors duration-120 data-hover:text-text data-selected:text-text data-disabled:cursor-not-allowed data-disabled:opacity-45 after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-full after:bg-transparent data-selected:after:bg-accent',
   segmented:
-    'flex h-8 shrink-0 items-center gap-2 rounded-md border border-transparent px-3 text-sm font-medium whitespace-nowrap text-muted transition-colors duration-120 data-hover:text-text data-selected:border-border-strong data-selected:bg-surface-3 data-selected:text-text data-selected:shadow-[inset_0_1px_0_rgb(255_255_255/0.04)] data-disabled:cursor-not-allowed data-disabled:opacity-45',
+    'flex h-8 shrink-0 items-center gap-2 rounded-md border border-transparent px-3 text-sm font-medium whitespace-nowrap text-muted transition-colors duration-120 data-hover:text-text data-selected:border-border-strong data-selected:bg-surface-3 data-selected:text-text data-disabled:cursor-not-allowed data-disabled:opacity-45',
 };
 
 /** Arrows move between tabs, Home and End jump, and each panel is labelled by its tab. */
@@ -47,7 +47,7 @@ export function Tabs({ tabs, selectedIndex, defaultIndex, onChange, variant = 'u
           <Tab key={tab.id} disabled={tab.disabled} className={TAB[variant]}>
             {tab.icon && <span className="flex [&>svg]:size-4">{tab.icon}</span>}
             {tab.label}
-            {tab.badge !== undefined && <span className="rounded-full bg-white/8 px-1.5 text-xs leading-5 text-muted nums">{tab.badge}</span>}
+            {tab.badge !== undefined && <span className="rounded-full bg-text/6 px-1.5 text-xs leading-5 text-muted nums">{tab.badge}</span>}
           </Tab>
         ))}
       </TabList>

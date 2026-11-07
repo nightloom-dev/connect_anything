@@ -101,7 +101,7 @@ export function Root() {
 
   return (
     <>
-      <Shell wallet={placeholder} walletSlot={setWalletSlot} pageSlot={setPageSlot} fills={walletPage?.fills}>
+      <Shell wallet={placeholder} walletSlot={setWalletSlot} pageSlot={setPageSlot} fills={walletPage?.fills} bleed={location === '/'}>
         {page}
       </Shell>
       {ready && (

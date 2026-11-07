@@ -96,8 +96,8 @@ export function Combobox<T>({
               disabled
                 ? 'cursor-not-allowed border-border-strong bg-surface text-muted'
                 : error
-                  ? 'border-danger/70 bg-surface-2 text-text focus:border-danger focus:shadow-[0_0_0_4px_rgb(255_92_108/0.18)]'
-                  : 'border-border-control bg-surface-2 text-text group-hover:[&:not(:focus)]:border-border-control-hover focus:border-accent focus:shadow-glow',
+                  ? 'border-danger/70 bg-surface text-text focus:border-danger focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-danger)_16%,transparent)]'
+                  : 'border-border-control bg-surface text-text group-hover:[&:not(:focus)]:border-border-control-hover focus:border-accent focus:shadow-glow',
             )}
           />
           <ComboboxButton className={cn('absolute top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-sm text-muted hover:text-text', AFFIX[size].button)} aria-label="Show all">

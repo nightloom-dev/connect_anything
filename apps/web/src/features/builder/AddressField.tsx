@@ -48,7 +48,7 @@ export function AddressField({ label, id, value, onChange, placeholder = 'Addres
                 <PopoverClose
                   type="button"
                   onClick={() => onChange(pick.address)}
-                  className={cn('flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-white/6', value === pick.address && 'bg-accent/10')}
+                  className={cn('flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-text/6', value === pick.address && 'bg-accent/10')}
                 >
                   <span className="truncate text-text">{pick.label}</span>
                   <span className="shrink-0 font-mono text-xs text-muted">{truncateMiddle(pick.address)}</span>

@@ -21,7 +21,7 @@ export function EmptyState({ icon, title, children, action, level = 3, compact =
       {icon && (
         <div
           className={cn(
-            'mb-4 flex items-center justify-center rounded-xl border border-border-strong bg-linear-to-b from-surface-3 to-surface-2 text-muted shadow-card',
+            'mb-4 flex items-center justify-center rounded-xl border border-border-strong bg-surface-2 text-muted',
             compact ? 'size-10 [&>svg]:size-[18px]' : 'size-12 [&>svg]:size-5',
           )}
           aria-hidden

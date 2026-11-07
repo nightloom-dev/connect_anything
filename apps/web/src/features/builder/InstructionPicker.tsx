@@ -15,7 +15,7 @@ type ProgramBarProps = { name: string; address: string; onBack: () => void };
 export function ProgramBar({ name, address, onBack }: ProgramBarProps) {
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-lg border border-border bg-surface px-4 py-3">
-      <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-md bg-linear-to-br from-[#6e7bff] to-[#3dd6d0] text-sm font-semibold text-bg">
+      <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-md border border-accent/40 bg-accent/8 font-mono text-sm font-semibold text-accent">
         {name[0]?.toUpperCase()}
       </span>
       <div className="min-w-0 flex-1 basis-56">

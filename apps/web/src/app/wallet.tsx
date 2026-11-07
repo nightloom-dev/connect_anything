@@ -32,7 +32,7 @@ function App({ children }: { children: ReactNode }) {
 /** AppKit and Intents Connect, around the header's wallet button and every page that pays. Mounted once. */
 export function WalletProviders({ children }: { children: ReactNode }) {
   return (
-    <AppKitProvider appName="Connect Anything" themeMode="dark">
+    <AppKitProvider appName="Connect Anything" themeMode="light">
       <AppKitTheme />
       <AppKitNetwork />
       <AppKitFocus />

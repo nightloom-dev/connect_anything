@@ -94,4 +94,4 @@ export type ProofRun = {
 export const PROOF_RUNS: ProofRun[] = [];
 
 export const FIXTURES_URL = `${REPO_URL}/blob/main/fixtures/README.md`;
-export const WATCHER_URL = `${REPO_URL}#telegram-watcher`;
+export { WATCHER_URL } from '../../app/brand.tsx';

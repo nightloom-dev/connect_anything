@@ -15,7 +15,7 @@ const api = (env: Record<string, string>): Plugin => {
   };
 };
 
-// The browser finds a font only once the CSS is parsed. Inter's Latin file draws every page, so it starts with the HTML.
+// The browser finds a font only once the CSS is parsed. IBM Plex Sans's Latin file draws every page, so it starts with the HTML.
 const preloadFont = (): Plugin => {
   let base = '/';
   return {
@@ -25,7 +25,7 @@ const preloadFont = (): Plugin => {
     transformIndexHtml: {
       order: 'post',
       handler: (_html, { bundle }) => {
-        const font = Object.keys(bundle ?? {}).find(file => /\/inter-latin-wght-normal-[\w-]+\.woff2$/.test(file));
+        const font = Object.keys(bundle ?? {}).find(file => /\/ibm-plex-sans-latin-wght-normal-[\w-]+\.woff2$/.test(file));
         if (!font) return [];
         return [{ tag: 'link', attrs: { rel: 'preload', href: `${base}${font}`, as: 'font', type: 'font/woff2', crossorigin: '' }, injectTo: 'head' }];
       },

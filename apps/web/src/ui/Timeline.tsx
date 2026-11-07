@@ -45,13 +45,16 @@ const SPOKEN: Record<StageState, string> = {
 /** The states a run never goes through: drawn dashed, and named on the right. */
 const NEVER: Partial<Record<StageState, string>> = { unreached: 'Not reached', skipped: 'Not needed' };
 
+/** The states of a stage the run has come to: the line into it is drawn in. */
+const ARRIVED = new Set<StageState>(['active', 'paused', 'done', 'failed', 'success', 'cancelled']);
+
 const NODE: Record<StageState, string> = {
   pending: 'border-border-strong bg-surface',
-  active: 'border-accent bg-accent/14 text-accent shadow-[0_0_0_4px_rgb(110_123_255/0.14)]',
+  active: 'border-accent bg-accent/8 text-accent shadow-glow',
   paused: 'border-warning/50 bg-warning/14 text-warning',
   done: 'border-success/40 bg-success/12 text-success',
   failed: 'border-danger/50 bg-danger/14 text-danger-text',
-  success: 'border-success bg-success text-[#062012]',
+  success: 'border-success bg-success text-white',
   cancelled: 'border-border-strong bg-surface-3 text-muted',
   unreached: 'border-dashed border-border-strong',
   skipped: 'border-dashed border-border-strong',
@@ -87,15 +90,30 @@ export function Timeline({ stages, label = 'Progress', announce, className }: Ti
     <div data-ui="timeline" className={className}>
       <ol aria-label={label} className="flex flex-col">
         {stages.map((stage, index) => {
-          const last = index === stages.length - 1;
-          const reached = stage.state === 'done' || stage.state === 'success';
-          // the way to a stage the run never goes through is dashed, like its node
           const next = stages[index + 1];
-          const line = next && NEVER[next.state] ? 'border-l border-dashed border-border-strong' : reached ? 'bg-success/40' : 'bg-border-strong';
+          // the way to a stage the run never goes through is dashed, like its node, and stays empty
+          const never = !!next && !!NEVER[next.state];
+          const filled = !!next && !never && (stage.state === 'done' || stage.state === 'success' || ARRIVED.has(next.state));
           return (
-            <li key={stage.id} aria-current={stage.state === 'active' || stage.state === 'paused' ? 'step' : undefined} className={cn('relative flex gap-3', !last && 'pb-5')}>
-              {!last && <span aria-hidden className={cn('absolute top-7 bottom-0.5 left-[11.5px] w-px', line)} />}
-              <span className={cn('relative flex size-6 shrink-0 items-center justify-center rounded-full border transition-colors duration-300', NODE[stage.state])}>
+            <li key={stage.id} aria-current={stage.state === 'active' || stage.state === 'paused' ? 'step' : undefined} className={cn('relative flex gap-3', next && 'pb-5')}>
+              {next && (
+                // the line to the next stage: cobalt runs down it once the run gets there, and a bead while this one works
+                <span aria-hidden className="absolute top-7 bottom-0.5 left-[9px] w-1.5 overflow-hidden">
+                  <span className={cn('absolute inset-y-0 left-[2.5px] w-px', never ? 'border-l border-dashed border-border-strong' : 'bg-border-strong')} />
+                  <span
+                    className={cn(
+                      'absolute inset-y-0 left-0.5 w-0.5 origin-top bg-accent transition-transform duration-600 ease-run motion-reduce:transition-none',
+                      filled ? 'scale-y-100' : 'scale-y-0',
+                    )}
+                  />
+                  {stage.state === 'active' && !never && (
+                    <span className="absolute inset-0 animate-run-bead motion-reduce:hidden">
+                      <span className="absolute top-0 left-0 size-1.5 rounded-full bg-accent" />
+                    </span>
+                  )}
+                </span>
+              )}
+              <span className={cn('relative flex size-6 shrink-0 items-center justify-center rounded-full border transition-colors duration-320', NODE[stage.state])}>
                 <Node state={stage.state} />
               </span>
               <div className="min-w-0 flex-1 pt-0.5">

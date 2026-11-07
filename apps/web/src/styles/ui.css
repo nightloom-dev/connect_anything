@@ -1,9 +1,13 @@
 /* What the primitives in src/ui cannot say with utilities: vendor pseudo-elements, highlighter colors, toasts. */
 @layer components {
+  /* what is still coming, hatched as on a drawing, the hatching drifting while it loads. In an 8 px tile at 45 degrees the
+     gradient line is 8 * sqrt(2) long, so 50% of it is one line and its gap and the tile repeats without a seam; moving
+     it 8 px brings it back where it was. With motion reduced it stands still. */
   .skeleton {
-    background: linear-gradient(90deg, var(--color-surface-2) 25%, var(--color-surface-3) 50%, var(--color-surface-2) 75%);
-    background-size: 200% 100%;
-    animation: var(--animate-shimmer);
+    background-color: var(--color-surface-2);
+    background-image: repeating-linear-gradient(45deg, var(--color-border) 0 1px, transparent 1px 50%);
+    background-size: 8px 8px;
+    animation: var(--animate-hatch);
   }
 
   /* Slider: the filled part of the track follows --fill, set from the value */
@@ -41,7 +45,7 @@
     border: 0;
     border-radius: 50%;
     background: #fff;
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--range-color) 28%, transparent), 0 2px 6px rgb(0 0 0 / 0.5);
+    box-shadow: inset 0 0 0 2px var(--range-color), 0 1px 3px rgb(14 26 43 / 0.28);
     transition: transform var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
   }
   .ui-range::-moz-range-thumb {
@@ -50,7 +54,7 @@
     border: 0;
     border-radius: 50%;
     background: #fff;
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--range-color) 28%, transparent), 0 2px 6px rgb(0 0 0 / 0.5);
+    box-shadow: inset 0 0 0 2px var(--range-color), 0 1px 3px rgb(14 26 43 / 0.28);
     transition: transform var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
   }
   .ui-range:hover:not(:disabled)::-webkit-slider-thumb,
@@ -65,10 +69,10 @@
     outline: none;
   }
   .ui-range:focus-visible::-webkit-slider-thumb {
-    box-shadow: 0 0 0 3px var(--color-bg), 0 0 0 5px var(--color-accent);
+    box-shadow: inset 0 0 0 2px var(--range-color), 0 0 0 3px var(--color-surface), 0 0 0 5px var(--color-accent);
   }
   .ui-range:focus-visible::-moz-range-thumb {
-    box-shadow: 0 0 0 3px var(--color-bg), 0 0 0 5px var(--color-accent);
+    box-shadow: inset 0 0 0 2px var(--range-color), 0 0 0 3px var(--color-surface), 0 0 0 5px var(--color-accent);
   }
   .ui-range:disabled {
     cursor: not-allowed;
@@ -76,16 +80,17 @@
   }
 
   /* sugar-high reads its colors from these */
+  /* each keeps 4.5:1 on surface-2, the ground of a code block */
   .code-hl {
-    --sh-class: #7dd3fc;
-    --sh-identifier: #dfe4ee;
-    --sh-sign: #8a93a6;
-    --sh-property: #a5b0ff;
-    --sh-entity: #5fe0c9;
-    --sh-jsxliterals: #c4b5fd;
-    --sh-string: #86e1a8;
-    --sh-keyword: #f59ac0;
-    --sh-comment: #7c8599;
+    --sh-class: #0b5cad;
+    --sh-identifier: #0e1a2b;
+    --sh-sign: #536073;
+    --sh-property: #1f3fd1;
+    --sh-entity: #6f3aa8;
+    --sh-jsxliterals: #6f3aa8;
+    --sh-string: #0b6b4a;
+    --sh-keyword: #a3305a;
+    --sh-comment: #637084;
   }
   .code-hl .sh__token--comment {
     font-style: italic;
@@ -126,9 +131,9 @@
     --toast-right: calc(max(0px, (100% - var(--container-content)) / 2) + 1.5rem + 14.5rem);
   }
 }
-:root [data-sonner-toaster][data-sonner-theme='dark'] {
-  --normal-bg: var(--color-surface-2);
-  --normal-bg-hover: var(--color-surface-3);
+:root [data-sonner-toaster][data-sonner-theme='light'] {
+  --normal-bg: var(--color-surface);
+  --normal-bg-hover: var(--color-surface-2);
   --normal-border: var(--color-border-strong);
   --normal-border-hover: var(--color-border-hover);
   --normal-text: var(--color-text);
@@ -141,7 +146,7 @@
   font-size: var(--text-sm);
   box-shadow: var(--shadow-popover);
 }
-:root [data-sonner-toaster][data-sonner-theme='dark'] [data-sonner-toast] [data-description] {
+:root [data-sonner-toaster][data-sonner-theme='light'] [data-sonner-toast] [data-description] {
   color: var(--color-muted);
 }
 :root [data-sonner-toaster] [data-sonner-toast][data-styled='true'] [data-title] {

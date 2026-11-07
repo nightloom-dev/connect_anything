@@ -79,7 +79,7 @@ export function LogViewer({ logs, title = 'Program logs', errorsOnly = false, ma
   const errors = lines.filter(line => line.kind === 'error').length;
   const shown = onlyErrors ? lines.filter(line => line.kind === 'error') : lines;
   return (
-    <div data-ui="log-viewer" className={cn('min-w-0 overflow-hidden rounded-lg border border-border bg-[#0d1016]', className)}>
+    <div data-ui="log-viewer" className={cn('min-w-0 overflow-hidden rounded-lg border border-border bg-surface-2', className)}>
       <div className="flex min-h-10 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-border bg-surface/70 py-1.5 pr-1.5 pl-3.5">
         <span className="flex items-baseline gap-2 text-xs">
           <span className="font-medium text-text">{title}</span>

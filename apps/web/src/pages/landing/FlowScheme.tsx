@@ -1,134 +1,366 @@
 import { useId, type CSSProperties } from 'react';
 import { cn } from '../../ui/cn.ts';
-import { SOURCE_CHAINS, VERIFIED } from './facts.ts';
 
-// The hero's picture of a run: three EVM chains, Intents Connect, and the instructions of a Kamino repay on Solana.
-// The first paint has all of it but the run: the chains, the faint tracks, Intents Connect and the program with its
-// instructions. Then the run plays once, in 1.2 s (styles/landing.css): the money lights the tracks to Connect and on to
-// Solana, and each instruction gets its check. With prefers-reduced-motion, or `still`, it is drawn in its final state:
-// every element's own style is the end of its animation.
+// The hero drawing of the landing page: the route of one run, from the EVM chain you sign on, through Intents Connect,
+// to the program on Solana. Two drawings of the same route: across, with three numbered callouts, from 960 px; top to
+// bottom on a narrower screen, where the callouts are a list under it (Landing.tsx). Its styles are in
+// styles/landing.css.
+//
+// Everything is drawn at the first paint; only the run itself plays. The payment rides the head of the line as it is
+// drawn, Intents Connect rings when it arrives, the program's instructions get their checks, and each callout lights as
+// the run passes what it names. At the first paint it is over in 1.2 s. Run again plays it slower (`slow`), and a run
+// from another chain (`source`) takes that chain's way to the junction. The chains' boxes are the control that picks it:
+// SourcePicker lays a button over each.
 
-const KLEND = VERIFIED[0];
+export const SCHEME_TITLE =
+  'One payment from Base, Arbitrum or Ethereum goes through Intents Connect to a program on Solana: here the four instructions of a Kamino repay.';
 
-const delay = (seconds: number): CSSProperties => ({ animationDelay: `${seconds}s` });
+export const CALLOUTS = [
+  ['Sign once on Base, Arbitrum or Ethereum.', 'No Solana wallet, no SOL.'],
+  ['Intents Connect bridges the money', 'and signs on Solana with MPC.'],
+  ['Any Anchor program runs on Solana.', 'Here, a Kamino repay in 4 instructions.'],
+] as const;
 
-// 400 × 380 units: the chains on top, Intents Connect in the middle, the program at the bottom
-const CHIP = { width: 116, height: 44, y: 8 };
-const CHIPS = SOURCE_CHAINS.map((chain, index) => ({ ...chain, x: 8 + index * 134 }));
-const HUB = { x: 90, y: 128, width: 220, height: 56 };
-const CARD = { x: 40, y: 228, width: 320, height: 144 };
-const MID = 200;
+export const SOURCES = ['Base', 'Arbitrum', 'Ethereum'] as const;
+export type Source = (typeof SOURCES)[number];
 
-const inbound = CHIPS.map(({ x }) => {
-  const from = x + CHIP.width / 2;
-  const top = CHIP.y + CHIP.height;
-  return from === MID ? `M${from} ${top} L${MID} ${HUB.y}` : `M${from} ${top} C${from} ${top + 40} ${MID} ${HUB.y - 40} ${MID} ${HUB.y}`;
+const INSTRUCTIONS = ['refresh_reserve ×2', 'refresh_obligation', 'repay_obligation_liquidity_v2'];
+// 115,948 of the 200,000 compute units Connect allows for one transaction
+const CU_SHARE = 115_948 / 200_000;
+/** How much slower Run again plays, so that the eye can follow the callouts. */
+const SLOW = 1.8;
+
+/** The top of each chain's box in the route across, which the callouts push 70 down, and the left of each in the narrow one. */
+const ROWS = [52, 127, 202];
+const ROUTE_TOP = 70;
+const COLUMNS = [10, 150, 290];
+/** The chains' boxes as [x, y, width, height] on each drawing's viewBox: where SourcePicker puts its buttons. */
+const BOXES = {
+  across: { width: 1000, height: 440, boxes: ROWS.map(y => [20, y + ROUTE_TOP, 180, 46]) },
+  narrow: { width: 420, height: 312, boxes: COLUMNS.map(x => [x, 10, 120, 36]) },
+};
+
+/** The run, in seconds from the first paint: when each part starts and how long it takes. The last ends at 1.18 s. */
+const RUN = {
+  /** The chain's dot, and callout 1. */
+  sign: [0, 0.45],
+  /** The line from the chain to Intents Connect, and the payment at its head. */
+  toHub: [0, 0.42],
+  /** Intents Connect rings as the payment arrives. */
+  hub: [0.4, 0.6],
+  /** Callout 2. */
+  bridge: [0.4, 0.45],
+  /** The line on to the program. */
+  toProgram: [0.48, 0.3],
+  /** One check per instruction. */
+  checks: [
+    [0.78, 0.22],
+    [0.86, 0.22],
+    [0.94, 0.22],
+  ],
+  /** The compute units the instructions took. */
+  units: [0.8, 0.36],
+  /** Callout 3. */
+  program: [0.73, 0.45],
+} satisfies Record<string, [number, number] | [number, number][]>;
+
+/** The animation's start and length as an inline style: `--flow-k` on the drawing stretches both. */
+const play = ([start, length]: readonly [number, number]): CSSProperties => ({
+  animationDelay: `calc(${start}s * var(--flow-k, 1))`,
+  animationDuration: `calc(${length}s * var(--flow-k, 1))`,
 });
-const outbound = `M${MID} ${HUB.y + HUB.height} L${MID} ${CARD.y}`;
 
-export function FlowScheme({ className, still = false }: { className?: string; /** Drawn in its final state, as for the OG image. */ still?: boolean }) {
-  const id = useId().replace(/:/g, '');
-  const brand = `${id}-brand`;
-  const ring = `${id}-ring`;
-  const glow = `${id}-glow`;
-  const title = `${id}-title`;
+type Point = readonly [number, number];
+
+/** A path of straight lines through the points, and its length, for a payment the same size on any of them. */
+function route(points: Point[]) {
+  const kept = points.filter((point, index) => index === 0 || point[0] !== points[index - 1][0] || point[1] !== points[index - 1][1]);
+  const length = kept.slice(1).reduce((sum, [x, y], index) => sum + Math.hypot(x - kept[index][0], y - kept[index][1]), 0);
+  return { d: `M${kept.map(point => point.join(' ')).join('L')}`, length };
+}
+
+/** The payment: a short bead at the head of the line as it is drawn, gone once it arrives. */
+function Packet({ d, length, at }: { d: string; length: number; at: readonly [number, number] }) {
+  const bead = Math.min(11 / length, 0.4).toFixed(4);
+  return <path className="fs-packet flow-packet" pathLength={1} d={d} style={{ ...play(at), '--bead': bead } as CSSProperties} />;
+}
+
+/** A line of the run, drawn as the payment goes, with the payment on it. */
+function Run({ points, at, still }: { points: Point[]; at: readonly [number, number]; still?: boolean }) {
+  const { d, length } = route(points);
   return (
-    <svg viewBox="0 0 400 380" role="img" aria-labelledby={title} className={cn('flow h-auto w-full select-none', still && 'flow-still', className)}>
-      <title id={title}>
-        One payment from Base, Arbitrum or Ethereum goes through Intents Connect to a program on Solana: here the four instructions of a Kamino repay.
-      </title>
-      <defs>
-        <linearGradient id={brand} gradientUnits="userSpaceOnUse" x1="0" y1={CHIP.y + CHIP.height} x2="0" y2={CARD.y}>
-          <stop offset="0" style={{ stopColor: 'var(--color-brand-from)' }} />
-          <stop offset="1" style={{ stopColor: 'var(--color-brand-to)' }} />
-        </linearGradient>
-        <linearGradient id={ring} gradientUnits="userSpaceOnUse" x1={HUB.x} y1="0" x2={HUB.x + HUB.width} y2="0">
-          <stop offset="0" style={{ stopColor: 'var(--color-brand-from)' }} />
-          <stop offset="1" style={{ stopColor: 'var(--color-brand-to)' }} />
-        </linearGradient>
-        <filter id={glow} x="-30%" y="-80%" width="160%" height="260%">
-          <feGaussianBlur stdDeviation="10" />
-        </filter>
-      </defs>
+    <>
+      <path className={cn('fs-run', !still && 'flow-draw')} style={still ? undefined : play(at)} pathLength={1} d={d} />
+      {!still && <Packet d={d} length={length} at={at} />}
+    </>
+  );
+}
 
-      {/* the tracks, faint, so the shape reads before the lines are drawn */}
-      <g className="fill-none stroke-border-strong" strokeWidth="1.5" strokeDasharray="2 5" strokeLinecap="round">
-        {inbound.map(d => (
-          <path key={d} d={d} />
-        ))}
-        <path d={outbound} />
-      </g>
+/** A check mark whose short arm starts at (x, y). */
+const Check = ({ x, y, at, still }: { x: number; y: number; at: readonly [number, number]; still?: boolean }) => (
+  <path className={cn('fs-ok', !still && 'flow-pop')} style={still ? undefined : play(at)} d={`M${x} ${y}l4 4 8-8`} />
+);
 
-      {/* the chains */}
-      {CHIPS.map(({ id: chain, name, icon, x }) => (
-        <g key={chain}>
-          <rect x={x + 0.5} y={CHIP.y + 0.5} width={CHIP.width - 1} height={CHIP.height - 1} rx="11" className="fill-surface-2 stroke-border-strong" />
-          <image href={icon} x={x + 12} y={CHIP.y + 12} width="20" height="20" />
-          <text x={x + 40} y={CHIP.y + 27} fontSize="13" fontWeight="600" className="fill-text">
-            {name}
+/** The route across, 1000 × 300: Base, Arbitrum and Ethereum, Intents Connect, the program. */
+function RouteAcross({ source, still }: { source: Source; still?: boolean }) {
+  const rows = ROWS;
+  const from = SOURCES.indexOf(source);
+  return (
+    <>
+      <text className="fs-col" x="20" y="18">
+        SOURCE · EVM
+      </text>
+      <text className="fs-col" x="400" y="18">
+        BRIDGE
+      </text>
+      <text className="fs-col" x="700" y="18">
+        TARGET · SOLANA
+      </text>
+      <path className="fs-hair" d="M20 30H980" />
+
+      {rows.map((y, index) => (
+        <g key={y}>
+          <rect className="fs-node" x="20" y={y} width="180" height="46" />
+          <circle className={cn(index === from ? 'fs-dot-on' : 'fs-dot', index === from && !still && 'flow-pop')} style={index === from && !still ? play(RUN.sign) : undefined} cx="44" cy={y + 23} r="6" />
+          <text className="fs-chain" x="60" y={y + 28}>
+            {SOURCES[index]}
           </text>
         </g>
       ))}
 
-      {/* the money, on its way to Connect */}
-      <g fill="none" strokeWidth="2" strokeLinecap="round">
-        {inbound.map((d, index) => (
-          <path key={d} d={d} pathLength={1} stroke={`url(#${brand})`} className="flow-draw" style={delay(index * 0.06)} />
-        ))}
-        {inbound.map((d, index) => (
-          <path key={d} d={d} pathLength={1} strokeWidth="3" className="flow-pulse stroke-white" style={delay(0.12 + index * 0.06)} />
-        ))}
-      </g>
+      {/* the ways every other chain could take, dashed, and over them the run from the one it takes */}
+      <path className="fs-bus" d={rows.filter((_, index) => index !== from).map(y => `M200 ${y + 23}H290V150`).join('')} />
+      <Run points={[[200, rows[from] + 23], [290, rows[from] + 23], [290, 150], [400, 150]]} at={RUN.toHub} still={still} />
+      <circle className="fs-junction" cx="290" cy="150" r="3.5" />
 
-      {/* Intents Connect */}
-      <rect x={HUB.x + 10} y={HUB.y + 8} width={HUB.width - 20} height={HUB.height - 16} rx="20" fill={`url(#${ring})`} opacity="0.35" filter={`url(#${glow})`} className="flow-in" style={delay(0.35)} />
-      <rect x={HUB.x} y={HUB.y} width={HUB.width} height={HUB.height} rx={HUB.height / 2} fill="none" stroke={`url(#${ring})`} strokeWidth="2" className="flow-ping" style={delay(0.45)} />
-      <g>
-        <rect x={HUB.x + 0.75} y={HUB.y + 0.75} width={HUB.width - 1.5} height={HUB.height - 1.5} rx={(HUB.height - 1.5) / 2} stroke={`url(#${ring})`} strokeWidth="1.5" className="fill-surface-2" />
-        <circle cx={HUB.x + 28} cy={HUB.y + HUB.height / 2} r="12" fill="none" stroke={`url(#${ring})`} strokeWidth="2" />
-        <circle cx={HUB.x + 28} cy={HUB.y + HUB.height / 2} r="4" className="fill-brand-to" />
-        <text x={HUB.x + 52} y={HUB.y + 25} fontSize="14" fontWeight="600" className="fill-text">
-          Intents Connect
-        </text>
-        <text x={HUB.x + 52} y={HUB.y + 41} fontSize="11" className="fill-muted">
-          bridge and MPC signature
-        </text>
-      </g>
+      <rect className="fs-hub" x="400" y="118" width="200" height="64" />
+      {!still && <rect className="fs-ping flow-ping" style={play(RUN.hub)} x="400" y="118" width="200" height="64" />}
+      <text className="fs-hub-t" x="500" y="146" textAnchor="middle">
+        Intents Connect
+      </text>
+      <text className="fs-sub" x="500" y="166" textAnchor="middle">
+        bridge + MPC signature
+      </text>
 
-      {/* on to Solana */}
-      <path d={outbound} pathLength={1} fill="none" stroke={`url(#${brand})`} strokeWidth="2" strokeLinecap="round" className="flow-draw" style={delay(0.5)} />
-      <path d={outbound} pathLength={1} fill="none" strokeWidth="3" strokeLinecap="round" className="flow-pulse stroke-white" style={delay(0.55)} />
-      <text x={MID + 10} y={HUB.y + HUB.height + 26} fontSize="11" className="fill-muted nums">
+      <Run points={[[600, 150], [696, 150]]} at={RUN.toProgram} still={still} />
+      <path className="fs-arrow" d="M687 144L698 150L687 156" />
+
+      {/* dimension lines: the time after the deposit, and the one signature it takes */}
+      <path className="fs-dim" d="M600 114V98M700 114V98M600 106H700M596 110L604 102M696 110L704 102" />
+      <text className="fs-dim-t" x="650" y="96" textAnchor="middle">
+        ≈150 s
+      </text>
+      <path className="fs-dim" d="M200 254V280M400 186V280M200 274H400M196 278L204 270M396 278L404 270" />
+      <text className="fs-dim-t" x="300" y="268" textAnchor="middle">
+        1 signature
+      </text>
+
+      <rect className="fs-node" x="700" y="52" width="280" height="196" />
+      <text className="fs-pt" x="718" y="78">
+        Solana program
+      </text>
+      <text className="fs-sub" x="962" y="78" textAnchor="end">
+        Kamino Lend
+      </text>
+      <path className="fs-hair" d="M700 92H980" />
+      {INSTRUCTIONS.map((name, index) => (
+        <g key={name}>
+          <text x="718" y={120 + index * 24}>
+            {name}
+          </text>
+          <Check x={944} y={115 + index * 24} at={RUN.checks[index]} still={still} />
+        </g>
+      ))}
+      <path className="fs-hair" d="M700 186H980" />
+      <text className="fs-sub" x="718" y="207">
+        115,948 / 200,000 CU
+      </text>
+      <text className="fs-sub" x="962" y="207" textAnchor="end">
+        934 / 1,232 B
+      </text>
+      <rect className="fs-bar" x="718" y="219" width="244" height="8" />
+      <rect className={cn('fs-barfill', !still && 'flow-grow')} style={still ? undefined : play(RUN.units)} x="718.5" y="219.5" width={(243 * CU_SHARE).toFixed(1)} height="7" />
+    </>
+  );
+}
+
+/** A numbered circle, as the callouts and the list under the narrow drawing have. It lights while the run is at it. */
+const Num = ({ x, y, n, r = 11, at, still }: { x: number; y: number; n: number; r?: number; at: readonly [number, number]; still?: boolean }) => (
+  <>
+    <circle className={cn('fs-num', !still && 'flow-light')} style={still ? undefined : play(at)} cx={x} cy={y} r={r} />
+    <text className="fs-num-t" x={x} y={y + 4} textAnchor="middle">
+      {n}
+    </text>
+  </>
+);
+
+/** A callout's leader and the dot it starts from, lit with its number. */
+const Leader = ({ d, x, y, at, still }: { d: string; x: number; y: number; at: readonly [number, number]; still?: boolean }) => (
+  <>
+    <path className={cn('fs-leader', !still && 'flow-light-line')} style={still ? undefined : play(at)} d={d} />
+    <circle className={cn('fs-anchor', !still && 'flow-light')} style={still ? undefined : play(at)} cx={x} cy={y} r="3.5" />
+  </>
+);
+
+type SchemeProps = {
+  /** The chain the run starts from. */
+  source?: Source;
+  /** Run again: the same run, slower. */
+  slow?: boolean;
+  /** No run at all, for a picture. */
+  still?: boolean;
+  className?: string;
+};
+
+/**
+ * The route across with its three callouts, 1000 × 440. `callouts={false}` draws the route alone, 1000 × 300, for the
+ * link preview (pages/OgImage.tsx). Its display is the caller's: block, or hidden under a breakpoint. A new key plays the
+ * run again.
+ */
+export function FlowScheme({ source = 'Base', slow = false, still = false, callouts = true, className }: SchemeProps & { callouts?: boolean }) {
+  const id = useId();
+  return (
+    <svg
+      viewBox={callouts ? '0 0 1000 440' : '0 0 1000 300'}
+      role="img"
+      aria-labelledby={id}
+      className={cn('flow h-auto w-full overflow-visible', still && 'flow-still', className)}
+      style={slow ? ({ '--flow-k': SLOW } as CSSProperties) : undefined}
+    >
+      <title id={id}>{SCHEME_TITLE}</title>
+      {callouts ? (
+        <>
+          <g transform={`translate(0 ${ROUTE_TOP})`}>
+            <RouteAcross source={source} still={still} />
+          </g>
+          <Leader d="M150 122V66H470" x={150} y={122} at={RUN.sign} still={still} />
+          <Num x={162} y={30} n={1} at={RUN.sign} still={still} />
+          <text className="fs-call" x="182" y="35">
+            {CALLOUTS[0][0]}
+          </text>
+          <text className="fs-call" x="182" y="56">
+            {CALLOUTS[0][1]}
+          </text>
+
+          <Leader d="M520 252V372H880" x={520} y={252} at={RUN.bridge} still={still} />
+          <Num x={546} y={400} n={2} at={RUN.bridge} still={still} />
+          <text className="fs-call" x="566" y="405">
+            {CALLOUTS[1][0]}
+          </text>
+          <text className="fs-call" x="566" y="426">
+            {CALLOUTS[1][1]}
+          </text>
+
+          <Leader d="M900 122V66H580" x={900} y={122} at={RUN.program} still={still} />
+          <Num x={592} y={30} n={3} at={RUN.program} still={still} />
+          <text className="fs-call" x="612" y="35">
+            {CALLOUTS[2][0]}
+          </text>
+          <text className="fs-call" x="612" y="56">
+            {CALLOUTS[2][1]}
+          </text>
+        </>
+      ) : (
+        <RouteAcross source={source} still={still} />
+      )}
+    </svg>
+  );
+}
+
+/** The same route top to bottom, 420 × 312, for a screen under 960 px: the numbers point to the list under it. */
+export function FlowSchemeNarrow({ source = 'Base', slow = false, className }: Omit<SchemeProps, 'still'>) {
+  const id = useId();
+  // the left edge of each chain's box; its way down starts from the middle, 60 further
+  const columns = COLUMNS;
+  const from = SOURCES.indexOf(source);
+  return (
+    <svg
+      viewBox="0 0 420 312"
+      role="img"
+      aria-labelledby={id}
+      className={cn('flow flow-narrow block h-auto w-full overflow-visible', className)}
+      style={slow ? ({ '--flow-k': SLOW } as CSSProperties) : undefined}
+    >
+      <title id={id}>{SCHEME_TITLE}</title>
+      <path className="fs-bus" d={columns.filter((_, index) => index !== from).map(x => `M${x + 60} 46V73H210`).join('')} />
+      <Run points={[[columns[from] + 60, 46], [columns[from] + 60, 73], [210, 73], [210, 100]]} at={RUN.toHub} />
+      <circle className="fs-junction" cx="210" cy="73" r="3" />
+      {columns.map((x, index) => (
+        <g key={x}>
+          <rect className="fs-node" x={x} y="10" width="120" height="36" />
+          <circle className={cn(index === from ? 'fs-dot-on flow-pop' : 'fs-dot')} style={index === from ? play(RUN.sign) : undefined} cx={x + 20} cy="28" r="6" />
+          <text className="fs-chain" x={x + 34} y="33">
+            {SOURCES[index]}
+          </text>
+        </g>
+      ))}
+      <Num x={34} y={73} n={1} r={10} at={RUN.sign} />
+
+      <rect className="fs-hub" x="105" y="100" width="210" height="50" />
+      <rect className="fs-ping flow-ping" style={play(RUN.hub)} x="105" y="100" width="210" height="50" />
+      <text className="fs-hub-t" x="210" y="122" textAnchor="middle">
+        Intents Connect
+      </text>
+      <text className="fs-sub" x="210" y="140" textAnchor="middle">
+        bridge + MPC signature
+      </text>
+      <Num x={80} y={125} n={2} r={10} at={RUN.bridge} />
+
+      <Run points={[[210, 150], [210, 189]]} at={RUN.toProgram} />
+      <path className="fs-arrow" d="M204 182L210 192L216 182" />
+      <path className="fs-dim" d="M244 155V187M239 155H249M239 187H249" />
+      <text className="fs-dim-t" x="256" y="175">
         ≈150 s
       </text>
 
-      {/* the program, and what it ran */}
-      <g>
-        <rect x={CARD.x + 0.5} y={CARD.y + 0.5} width={CARD.width - 1} height={CARD.height - 1} rx="14" className="fill-surface stroke-border-strong" />
-        <image href="/icons/solana.svg" x={CARD.x + 16} y={CARD.y + 12} width="20" height="20" />
-        <text x={CARD.x + 44} y={CARD.y + 27} fontSize="13.5" fontWeight="600" className="fill-text">
-          Solana program
-        </text>
-        <text x={CARD.x + CARD.width - 16} y={CARD.y + 27} fontSize="11.5" textAnchor="end" className="fill-muted">
-          {KLEND.name}
-        </text>
-        <line x1={CARD.x} x2={CARD.x + CARD.width} y1={CARD.y + 44} y2={CARD.y + 44} className="stroke-border" />
-      </g>
-      {KLEND.instructions.map((name, index) => {
-        const y = CARD.y + 70 + index * 25;
-        const right = CARD.x + CARD.width - 24;
+      <rect className="fs-node" x="50" y="192" width="320" height="112" />
+      <text className="fs-pt" x="68" y="216">
+        Solana program
+      </text>
+      <text className="fs-sub" x="352" y="216" textAnchor="end">
+        Kamino Lend
+      </text>
+      <path className="fs-hair" d="M50 228H370" />
+      {INSTRUCTIONS.map((name, index) => (
+        <g key={name}>
+          <text className="fs-ix" x="68" y={252 + index * 20}>
+            {name}
+          </text>
+          <Check x={343} y={247 + index * 20} at={RUN.checks[index]} />
+        </g>
+      ))}
+      <Num x={28} y={248} n={3} r={10} at={RUN.program} />
+    </svg>
+  );
+}
+
+const share = (part: number, whole: number) => `${((part / whole) * 100).toFixed(3)}%`;
+
+/**
+ * The chains' boxes of a drawing as buttons, laid over it: pressing one plays the run from that chain. They are not in
+ * the drawing, which a new run draws anew, so that the focus stays on the button that was pressed. The caller puts the
+ * drawing and this in a `relative` box as large as the drawing.
+ */
+export function SourcePicker({ layout, source, onSource }: { layout: keyof typeof BOXES; source: Source; onSource: (source: Source) => void }) {
+  const { width, height, boxes } = BOXES[layout];
+  return (
+    <div role="group" aria-label="Pay from" className="pointer-events-none absolute inset-0">
+      {SOURCES.map((chain, index) => {
+        const [x, y, w, h] = boxes[index];
         return (
-          <g key={name}>
-            <text x={CARD.x + 18} y={y} fontSize="11.5" className="fill-text font-mono">
-              {name}
-            </text>
-            <g className="flow-pop" style={delay(0.75 + index * 0.08)}>
-              <circle cx={right} cy={y - 4} r="8" className="fill-success/16" />
-              <path d={`M${right - 4} ${y - 4} l3 3 l5 -6`} fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="stroke-success" />
-            </g>
-          </g>
+          <button
+            key={chain}
+            type="button"
+            aria-pressed={chain === source}
+            onClick={() => onSource(chain)}
+            // the chosen one is edged in cobalt, as its run is; a phone gets 6 px more above and below to tap
+            className="pointer-events-auto absolute cursor-pointer transition-[background-color,box-shadow] duration-120 ease-out before:absolute before:inset-x-0 before:-inset-y-1.5 hover:bg-accent/6 aria-pressed:shadow-[inset_0_0_0_1.5px_var(--color-accent)] md:before:hidden"
+            style={{ left: share(x, width), top: share(y, height), width: share(w, width), height: share(h, height) }}
+          >
+            <span className="sr-only">{chain}</span>
+          </button>
         );
       })}
-    </svg>
+    </div>
   );
 }

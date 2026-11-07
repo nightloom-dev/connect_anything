@@ -98,7 +98,7 @@ export function PayBar({ to, ...bar }: PayBarProps) {
         !below && 'invisible translate-y-full opacity-0',
       )}
     >
-      <div className="border-t border-border-strong bg-surface/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-12px_32px_-16px_rgb(0_0_0/0.7)] backdrop-blur-md sm:px-6">
+      <div className="border-t border-border-strong bg-surface/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_-16px_rgb(14_26_43/0.25)] backdrop-blur-md sm:px-6">
         <PayStrip {...bar} onGo={() => goTo(to)} />
       </div>
     </div>

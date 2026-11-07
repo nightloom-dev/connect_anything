@@ -1,13 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <defs>
-    <linearGradient id="g" x1="2" y1="30" x2="30" y2="2" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#6E7BFF"/>
-      <stop offset="1" stop-color="#3DD6D0"/>
-    </linearGradient>
-  </defs>
-  <rect width="32" height="32" rx="9" fill="url(#g)"/>
-  <rect x=".5" y=".5" width="31" height="31" rx="8.5" stroke="#fff" stroke-opacity=".18"/>
-  <path d="M10 21.5c0-5.5 12-5.5 12-11" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>
-  <circle cx="10" cy="22" r="3.4" fill="#fff"/>
-  <circle cx="22" cy="10" r="3.2" fill="#262c6e" stroke="#fff" stroke-width="2.2"/>
+  <!-- LogoMark (src/app/brand.tsx). On a dark tab the ink goes light and the cobalt lighter, so that both still show. -->
+  <style>
+    path { stroke: #0e1a2b; }
+    rect { fill: #1f3fd1; }
+    @media (prefers-color-scheme: dark) {
+      path { stroke: #f2f5f9; }
+      rect { fill: #6d86f2; }
+    }
+  </style>
+  <path d="M4 14V4h10M28 18v10H18" stroke-width="4"/>
+  <rect x="10" y="10" width="12" height="12"/>
 </svg>

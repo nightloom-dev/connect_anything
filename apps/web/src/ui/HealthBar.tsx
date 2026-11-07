@@ -27,7 +27,8 @@ type Zone = 'safe' | 'caution' | 'danger';
 const percent = (fraction: number) => `${(fraction * 100).toFixed(1)}%`;
 const FILL: Record<Zone, string> = { safe: 'bg-success', caution: 'bg-warning', danger: 'bg-danger' };
 const TEXT: Record<Zone, string> = { safe: 'text-success', caution: 'text-warning', danger: 'text-danger-text' };
-const MOVE = 'transition-[left,width,opacity,background-color] duration-700 ease-out motion-reduce:transition-none';
+// what the repayment moves: clipped and translated, not laid out again, in the 600 ms of a bar that fills
+const MOVE = 'duration-600 ease-out motion-reduce:transition-none';
 
 /** An LTV against its liquidation line: the zones, where it is now, the target, and where it lands after paying. */
 export function HealthBar({ value, liquidation, caution, target, after, max, format = percent, label = 'LTV', size = 'md', className }: HealthBarProps) {
@@ -56,10 +57,10 @@ export function HealthBar({ value, liquidation, caution, target, after, max, for
         <span className="absolute inset-y-0 right-0 bg-danger/22" style={{ left: at(liquidation) }} />
         {/* what the repayment takes off, between where it is and where it lands */}
         <span
-          className={cn('absolute inset-y-0', MOVE, paying ? 'opacity-100' : 'opacity-0')}
-          style={{ left: at(landed), width: `calc(${at(value)} - ${at(landed)})`, backgroundImage: 'repeating-linear-gradient(135deg, rgb(255 255 255 / 0.22) 0 3px, transparent 3px 6px)' } as CSSProperties}
+          className={cn('absolute inset-0 transition-[clip-path,opacity]', MOVE, paying ? 'opacity-100' : 'opacity-0')}
+          style={{ clipPath: `inset(0 calc(100% - ${at(value)}) 0 ${at(landed)})`, backgroundImage: 'repeating-linear-gradient(135deg, rgb(255 255 255 / 0.22) 0 3px, transparent 3px 6px)' } as CSSProperties}
         />
-        <span className={cn('absolute inset-y-0 left-0 rounded-full', MOVE, FILL[zone(landed)])} style={{ width: at(landed) }} />
+        <span className={cn('absolute inset-0 transition-[clip-path,background-color]', MOVE, FILL[zone(landed)])} style={{ clipPath: `inset(0 calc(100% - ${at(landed)}) 0 0 round 999px)` }} />
       </div>
       {/* liquidation, dashed through the bar */}
       <span
@@ -70,13 +71,19 @@ export function HealthBar({ value, liquidation, caution, target, after, max, for
       {size === 'md' && (
         <>
           {/* now */}
-          <span aria-hidden className="absolute -inset-y-1.5 w-1 -translate-x-1/2 rounded-full bg-white shadow-[0_0_0_2px_var(--color-surface)]" style={{ left: at(value) }} />
-          {/* after */}
-          <span
-            aria-hidden
-            className={cn('absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white', MOVE, FILL[zone(landed)], after != null ? 'opacity-100' : 'opacity-0')}
-            style={{ left: at(landed) }}
-          />
+          <span aria-hidden className="absolute -inset-y-1.5 w-1 -translate-x-1/2 rounded-full bg-text shadow-[0_0_0_2px_var(--color-surface)]" style={{ left: at(value) }} />
+          {/* after: on the right edge of a layer as wide as the bar, which a translation moves. The layer comes from the
+              left, so what of it is past the bar is on the left, where nothing scrolls to it. */}
+          <span aria-hidden className={cn('pointer-events-none absolute inset-0 transition-transform', MOVE)} style={{ transform: `translateX(calc(${at(landed)} - 100%))` }}>
+            <span
+              className={cn(
+                'absolute top-1/2 left-full size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-surface shadow-[0_0_0_1px_var(--color-text)] transition-[opacity,background-color]',
+                MOVE,
+                FILL[zone(landed)],
+                after != null ? 'opacity-100' : 'opacity-0',
+              )}
+            />
+          </span>
           {/* target */}
           {target != null && (
             <span aria-hidden className="absolute top-full mt-1 -translate-x-1/2 text-accent" style={{ left: at(target) }}>
@@ -97,7 +104,7 @@ export function HealthBar({ value, liquidation, caution, target, after, max, for
       <div className="flex items-end justify-between gap-3">
         <span className="text-sm font-medium text-muted">{label}</span>
         <span className="flex items-baseline gap-2 text-2xl leading-8 font-semibold tracking-tight nums" aria-hidden>
-          <span className={cn(after != null ? 'text-muted' : TEXT[zone(value)], 'transition-colors duration-500')}>{format(value)}</span>
+          <span className={cn(after != null ? 'text-muted' : TEXT[zone(value)], 'transition-colors duration-320')}>{format(value)}</span>
           {after != null && (
             <>
               <ArrowRight className="size-4 self-center text-muted" />
@@ -109,12 +116,12 @@ export function HealthBar({ value, liquidation, caution, target, after, max, for
       <div className="mt-3 mb-5">{bar}</div>
       <ul className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted" aria-hidden>
         <li className="flex items-center gap-1.5">
-          <span className="h-3 w-1 rounded-full bg-white" />
+          <span className="h-3 w-1 rounded-full bg-text" />
           Now <span className="text-text nums">{format(value)}</span>
         </li>
         {after != null && (
           <li className="flex items-center gap-1.5">
-            <span className={cn('size-2.5 rounded-full border-2 border-white', FILL[zone(after)])} />
+            <span className={cn('size-2.5 rounded-full border-2 border-surface shadow-[0_0_0_1px_var(--color-text)]', FILL[zone(after)])} />
             After <span className="text-text nums">{format(after)}</span>
           </li>
         )}
