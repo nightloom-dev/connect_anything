@@ -18,6 +18,7 @@ import {
   type RpcTransport,
 } from '@solana/kit';
 import { Connection, PublicKey } from '@solana/web3.js';
+import { parseStored } from '../src/recipe.ts';
 
 export type Env = Record<string, string | undefined>;
 
@@ -325,7 +326,12 @@ export function createApi(env: Env) {
 
     ['POST', /^\/api\/recipes$/, async (_, { req, res }) => {
       const recipe = await readJson(req);
-      if (!isObject(recipe)) throw new HttpError(400, 'A recipe is a JSON object');
+      // the same check /r/:id runs, so a link is never made for a recipe its page would refuse
+      try {
+        parseStored(recipe);
+      } catch (error) {
+        throw new HttpError(400, (error as Error).message);
+      }
       await mkdir(recipesDir, { recursive: true });
       if ((await readdir(recipesDir)).length >= MAX_RECIPES) throw new HttpError(507, 'The recipe store is full');
       const id = randomBytes(16).toString('hex');

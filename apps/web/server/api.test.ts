@@ -26,6 +26,7 @@ const USDC = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
 const coreFixture = (name: string) => JSON.parse(readFileSync(new URL(`../../../packages/core/test/fixtures/${name}`, import.meta.url), 'utf8'));
 const KLEND_IDL = JSON.parse(readFileSync(new URL('../../../recipes/kamino-rescue/klend.idl.json', import.meta.url), 'utf8'));
+const RECIPE = JSON.parse(readFileSync(new URL('../../../fixtures/klend-repay-wrong-market.recipe.json', import.meta.url), 'utf8'));
 
 const recipesDir = mkdtempSync(join(tmpdir(), 'recipes-'));
 const servers: Server[] = [];
@@ -245,7 +246,7 @@ test('POST /api/simulate passes on why the simulator refused a recipe', async ()
 
 test('a recipe comes back under the id it got', async () => {
   const base = await app();
-  const recipe = { title: 'Repay', steps: [{ ixName: 'repay' }] };
+  const recipe = RECIPE;
   const created = await post(base, '/api/recipes', recipe);
   assert.equal(created.status, 201);
   assert.match(created.body.id, /^[0-9a-f]{32}$/);
@@ -266,20 +267,20 @@ test('a recipe id has one form, so no path can leave the store', async () => {
 
 test('a recipe is a JSON object of a limited size in a store of a limited size', async () => {
   const base = await app();
-  for (const body of ['nope', '[]', '1', '"text"', 'null']) assert.equal((await post(base, '/api/recipes', body)).status, 400, body);
+  for (const body of ['nope', '[]', '1', '"text"', 'null', '{}', JSON.stringify({ ...RECIPE, steps: [] })]) assert.equal((await post(base, '/api/recipes', body)).status, 400, body);
   assert.equal((await post(base, '/api/recipes', 'x'.repeat(4 * 1024 * 1024 + 1))).status, 413);
 
   const full = mkdtempSync(join(tmpdir(), 'recipes-full-'));
   after(() => rmSync(full, { recursive: true, force: true }));
   for (let i = 0; i < 1000; i++) writeFileSync(join(full, `${i}.json`), '{}');
-  assert.equal((await post(await app({ RECIPES_DIR: full }), '/api/recipes', {})).status, 507);
+  assert.equal((await post(await app({ RECIPES_DIR: full }), '/api/recipes', RECIPE)).status, 507);
   assert.equal(readdirSync(full).length, 1000);
 });
 
 test('the store is created on first use', async () => {
   const parent = mkdtempSync(join(tmpdir(), 'recipes-new-'));
   after(() => rmSync(parent, { recursive: true, force: true }));
-  const { status } = await post(await app({ RECIPES_DIR: join(parent, 'deep', 'recipes') }), '/api/recipes', {});
+  const { status } = await post(await app({ RECIPES_DIR: join(parent, 'deep', 'recipes') }), '/api/recipes', RECIPE);
   assert.equal(status, 201);
 });
 
