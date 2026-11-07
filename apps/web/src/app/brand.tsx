@@ -1,17 +1,35 @@
+import { cn } from '../ui/cn.ts';
+
 export const REPO_URL = 'https://github.com/nightloom-dev/connect_anything';
 export const DOCS_URL = `${REPO_URL}#readme`;
 
 /**
- * The mark: a route drawn on a cobalt sheet. A filled node is the chain you sign on, the square is the program on
- * Solana, and the bus between them turns at right angles, as the lines of the drawings on the landing page do.
+ * The mark, "Slot": the corner marks of a drawing field around a filled block, a slot that takes any program. On a
+ * 32 grid: corners 4 thick with arms of 10, in ink, and a cobalt block of 12. public/favicon.svg is the same drawing,
+ * and the PNGs beside it are drawn from it.
  */
 export function LogoMark({ size = 28, className }: { size?: number; className?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden className={className}>
-      <rect width="32" height="32" rx="3" fill="#1F3FD1" />
-      <path d="M9.5 22.5V16h13V12" stroke="#fff" strokeWidth="2.2" strokeLinejoin="miter" />
-      <circle cx="9.5" cy="22.5" r="3.2" fill="#fff" />
-      <rect x="18.6" y="6.1" width="7.8" height="7.8" fill="#1F3FD1" stroke="#fff" strokeWidth="2.2" />
+      <path d="M4 14V4h10M28 18v10H18" strokeWidth="4" className="stroke-text" />
+      <rect x="10" y="10" width="12" height="12" className="fill-accent" />
+    </svg>
+  );
+}
+
+/**
+ * The name with the device built in: "Anything" stands in the corner marks of the mark, in cobalt. IBM Plex Sans 600
+ * at 28 on a 240 × 42 box, sized by its height: at 42 it is drawn 1:1, with its strokes on whole pixels. The link
+ * preview (OgImage) carries it; the header keeps the mark beside the name in words.
+ */
+export function Wordmark({ height = 42, className }: { height?: number; className?: string }) {
+  return (
+    <svg viewBox="0 0 240 42" width={(height * 240) / 42} height={height} role="img" aria-label="Connect Anything" className={cn('overflow-visible', className)}>
+      <g className="fill-text font-sans text-[28px] font-semibold tracking-[-0.02em]">
+        <text y="28">Connect</text>
+        <text x="120.2" y="28">Anything</text>
+      </g>
+      <path d="M114.5 16V2.5H128M237.5 26v13.5H224" fill="none" strokeWidth="3" className="stroke-accent" />
     </svg>
   );
 }

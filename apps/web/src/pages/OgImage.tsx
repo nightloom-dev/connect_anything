@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import { LogoMark } from '../app/brand.tsx';
+import { Wordmark } from '../app/brand.tsx';
 import { usePageTitle } from '../app/title.ts';
 import { FlowScheme } from './landing/FlowScheme.tsx';
 
@@ -16,10 +16,7 @@ export default function OgImage() {
   return createPortal(
     <div className="bg-grid fixed top-0 left-0 z-100 flex h-[630px] w-[1200px] flex-col overflow-hidden px-[72px] pt-12 pb-10 font-sans text-text">
       <div className="flex items-center gap-5">
-        <span className="flex shrink-0 items-center gap-3">
-          <LogoMark size={36} />
-          <span className="text-[24px] font-semibold tracking-tight">Connect Anything</span>
-        </span>
+        <Wordmark className="shrink-0" />
         <span aria-hidden className="h-px flex-1 bg-text" />
         <span className="label-caps text-[13px]! text-muted">Built on Aurora Intents Connect</span>
       </div>

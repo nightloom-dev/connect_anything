@@ -1,6 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <rect width="32" height="32" rx="3" fill="#1F3FD1"/>
-  <path d="M9.5 22.5V16h13V12" stroke="#fff" stroke-width="2.2"/>
-  <circle cx="9.5" cy="22.5" r="3.2" fill="#fff"/>
-  <rect x="18.6" y="6.1" width="7.8" height="7.8" fill="#1F3FD1" stroke="#fff" stroke-width="2.2"/>
+  <!-- LogoMark (src/app/brand.tsx). On a dark tab the ink goes light and the cobalt lighter, so that both still show. -->
+  <style>
+    path { stroke: #0e1a2b; }
+    rect { fill: #1f3fd1; }
+    @media (prefers-color-scheme: dark) {
+      path { stroke: #f2f5f9; }
+      rect { fill: #6d86f2; }
+    }
+  </style>
+  <path d="M4 14V4h10M28 18v10H18" stroke-width="4"/>
+  <rect x="10" y="10" width="12" height="12"/>
 </svg>
