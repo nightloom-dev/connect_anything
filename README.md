@@ -19,8 +19,8 @@ hackathon.
 A borrower on Kamino keeps their USDC on Base, and their Kamino position on Solana is close to liquidation. To repay it
 today they need a bridge or an exchange, a Solana wallet, SOL for fees, and several transactions in several apps.
 
-Aurora Intents Connect can do this in one step: it bridges the money and runs Solana instructions, signed by an
-intermediary account that belongs to the user. But each Connect integration is written by hand: the instruction
+Aurora Intents Connect can already do this: it bridges the money and runs Solana instructions, signed by the user's
+intermediary account. But each Connect integration is written by hand: the instruction
 discriminator, the account order, the argument encoding, the compute budget. Aurora's own examples, Kamino included,
 are written that way.
 
@@ -28,6 +28,8 @@ Connect Anything does that work from the program's IDL. A Solana protocol team g
 its Anchor program without writing an integration. Its users sign once in the EVM wallet they already have.
 
 ## How it works
+
+The flagship flow, end to end:
 
 ```
 EVM wallet on Base, Arbitrum or Ethereum
@@ -53,7 +55,7 @@ two build on Aurora's SDK and on Connect itself.
    simulator service.
 2. **Form.** Each argument of the chosen instruction becomes a typed field: integers, floats, booleans, public keys,
    strings, bytes, options, vectors, arrays, structs and enums. Anchor's `BorshCoder` encodes the instruction data.
-3. **Accounts.** The resolver fills in what it can. Signers become the user's intermediary. PDAs are derived from the
+3. **Accounts.** The resolver fills in what it can. The signer becomes the user's intermediary. PDAs are derived from the
    seeds in the IDL, fixed addresses come from the IDL, and the intermediary's associated token accounts follow from the
    mint and its token program. The rest comes from the form or from the recipe. The form shows where each account came
    from.
@@ -255,13 +257,13 @@ echo 'TELEGRAM_BOT_TOKEN=...' > .env
 npm start
 ```
 
-| Variable             | Default                      | What it is                                    |
-| -------------------- | ---------------------------- | --------------------------------------------- |
-| `TELEGRAM_BOT_TOKEN` | none, required               | The bot's token from @BotFather               |
-| `APP_URL`            | `http://localhost:5180`      | Where the watcher reads positions             |
-| `PUBLIC_URL`         | `APP_URL`                    | The address the alert links to                |
-| `WATCH_EVERY_S`      | `60`                         | Seconds between checks                        |
-| `WATCH_FILE`         | `apps/watch/data/watches.json` | Where the watches are kept                  |
+| Variable             | Default                        | What it is                      |
+| -------------------- | ------------------------------ | ------------------------------- |
+| `TELEGRAM_BOT_TOKEN` | none, required                 | The bot's token from @BotFather |
+| `APP_URL`            | `http://localhost:5180`        | Where the watcher reads positions |
+| `PUBLIC_URL`         | `APP_URL`                      | The address the alert links to  |
+| `WATCH_EVERY_S`      | `60`                           | Seconds between checks          |
+| `WATCH_FILE`         | `apps/watch/data/watches.json` | Where the watches are kept      |
 
 In the chat with the bot:
 
@@ -296,14 +298,14 @@ cargo test -p sim            # the simulator, offline
 npm run e2e                  # end-to-end, in Chromium
 ```
 
-| Suite                   | Command                         | Tests on 2026-11-08 |
-| ----------------------- | ------------------------------- | ------------------: |
-| `packages/core`         | `npm test -w packages/core`     |                  53 |
-| `apps/web`              | `npm test -w apps/web`          |                 133 |
-| `recipes/kamino-rescue` | `npm test -w recipes/kamino-rescue` |              16 |
-| `apps/watch`            | `npm test -w apps/watch`        |                   4 |
-| `crates/sim`            | `cargo test -p sim`             |                  24 |
-| End-to-end              | `npm run e2e`                   |                 200 |
+| Suite                   | Command                             | Tests on 2026-11-08 |
+| ----------------------- | ----------------------------------- | ------------------: |
+| `packages/core`         | `npm test -w packages/core`         |                  53 |
+| `apps/web`              | `npm test -w apps/web`              |                 133 |
+| `recipes/kamino-rescue` | `npm test -w recipes/kamino-rescue` |                  16 |
+| `apps/watch`            | `npm test -w apps/watch`            |                   4 |
+| `crates/sim`            | `cargo test -p sim`                 |                  24 |
+| End-to-end              | `npm run e2e`                       |                 200 |
 
 The unit tests run offline. The Kamino tests replay one read of a real mainnet wallet, kept in
 `apps/web/server/fixtures`, and compare the rescue recipe with two real repay transactions, kept in
@@ -328,8 +330,7 @@ the end-to-end tests. The screenshots and Lighthouse run without blocking.
 
 ## Still open
 
-- **Retry and Refund on mainnet.** Both have run only against an in-memory backend and the fake Connect of the
-  end-to-end suite, not with real money.
+- **Retry and Refund on mainnet.** Both have run only against an in-memory backend, not with real money.
 - **Source chains.** The app offers Base, Arbitrum and Ethereum, but only Base has paid for a run on mainnet: the one
   run of 2026-11-03. Solana and NEAR as source chains are not implemented.
 - **Packaging.** There is no npm package and no CLI. A recipe leaves the app as TypeScript code or as a `/r/:id` link.

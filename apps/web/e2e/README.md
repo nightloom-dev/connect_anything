@@ -1,9 +1,8 @@
 # End-to-end tests
 
 Characterization tests: they pin what the UI does today, above all where money moves, so that a redesign can change how
-it looks and nothing else. Every request of the page is answered by a mock, so the suite runs offline, and the wallet is
-a mock too. On top of them: axe, the keyboard, the
-layout at 360 px, layout shifts and screenshots.
+it looks and nothing else. A mock answers every request of the page, so the suite runs offline, and the wallet is a mock
+too. On top of the behaviour, the suite checks axe, the keyboard, the layout at 360 px, layout shifts and screenshots.
 
 | File                   | What it pins                                                                                  |
 | ---------------------- | --------------------------------------------------------------------------------------------- |
@@ -92,9 +91,10 @@ A page of the build is ready in well under a second, where the dev server spends
 that is why the page tests moved to the build. The dev server stays for what only it has. `mobile-webkit` (the in-app
 browser of Telegram on iOS) is commented out until there is a WebKit for 1.63.0.
 
-Time, on a 4-CPU machine shared with other suites (load average 7 to 12), 2 workers: `npm run e2e` (162 tests) 5 to 6
-minutes, and `npm run e2e:visual` (44 tests) 2. Before the build, the 89 tests of then took 6.9 minutes on the dev
-server. In CI (2 workers) the same commands run in the `e2e` and `visual` jobs of `.github/workflows/ci.yml`.
+Time, on a 4-CPU machine shared with other suites (load average 7 to 12), 2 workers, measured when the suites had 162
+and 44 tests: `npm run e2e` 5 to 6 minutes, and `npm run e2e:visual` 2. On 2026-11-08 Playwright lists 200 and 48.
+Before the build, the 89 tests of then took 6.9 minutes on the dev server. In CI (2 workers) the same commands run in
+the `e2e` and `visual` jobs of `.github/workflows/ci.yml`.
 
 ## What fails a test
 
@@ -109,8 +109,8 @@ Beyond its own assertions, `support.ts` fails every test that:
 ## Screenshots
 
 `pages.visual.ts` takes every scene of `scenes.ts` as a whole page; `gallery.visual.ts` takes every section of
-`/dev/states` on its own. The baselines are `__screenshots__/<project>/<file>/<name>.png`, 157 of them, drawn on Linux
-with Playwright's Chromium. A picture is taken once the page holds still: the clock stopped at `look.ts` `FROZEN`, the
+`/dev/states` on its own. The baselines are `__screenshots__/<project>/<file>/<name>.png`, drawn on Linux with
+Playwright's Chromium. A picture is taken once the page holds still: the clock stopped at `look.ts` `FROZEN`, the
 fonts and images in, animations and the caret off, the toasts hidden (`visual.css`), and the page's own origin, where it
 is text, written as `https://connect.example` so that the ports of the machine do not show.
 
@@ -121,8 +121,7 @@ A baseline changes only with a person looking at it:
    what the judges will see. A change nobody meant is a bug, not a new baseline.
 3. Commit the pictures with the change that made them, saying why they changed.
 
-A scene or a section
-that is gone leaves its picture behind: delete it by hand.
+A scene or a section that is gone leaves its picture behind: delete it by hand.
 
 Locally a single pixel counts: the same machine draws the same pixels, run after run. Another machine rasterizes font
 edges a little differently, so CI runs the screenshots with `E2E_PIXEL_TOLERANCE=0.01` in a job that does not block,
@@ -246,7 +245,6 @@ The specs pin the words of the money flows on purpose: changing one is a change 
 1. `grep -rn "the old phrase" apps/web/e2e` and change it there, in the same commit as the UI.
 2. If a page moved, change `paths.ts`.
 3. If a role changed (a `status` that became an `alert`), change the helper call, not the phrase.
-
 4. Run `npm run e2e:update` and review the pictures the new words changed (Screenshots, above).
 
 The words the specs lean on most: "Connect wallet" (the run card's in `main`, the header's in the `banner`), "Get

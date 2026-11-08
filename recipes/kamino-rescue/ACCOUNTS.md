@@ -1,25 +1,25 @@
-# The repay of someone else's position on a fork
+# Repaying someone else's position, on a fork
 
-What the recipe of `rescueSteps` does on a fork of mainnet. These are the accounts each instruction takes, where each one
-comes from, and what it costs. Measured by `crates/sim` on 02.11.2026. Each request and its answer are in
-`fixtures/klend-repay*.sim.json` and `*.result.json`. Rerun them with
+What the recipe of `rescueSteps` does on a fork of mainnet: the accounts each instruction takes, where each one comes
+from, and what it costs. Measured by `crates/sim` on 2026-11-02. Each request and its answer are in
+`fixtures/klend-repay*.sim.json` and `*.result.json`. To run them again:
 `SOLANA_RPC_URL=... cargo test -p sim --release -- --ignored`.
 
-The order in `rescueSteps` holds. All five recipes below pass with the accounts exactly as `index.ts` and
-`GET /api/kamino` give them. The intermediary signs the repay of a position it does not own: klend checks the
-obligation only for `has_one = lending_market`.
+The fork confirms the order in `rescueSteps`. All five recipes below pass with the accounts exactly as `index.ts` and
+`GET /api/kamino` provide them. The intermediary signs the repay of a position it does not own, because klend checks
+the obligation only for `has_one = lending_market`.
 
 ## The transaction
 
 1. `refresh_reserve`, once for each reserve of the position: deposits first, then borrows, each reserve only once.
-2. `refresh_obligation`, plus its remaining accounts.
-3. `repay_obligation_liquidity_v2(liquidity_amount)`, plus its remaining accounts.
+2. `refresh_obligation`, with its remaining accounts.
+3. `repay_obligation_liquidity_v2(liquidity_amount)`, with its remaining accounts.
 
 Every reserve has to be refreshed in the same slot as `refresh_obligation`, which in practice means the same
 transaction. A recipe that is too heavy cannot be split into two executions.
 
 Connect adds instructions around the steps. Before them: `AdvanceNonceAccount`, `SetComputeUnitLimit` and
-`SetComputeUnitPrice`, together 450 CU. After them: its fee, a `TransferChecked` of the delivered token from the
+`SetComputeUnitPrice`, 450 CU together. After them: its fee, a `TransferChecked` of the delivered token from the
 intermediary, 105 CU. The figures below include all four. Connect's docs do not name these instructions, so this is the
 simulator's model of them (see `crates/sim/src/simulate.rs`).
 
@@ -49,12 +49,12 @@ Remaining accounts, in this order:
 2. The borrow reserves, in the order of its borrow slots.
 3. Only when the obligation has a referrer: the referrer token state of each borrow.
 
-The count has to be exact (klend `ObligationRemainingAccounts::parse`), otherwise the step fails with
-`InvalidAccountInput` (6006). `refreshRemaining` is klend-sdk's `getRefreshObligationIx().accounts.slice(2)`, which
-follows this order. `rescueSteps` marks every remaining account writable, and it should stay that way. klend writes to
-the referrer token states, and its code can write to a borrow reserve as well (the elevation group accounting and the
-referral fees). Read-only reserves did pass on the fork for the first position below, but that depends on the state
-of the reserve at that slot.
+The count has to be exact (klend `ObligationRemainingAccounts::parse`), or the step fails with `InvalidAccountInput`
+(6006). `refreshRemaining` is klend-sdk's `getRefreshObligationIx().accounts.slice(2)`, which follows this order.
+`rescueSteps` marks every remaining account writable, and it should stay that way: klend writes to the referrer token
+states, and its code can also write to a borrow reserve (the elevation group accounting and the referral fees).
+Read-only reserves did pass on the fork for the first position below, but that depends on the state of the reserve at
+that slot.
 
 ## repay_obligation_liquidity_v2
 
@@ -74,17 +74,17 @@ of the reserve at that slot.
 | 11  | `lending_market_authority`                     |                    | PDA `["lma", lending_market]` of klend                                                       |
 | 12  | `farms_program`                                |                    | `FarmsPZpWu9i7Kky8tPN37rs2TpmMrAZrC7S7vJa91Hr`                                               |
 
-Remaining accounts: only when the obligation is in an elevation group (`elevationGroup > 0`), its deposit reserves in
-the order of the deposit slots. Without them, a position in an elevation group fails with `InvalidAccountInput` (6006).
-This was checked on the fork. They passed both writable, as `repayRemaining` gives them, and read-only.
+Remaining accounts: only when the obligation is in an elevation group (`elevationGroup > 0`), its deposit reserves in the
+order of the deposit slots. Without them, a position in an elevation group fails with `InvalidAccountInput` (6006).
+This was checked on the fork, where they passed both writable, as `repayRemaining` gives them, and read-only.
 
 A debt farm that the position never joined has no user state, and the repay fails. `rescuable` already refuses that
 case.
 
 ## Compute units and bytes
 
-The transaction as Connect would send it, with its four instructions and two signatures. It is a legacy message,
-with no lookup table.
+The transaction as Connect would send it, with its four added instructions and two signatures, as a legacy message with
+no lookup table.
 
 | Position (fixture)                     | Reserves | Debt farm | Elevation group |                  CU | Bytes |
 | -------------------------------------- | -------: | :-------: | :-------------: | ------------------: | ----: |
@@ -93,7 +93,7 @@ with no lookup table.
 | USDT / USDC (`klend-repay-elevation-group`) |   2 |    no     |       yes       |     129,221–130,940 |   935 |
 | six reserves (`klend-repay-six-reserves`) |     6 |    no     |       no        | 250,028–268,490 (warn) | 1134 |
 
-Each instruction, from the logs:
+Per instruction, from the logs:
 
 | Instruction           | CU                                                                                                    |
 | --------------------- | ----------------------------------------------------------------------------------------------------- |
@@ -105,15 +105,15 @@ Each instruction, from the logs:
 The figures move by up to 19k between slots on the same position. A reserve that someone else has refreshed in the
 same slot is cheaper to refresh again.
 
-`refresh_reserves_batch` in place of the separate `refresh_reserve`s was measured too. It saves about 5k CU and 10
-bytes on two reserves and nothing on six, so it is not worth it.
+`refresh_reserves_batch` in place of separate `refresh_reserve` calls was measured too. It saves about 5k CU and 10
+bytes with two reserves and nothing with six, so it is not worth it.
 
 ### Bytes are not the limit, compute units are
 
 Every position that fits in 200k CU is far under 1232 bytes, so a lookup table changes nothing that matters for a
 repay. If one is wanted anyway, `284iwGtA9X9aLy3KsyV8uT2pXLARhYbiSi5SiM2g47M2` was found in recent klend transactions on
-mainnet. It holds 256 addresses, 10 of the 14 accounts of `klend-repay` among them. Its owner is not known, so it is not
-known to be Kamino's, and it can be extended or closed at any time. Passed in `lookupTables`, it makes the message v0
+mainnet. It holds 256 addresses, including 10 of the 14 accounts of `klend-repay`. Its owner is not known, so it is not
+known to be Kamino's, and it can be extended or closed at any time. Passed in `lookupTables`, it makes the message v0,
 with the same compute units:
 
 | Fixture                     | Bytes without a table | Bytes with this one |
@@ -123,17 +123,17 @@ with the same compute units:
 
 ### For `estimateCu`
 
-`estimateCu` is now `n × 24k + 32k + (debt farm ? 67k : 37k)`. That gives 213k for the six-reserve position, which
-measures 250–268k, because it leaves out how `refresh_obligation` grows with each reserve. A fit to the measurements,
-on the safe side:
+`estimateCu` is currently `n × 24k + 32k + (debt farm ? 67k : 37k)`. That gives 213k for the six-reserve position,
+which measures 250–268k, because it leaves out how `refresh_obligation` grows with each reserve. A fit to the
+measurements, erring on the safe side:
 
 ```
 n × 38_000 + 42_000 + (debt farm ? 13_000 : 0) + (elevation group ? 13_000 : 0)
 ```
 
-Here n is the number of distinct reserves. The fit gives 118k for the first position (measured 116k), 131k for the
-farm and for the elevation group (130k and 131k), and 270k for the six-reserve position (250–268k). It goes over 200k
-from 5 reserves, or from 4 with a debt farm or an elevation group. Such a position does not fit in one Connect
+Here n is the number of distinct reserves. The fit gives 118k for the first position (measured 116k), 131k for the farm
+and for the elevation group (measured 130k and 131k), and 270k for the six-reserve position (measured 250–268k). It goes
+over 200k from 5 reserves, or from 4 with a debt farm or an elevation group. Such a position does not fit in one Connect
 transaction.
 
 ## How it fails
