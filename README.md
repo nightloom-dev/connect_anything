@@ -14,6 +14,17 @@ hackathon.
   Solana <!-- FILL: Solscan URL of the transaction that ran the steps -->
 - **Fork measurements:** [fixtures/README.md](fixtures/README.md)
 
+## Try it in two minutes
+
+1. **A program with no code written for it.** Open `/build`, then under "Open a ready recipe" press "Repay a USDC debt".
+   The four klend instructions are filled in, accounts and all. Press "Next: simulate" to run them on a fork of mainnet:
+   compute units, bytes and logs. The three swaps next to it are Orca and Meteora, the same way.
+2. **The rescue.** Open `/kamino`, enter `2APx2UH73Vnwua5sUpSfrEmGkxE4v33Y5y4GKACTHATf` (a live position with a USDC
+   debt), pick a target LTV, and read the fork check and the quote before any signature.
+3. **A failure and its refund.** `fixtures/klend-repay-wrong-market.recipe.json` repays against the wrong market. The
+   simulator names the error, and a real run of it ends in `OPERATION_FAILED` and Refund. See
+   [the demo failure](fixtures/README.md#the-demo-failure).
+
 ## The problem
 
 A borrower on Kamino keeps their USDC on Base, and their Kamino position on Solana is close to liquidation. To repay it
@@ -198,12 +209,12 @@ Read from `apps/web/.env` or from the environment.
 
 ### Pages
 
-| Path      | What it is                                                                  |
-| --------- | --------------------------------------------------------------------------- |
-| `/`       | The landing page: what the project does, and the two ways in                |
-| `/build`  | The builder in four screens: program, form, simulation, run                 |
-| `/r/:id`  | Run a recipe someone shared                                                 |
-| `/kamino` | Repay a Kamino debt. `?wallet=&obligation=` fills it in                     |
+| Path      | What it is                                                                                         |
+| --------- | -------------------------------------------------------------------------------------------------- |
+| `/`       | The landing page: what the project does, and the two ways in                                       |
+| `/build`  | The builder in four screens: program, form, simulation, run. Four ready recipes start it filled in |
+| `/r/:id`  | Run a recipe someone shared                                                                        |
+| `/kamino` | Repay a Kamino debt. `?wallet=&obligation=` fills it in                                            |
 
 On `/r/:id`, before anything can be signed, the page lists the recipe's programs, instructions and accounts, says that
 whoever shared the link made it, and compares it with the IDL the program publishes, where there is one.
@@ -348,9 +359,8 @@ the end-to-end tests. The screenshots and Lighthouse run without blocking.
   the obligation, so the work cannot be split into two executions. Only USDC debts are supported.
 - **Simulation is optional.** Without `SIM_URL` the builder cannot simulate, and a legacy IDL such as klend's on-chain
   one needs an uploaded file. The shared run page `/r/:id` does not simulate.
-- **Account resolution.** On Meteora DLMM and DAMM v2 the resolver does not find all of the intermediary's token
-  accounts, so they are typed in, and such a recipe fails when another intermediary runs it. See
-  [fixtures/README.md](fixtures/README.md#open-the-intermediarys-output-accounts).
+- **Account resolution.** An IDL does not say which accounts hold tokens, so the intermediary's token accounts are
+  recognized by their names. A name that fits no rule stays open, to be typed in, and the simulation then checks it.
 - **Open server.** Anyone who can reach the web server can create executions with its key, and the recipe store has no
   rate limit: once it holds 1000 recipes, new ones get 507.
 

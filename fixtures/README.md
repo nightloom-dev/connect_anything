@@ -84,18 +84,20 @@ account of it, and that is what makes Connect add the opening. It accounts for 1
 - **A minimum out of 1.** `min_amount_out`, `other_amount_threshold` and `minimum_amount_out` are 1 lamport here, so the
   fixtures do not depend on the price. A real recipe sets a real minimum.
 
-### Open: the intermediary's output accounts
+### The intermediary's own accounts
 
-`resolveAccounts` finds every account of the intermediary on Whirlpools (`token_owner_account_a` and `_b`, through
-`token_mint_a` and `_b`), so that recipe works for any intermediary. On the other two it leaves some accounts open. The
-fixtures have the stand-in's accounts typed in: its wSOL account `ADKjaG2T4AqDPrpSGFvAjYRioN6GvgJZvwFxQr4Xdmgi` on both,
-and on DAMM v2 also its USDC account `E9yZFuPob5nB8ZnviNS7TrmAwE2sNgixNvHjPN6gcWYU`. That is correct for the simulation,
-but run by another intermediary, such a recipe would still name the stand-in's accounts and fail.
+`resolveAccounts` finds every token account of the intermediary on all three, so each recipe works for whoever runs it:
 
-- DLMM `user_token_out`: two mints fit (`token_x_mint`, `token_y_mint`). When the funded mint is one of the two, the
-  outgoing account could take the other.
-- DAMM v2 `input_token_account` and `output_token_account`: `OWN_TOKEN_ACCOUNT` expects a prefix such as `user_` or
-  `owner_`, so these names are not recognized at all.
+- Whirlpools `token_owner_account_a` and `_b`, through `token_mint_a` and `_b`.
+- DLMM `user_token_in` is the account of the funded mint, and `user_token_out` that of the other mint of the pair.
+- DAMM v2 `input_token_account` and `output_token_account`, the same way, with each side's token program.
+
+## Ready recipes
+
+`klend-repay`, `orca-whirlpool-swap`, `meteora-dlmm-swap` and `meteora-damm-v2-swap` each have a `.recipe.json`: the
+recipe in the form the web stores, every account and argument filled in. The builder offers them under "Open a ready
+recipe". Each builds exactly the instructions of its `.sim.json` for the stand-in, and only addresses of the actual
+intermediary for any other (`apps/web/src/features/builder/examples.test.ts`).
 
 ## The demo failure
 

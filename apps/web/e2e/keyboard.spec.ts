@@ -21,7 +21,6 @@ const REPAY_ACCOUNTS = {
   'repay_accounts.reserve_liquidity_mint': 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
   'repay_accounts.reserve_destination_liquidity': 'Bgq7trRgVMeq33yt235zM2onQ4bRDBsY5EWiTetF4qw6',
   'repay_accounts.token_program': 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
-  'repay_accounts.instruction_sysvar_account': 'Sysvar1nstructions1111111111111111111111111',
   lending_market_authority: '9DrvZvyWh1HuAoZxvYWMvkf2XCzryCpGgHqrMjyDWpmo',
   farms_program: 'FarmsPZpWu9i7Kky8tPN37rs2TpmMrAZrC7S7vJa91Hr',
 };
@@ -111,11 +110,11 @@ test('/build from the keyboard: an example, the instruction search, its accounts
   await walk.press('Enter');
   await expect(page.getByRole('heading', { name: REPAY, level: 2 })).toBeVisible();
 
-  // the argument first, as the form has it, then the accounts
+  // the argument first, as the form has it, then the accounts; the amount and the sysvar come filled in
   const delivered = page.getByLabel('Uses the amount delivered');
   await walk.tabTo(delivered);
-  await walk.press('Space');
   await expect(delivered).toBeChecked();
+  await expect(page.getByLabel('Address of repay_accounts.instruction_sysvar_account', { exact: true })).toHaveValue('Sysvar1nstructions1111111111111111111111111');
   for (const [name, value] of Object.entries(REPAY_ACCOUNTS)) {
     await walk.tabTo(page.getByLabel(`Address of ${name}`, { exact: true }));
     await walk.type(value);
