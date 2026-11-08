@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { ExecutionStatus, Phase } from '@aurora-is-near/intents-connect';
 import { STAGE_OF } from '../../connect.ts';
-import { BASE_USDC, SOLANA_USDC } from '../../kamino.ts';
 import type { StageState } from '../../ui/Timeline.tsx';
 import { enter, flowOf, progressStages, type Entered, type Flow } from './progress.ts';
+
+const BASE_USDC = 'nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near';
+const SOLANA_USDC = 'nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near';
 
 const drawn = (status: ExecutionStatus | undefined, now: StageState, phase: Phase, flow?: Flow, at = status ? STAGE_OF[status] : -1) =>
   progressStages({ at, now, status, phase, flow, note: 'the note' });
@@ -69,8 +71,8 @@ test('the flow comes from what the execution records', () => {
   assert.equal(flowOf(undefined), 'bridge-in');
   assert.equal(flowOf({ executionMode: 'steps_only' }), 'steps-only');
   assert.equal(flowOf({ metadata: { intentsConnectFlow: 'steps-only' }, quote: {} }), 'steps-only');
-  assert.equal(flowOf({ executionMode: 'quote_with_steps', quote: { originAsset: BASE_USDC.assetId, destinationAsset: SOLANA_USDC } }), 'bridge-in');
-  assert.equal(flowOf({ executionMode: 'quote_with_steps', quote: { originAsset: SOLANA_USDC, destinationAsset: BASE_USDC.assetId } }), 'refund');
+  assert.equal(flowOf({ executionMode: 'quote_with_steps', quote: { originAsset: BASE_USDC, destinationAsset: SOLANA_USDC } }), 'bridge-in');
+  assert.equal(flowOf({ executionMode: 'quote_with_steps', quote: { originAsset: SOLANA_USDC, destinationAsset: BASE_USDC } }), 'refund');
 });
 
 /** What the page has seen after reading the execution at each of these statuses, one read a second from 4:54:00. */

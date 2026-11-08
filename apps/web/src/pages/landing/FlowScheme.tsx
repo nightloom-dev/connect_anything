@@ -1,5 +1,7 @@
 import { useId, type CSSProperties } from 'react';
+import { CU_LIMIT } from '../../limits.ts';
 import { cn } from '../../ui/cn.ts';
+import { VERIFIED } from './facts.ts';
 
 // The landing page's hero drawing: one run from an EVM chain, through Intents Connect, to a program on Solana.
 // Laid out across from 960 px and top to bottom below that; styles in styles/landing.css. The animation finishes within
@@ -18,8 +20,8 @@ export const SOURCES = ['Base', 'Arbitrum', 'Ethereum'] as const;
 export type Source = (typeof SOURCES)[number];
 
 const INSTRUCTIONS = ['refresh_reserve ×2', 'refresh_obligation', 'repay_obligation_liquidity_v2'];
-// 115,948 of the 200,000 compute units Connect allows for one transaction
-const CU_SHARE = 115_948 / 200_000;
+// the Kamino repay of the proof table, against what Connect allows
+const CU_SHARE = VERIFIED[0].computeUnits / CU_LIMIT;
 /** How much slower Run again plays, so that the eye can follow the callouts. */
 const SLOW = 1.8;
 

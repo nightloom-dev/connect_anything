@@ -1,5 +1,5 @@
 import { Component, useEffect, useState, type ReactNode } from 'react';
-import { Check, Copy as CopyIcon, RotateCw } from 'lucide-react';
+import { RotateCw } from 'lucide-react';
 import { explain } from './connect.ts';
 import { followsIntermediary, type Row } from './recipe.ts';
 import { Address, Alert, Badge, Button } from './ui/index.ts';
@@ -93,20 +93,6 @@ export class Boundary extends Component<{ children: ReactNode }, { error?: Error
   render() {
     return this.state.error ? <Failure error={this.state.error} /> : this.props.children;
   }
-}
-
-export function Copy({ text }: { text: string }) {
-  const [done, setDone] = useState(false);
-  const copy = () =>
-    navigator.clipboard?.writeText(text).then(
-      () => setDone(true),
-      () => {}, // the text is on the page and can be selected by hand
-    );
-  return (
-    <Button size="sm" icon={done ? <Check className="text-success" /> : <CopyIcon />} onClick={copy}>
-      {done ? 'Copied' : 'Copy'}
-    </Button>
-  );
 }
 
 export const short = (value: string) => `${value.slice(0, 4)}…${value.slice(-4)}`;

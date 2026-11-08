@@ -1,6 +1,12 @@
 {
   "name": "connect-anything",
   "private": true,
+  "description": "Turn an Anchor program on Solana into a button anyone can press from an EVM chain, on Aurora Intents Connect",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nightloom-dev/connect_anything"
+  },
   "workspaces": ["apps/*", "packages/*", "recipes/*"],
   "scripts": {
     "dev": "npm run dev -w apps/web",

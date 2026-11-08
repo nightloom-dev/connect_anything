@@ -1,6 +1,7 @@
 {
-  "name": "web",
+  "name": "@connect-anything/web",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=22.18"

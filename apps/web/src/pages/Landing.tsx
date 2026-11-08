@@ -2,13 +2,14 @@ import { useState, type ReactNode } from 'react';
 import { ArrowRight, ArrowUpRight, Blocks, Check, LifeBuoy, RotateCcw } from 'lucide-react';
 import { Link } from 'wouter';
 import { usePageTitle } from '../app/title.ts';
+import { CU_LIMIT, TX_BYTES_LIMIT } from '../limits.ts';
 import { buttonClass } from '../ui/Button.tsx';
 import { cn } from '../ui/cn.ts';
 import { Tooltip } from '../ui/Tooltip.tsx';
 import { CALLOUTS, FlowScheme, FlowSchemeNarrow, SourcePicker, type Source } from './landing/FlowScheme.tsx';
 import { useDrawOnView } from './landing/useDrawOnView.ts';
 import { WatcherPlot } from './landing/WatcherPlot.tsx';
-import { CU_LIMIT, FIXTURES_URL, PROOF_RUNS, SOLSCAN, SOURCE_CHAINS, TX_BYTES_LIMIT, VERIFIED, WATCHER_URL, type ProofRun, type VerifiedProgram } from './landing/facts.ts';
+import { FIXTURES_URL, PROOF_RUNS, SOLSCAN, SOURCE_CHAINS, VERIFIED, WATCHER_URL, type ProofRun, type VerifiedProgram } from './landing/facts.ts';
 
 // The landing page is drawn as a set of five sheets: the route of a run with its callouts, the problem, the steps,
 // the proof and the watcher. Each sheet spans the window and keeps its words to the content width.
