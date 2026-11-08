@@ -438,7 +438,7 @@ function Proof() {
       <ProofTable />
       <ProofList />
       <div className="mt-5 flex flex-col gap-3 text-sm text-muted sm:flex-row sm:items-center sm:justify-between">
-        <p>Paid from Base, Arbitrum or Ethereum.</p>
+        <p>Simulated, so no money moved. In the app, each is paid from Base, Arbitrum or Ethereum.</p>
         <External href={FIXTURES_URL}>How these were measured</External>
       </div>
       {PROOF_RUNS.length > 0 && <MainnetRuns runs={PROOF_RUNS} />}
