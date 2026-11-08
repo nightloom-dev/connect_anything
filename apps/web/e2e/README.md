@@ -118,7 +118,7 @@ A baseline changes only with a person looking at it:
 
 1. `npm run e2e:update` (or `-- pages.visual.ts -g kamino` for some) draws the pictures that differ and the missing ones.
 2. Look at every changed picture in the diff of the commit (`git difftool`, or the pull request's image diff): it is
-   what the judges will see. A change nobody meant is a bug, not a new baseline.
+   what visitors will see. A change nobody meant is a bug, not a new baseline.
 3. Commit the pictures with the change that made them, saying why they changed.
 
 A scene or a section that is gone leaves its picture behind: delete it by hand.
@@ -235,7 +235,7 @@ find one by a phrase of it. Page paths are in `paths.ts`.
 3. Assert the words that tell the person what happened, then what happened behind them: `connect.list()`,
    `connect.requests`, `wallet.calls(…)`. A state is about money, so check the money: who signs what, what is sent where.
 4. A state no knob can reach gets `test.fixme(…)` with the reason in its body, never a skipped assertion.
-5. If a judge or a person will see the state, add it to `scenes.ts` as well: axe, the 360 px check and the screenshots
+5. If a visitor will see the state, add it to `scenes.ts` as well: axe, the 360 px check and the screenshots
    then cover it. Its baseline comes from `npm run e2e:update`.
 
 ## After a deliberate change of words
