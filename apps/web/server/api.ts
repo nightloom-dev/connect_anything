@@ -24,6 +24,9 @@ export type Env = Record<string, string | undefined>;
 
 const PUBLIC_RPC = 'https://api.mainnet-beta.solana.com';
 const CONNECT_PROXY = '/api/intents-connect/';
+// The only calls the SDK (7.28.0) sends with the key: createExecution and createStepsExecution.
+// The wallet segment allows no '%', '/' or '\' and is never '.' or '..', so it cannot resolve to another path upstream.
+const CONNECT_CREATE = /^api\/v1\/executions\/(?!\.\.?(?:\/|\?|$))[\w.~-]+(?:\/steps)?(?:\?.*)?$/;
 const RECIPE_ID = /^[0-9a-f]{32}$/;
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
 const MAX_BODY = 4 * 1024 * 1024; // klend, one of the largest real IDLs, is 240 KB
@@ -270,10 +273,12 @@ export function createApi(env: Env) {
       throw new HttpError(502, 'Intents Connect did not answer');
     });
 
-  // Known limit: any path on Connect goes through with the key, whoever can reach this server can spend it
+  // Known limit: anyone who can reach this server can still create executions with the key
   async function proxyConnect(url: string, req: IncomingMessage, res: ServerResponse) {
+    const path = url.slice(CONNECT_PROXY.length);
+    if (req.method !== 'POST' || !CONNECT_CREATE.test(path)) throw new HttpError(404, 'The key proxy only forwards the create calls of Intents Connect');
     const body = await readBody(req);
-    const upstream = await connect(url.slice(CONNECT_PROXY.length), req.method, body.length ? body : undefined);
+    const upstream = await connect(path, req.method, body.length ? body : undefined);
     const type = upstream.headers.get('content-type') ?? 'application/json';
     const bytes = Buffer.from(await upstream.arrayBuffer());
     // the status stays because the SDK acts on 409 and 503, but a gateway's HTML page is not an answer to pass on

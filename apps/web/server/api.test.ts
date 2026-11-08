@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer, type IncomingHttpHeaders, type RequestListener, type Server, type ServerResponse } from 'node:http';
+import { createServer, request, type IncomingHttpHeaders, type IncomingMessage, type RequestListener, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -307,33 +307,73 @@ test('GET /api/tokens is a JSON error when Connect fails', async () => {
   }
 });
 
-test('the proxy adds the key and passes everything else on as it is', async () => {
+const CREATE = '/api/intents-connect/api/v1/executions/0xabc';
+
+test('the proxy adds the key and passes the create calls on as they are', async () => {
   const connect = await fake((_, res) => send(res, 201, { ok: true }, 'application/json; charset=utf-8'));
   const base = await app({ CONNECT_API_URL: connect.url });
-  const { status, type, body } = await call(base, '/api/intents-connect/api/v1/executions/0xabc?flow=x&y=1', { method: 'PATCH', body: '{"a":1}' });
+  const { status, type, body } = await call(base, `${CREATE}?flow=x&y=1`, { method: 'POST', body: '{"a":1}' });
   assert.deepEqual([status, type, body], [201, 'application/json; charset=utf-8', { ok: true }]);
   const [{ method, url, headers, body: sent }] = connect.seen;
-  assert.deepEqual([method, url, headers['x-api-key'], headers['content-type'], sent], ['PATCH', '/api/v1/executions/0xabc?flow=x&y=1', KEY, 'application/json', '{"a":1}']);
+  assert.deepEqual([method, url, headers['x-api-key'], headers['content-type'], sent], ['POST', '/api/v1/executions/0xabc?flow=x&y=1', KEY, 'application/json', '{"a":1}']);
 
-  await call(base, '/api/intents-connect/api/v1/x');
-  assert.deepEqual([connect.seen[1].method, connect.seen[1].body], ['GET', '']);
+  await call(base, `${CREATE}/steps`, { method: 'POST' });
+  assert.deepEqual([connect.seen[1].method, connect.seen[1].url, connect.seen[1].body], ['POST', '/api/v1/executions/0xabc/steps', '']);
+});
+
+// sent as written: fetch would resolve the dots before they reach the server
+async function rawCall(base: string, method: string, path: string) {
+  const { hostname, port } = new URL(base);
+  const req = request({ hostname, port, method, path });
+  req.end();
+  const [res] = (await once(req, 'response')) as [IncomingMessage];
+  let text = '';
+  for await (const chunk of res) text += chunk;
+  assert.ok(!text.includes(KEY), `${path} leaked the key: ${text}`);
+  return { status: res.statusCode, body: JSON.parse(text) };
+}
+
+test('the proxy forwards nothing but the create calls', async () => {
+  const connect = await fake((_, res) => send(res, 200, {}));
+  const base = await app({ CONNECT_API_URL: connect.url });
+  const refused: [string, string][] = [
+    ['GET', 'api/v1/executions/0xabc'],
+    ['DELETE', 'api/v1/executions/0xabc'],
+    ['POST', 'api/v1/supported_tokens'],
+    ['POST', 'api/v1/executions/0xabc/submit'],
+    ['POST', 'api/v1/executions/0xabc/intermediary'],
+    ['POST', 'api/v1/executions/deposit/submit'],
+    ['POST', 'api/v2/executions/0xabc'],
+    ['POST', 'api/v1/executions/..'],
+    ['POST', 'api/v1/executions/../../admin'],
+    ['POST', 'api/v1/executions/./steps'],
+    ['POST', 'api/v1/executions/%2e%2e/steps'],
+    ['POST', 'api/v1/executions/0xabc%2F..%2Fadmin'],
+    ['POST', 'api/v1/executions/0xabc\\..\\..\\admin'],
+    ['POST', '/evil.example/api/v1/executions/0xabc'],
+  ];
+  for (const [method, path] of refused) {
+    const { status, body } = await rawCall(base, method, `/api/intents-connect/${path}`);
+    assert.deepEqual([status, typeof body.error], [404, 'string'], `${method} ${path}`);
+  }
+  assert.equal(connect.seen.length, 0);
 });
 
 test('the proxy keeps the statuses the SDK acts on', async () => {
   for (const status of [400, 409, 503]) {
     const answer = { error: 'from Connect', status };
     const connect = await fake((_, res) => send(res, status, answer));
-    const got = await call(await app({ CONNECT_API_URL: connect.url }), '/api/intents-connect/api/v1/x', { method: 'POST', body: '{}' });
+    const got = await call(await app({ CONNECT_API_URL: connect.url }), CREATE, { method: 'POST', body: '{}' });
     assert.deepEqual([got.status, got.body], [status, answer]);
   }
 });
 
 test('the proxy never passes a failure on as anything but JSON', async () => {
-  const down = await call(await app(), '/api/intents-connect/api/v1/x', { method: 'POST', body: '{}' });
+  const down = await call(await app(), CREATE, { method: 'POST', body: '{}' });
   assert.deepEqual([down.status, down.body], [502, { error: 'Intents Connect did not answer' }]);
 
   const connect = await fake((_, res) => send(res, 503, '<html>gateway</html>', 'text/html'));
-  const gateway = await call(await app({ CONNECT_API_URL: connect.url }), '/api/intents-connect/api/v1/x');
+  const gateway = await call(await app({ CONNECT_API_URL: connect.url }), CREATE, { method: 'POST', body: '{}' });
   assert.deepEqual([gateway.status, gateway.type], [503, 'application/json']);
 });
 
@@ -344,13 +384,13 @@ test('the proxy does not follow a redirect, which would take the key along', asy
     res.setHeader('location', elsewhere.url);
     res.end();
   });
-  assert.equal((await call(await app({ CONNECT_API_URL: connect.url }), '/api/intents-connect/api/v1/x')).status, 502);
+  assert.equal((await call(await app({ CONNECT_API_URL: connect.url }), CREATE, { method: 'POST', body: '{}' })).status, 502);
   assert.equal(elsewhere.seen.length, 0);
 });
 
 test('the proxy has a body limit', async () => {
   const connect = await fake((_, res) => send(res, 200, {}));
-  assert.equal((await post(await app({ CONNECT_API_URL: connect.url }), '/api/intents-connect/api/v1/x', 'x'.repeat(4 * 1024 * 1024 + 1))).status, 413);
+  assert.equal((await post(await app({ CONNECT_API_URL: connect.url }), CREATE, 'x'.repeat(4 * 1024 * 1024 + 1))).status, 413);
   assert.equal(connect.seen.length, 0);
 });
 
