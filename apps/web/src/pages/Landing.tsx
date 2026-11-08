@@ -62,12 +62,13 @@ function Sheet({ n, id, label, title, lead, children, className }: { n: number; 
 }
 
 /**
- * Under the drawing: Run again, which plays the same run once more, slower, so that the callouts can be followed. With
- * motion reduced there is no run to play again.
+ * Under the drawing: how to pick the chain (its boxes are buttons, see SourcePicker), and Run again, which replays the
+ * run more slowly. With reduced motion there is nothing to replay.
  */
 function RunControls({ onAgain }: { onAgain: () => void }) {
   return (
     <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 md:mt-3">
+      <p className="text-sm text-muted">Press Base, Arbitrum or Ethereum on the drawing to pay from it.</p>
       <button
         type="button"
         onClick={onAgain}
