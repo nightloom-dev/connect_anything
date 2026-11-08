@@ -81,7 +81,7 @@ impl Drop for Waiting<'_> {
     }
 }
 
-fn message(status: StatusCode, text: impl Into<String>) -> Response {
+fn json_error(status: StatusCode, text: impl Into<String>) -> Response {
     (status, Json(json!({ "message": text.into() }))).into_response()
 }
 
@@ -89,14 +89,14 @@ async fn simulate_route(State(app): State<App>, body: Bytes) -> Response {
     let started = Instant::now();
     let request: SimRequest = match serde_json::from_slice(&body) {
         Ok(request) => request,
-        Err(error) => return message(StatusCode::BAD_REQUEST, format!("Not a simulation request: {error}")),
+        Err(error) => return json_error(StatusCode::BAD_REQUEST, format!("Not a simulation request: {error}")),
     };
     let parsed = match simulate::parse(&request) {
         Ok(parsed) => parsed,
-        Err(problem) => return message(StatusCode::BAD_REQUEST, format!("Not a simulation request: {problem}")),
+        Err(problem) => return json_error(StatusCode::BAD_REQUEST, format!("Not a simulation request: {problem}")),
     };
     let Some(slot) = app.slot().await else {
-        return message(StatusCode::SERVICE_UNAVAILABLE, "The simulator is busy: try again in a few seconds");
+        return json_error(StatusCode::SERVICE_UNAVAILABLE, "The simulator is busy: try again in a few seconds");
     };
     let run = simulate::simulate(&app.rpc, &app.cache, parsed, request.idls.unwrap_or_default(), slot);
     match tokio::time::timeout(DEADLINE, run).await {
@@ -106,16 +106,16 @@ async fn simulate_route(State(app): State<App>, body: Bytes) -> Response {
         }
         Ok(Err(Failure::Mainnet(problem))) => {
             tracing::warn!("simulate could not read mainnet: {problem}");
-            message(StatusCode::SERVICE_UNAVAILABLE, format!("The simulator could not read mainnet: {problem}"))
+            json_error(StatusCode::SERVICE_UNAVAILABLE, format!("The simulator could not read mainnet: {problem}"))
         }
-        Ok(Err(Failure::Unsupported(problem))) => message(StatusCode::UNPROCESSABLE_ENTITY, problem),
+        Ok(Err(Failure::Unsupported(problem))) => json_error(StatusCode::UNPROCESSABLE_ENTITY, problem),
         Ok(Err(Failure::Internal(problem))) => {
             tracing::error!("simulate failed: {problem}");
-            message(StatusCode::INTERNAL_SERVER_ERROR, problem)
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, problem)
         }
         Err(_) => {
             tracing::warn!("simulate gave up after {} s", DEADLINE.as_secs());
-            message(StatusCode::SERVICE_UNAVAILABLE, format!("The simulator gave up after {} s: mainnet was too slow to read", DEADLINE.as_secs()))
+            json_error(StatusCode::SERVICE_UNAVAILABLE, format!("The simulator gave up after {} s: mainnet was too slow to read", DEADLINE.as_secs()))
         }
     }
 }
@@ -123,7 +123,7 @@ async fn simulate_route(State(app): State<App>, body: Bytes) -> Response {
 async fn convert_route(body: Bytes) -> Response {
     match convert::convert(&body) {
         Ok(idl) => Json(idl).into_response(),
-        Err(problem) => message(StatusCode::BAD_REQUEST, problem),
+        Err(problem) => json_error(StatusCode::BAD_REQUEST, problem),
     }
 }
 
@@ -131,15 +131,15 @@ async fn convert_route(body: Bytes) -> Response {
 async fn require_token(State(app): State<App>, request: Request, next: Next) -> Response {
     if let Some(token) = &app.token {
         let given = request.headers().get("x-sim-token").map(|value| value.as_bytes()).unwrap_or_default();
-        if !same(given, token.as_bytes()) {
-            return message(StatusCode::UNAUTHORIZED, "Missing or wrong x-sim-token");
+        if !constant_time_eq(given, token.as_bytes()) {
+            return json_error(StatusCode::UNAUTHORIZED, "Missing or wrong x-sim-token");
         }
     }
     next.run(request).await
 }
 
-/// Compares in time that does not depend on where the two differ.
-fn same(a: &[u8], b: &[u8]) -> bool {
+/// Compares two tokens in constant time, so the time taken does not reveal where they differ.
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len() && a.iter().zip(b).fold(0u8, |diff, (x, y)| diff | (x ^ y)) == 0
 }
 
@@ -166,7 +166,10 @@ async fn main() {
     let address: SocketAddr = format!("{host}:{port}").parse().expect("SIM_HOST and SIM_PORT make an address");
     let listener = tokio::net::TcpListener::bind(address).await.unwrap_or_else(|error| panic!("cannot listen on {address}: {error}"));
     tracing::info!("simulator listening on http://{address}, {parallel} simulations at once");
-    axum::serve(listener, router(App::new(rpc_url, token, parallel))).with_graceful_shutdown(stopped()).await.expect("the server");
+    axum::serve(listener, router(App::new(rpc_url, token, parallel)))
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .expect("the server stopped with an error");
 }
 
 fn router(app: App) -> Router {
@@ -181,13 +184,13 @@ fn router(app: App) -> Router {
 
 /// Docker and systemd stop a service with SIGTERM, a terminal with SIGINT. As PID 1 in a container, a signal without a
 /// handler is ignored, and `docker stop` would wait ten seconds and kill it.
-async fn stopped() {
-    let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).expect("a SIGTERM handler");
+async fn shutdown_signal() {
+    let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).expect("cannot install the SIGTERM handler");
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {}
         _ = terminate.recv() => {}
     }
-    tracing::info!("stopping: answering what is running, taking nothing new");
+    tracing::info!("shutting down: finishing the requests in flight");
 }
 
 #[cfg(test)]
@@ -198,10 +201,10 @@ mod tests {
 
     #[test]
     fn compares_tokens() {
-        assert!(same(b"secret", b"secret"));
-        assert!(!same(b"secret", b"secreT"));
-        assert!(!same(b"secret", b"secret!"));
-        assert!(!same(b"", b"secret"));
+        assert!(constant_time_eq(b"secret", b"secret"));
+        assert!(!constant_time_eq(b"secret", b"secreT"));
+        assert!(!constant_time_eq(b"secret", b"secret!"));
+        assert!(!constant_time_eq(b"", b"secret"));
     }
 
     #[tokio::test]
