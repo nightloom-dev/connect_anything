@@ -1,6 +1,7 @@
 {
-  "name": "web",
+  "name": "@connect-anything/web",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=22.18"
@@ -8,6 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "test": "node --test '{server,src}/**/*.test.ts'",
     "e2e": "playwright test -c e2e/playwright.config.ts --project=desktop --project=mobile --project=dev",

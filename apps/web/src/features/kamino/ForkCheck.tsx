@@ -1,12 +1,9 @@
 import { useId, type ReactNode } from 'react';
 import { FlaskConical, RotateCw } from 'lucide-react';
 import type { SimResult } from '@connect-anything/core';
+import { CU_LIMIT, TX_BYTES_LIMIT } from '../../limits.ts';
 import { Badge, Button, Card, Meter, Skeleton, Spinner, cn } from '../../ui/index.ts';
 import type { ForkCheck } from './fork.ts';
-
-/** What Connect allows a transaction: about 200k compute units, and Solana's 1232 bytes. */
-export const CU_MAX = 200_000;
-export const BYTES_MAX = 1232;
 
 const VERDICT = {
   ok: { variant: 'ok', text: 'Passed' },
@@ -28,8 +25,8 @@ function Meters({ result, stale = false }: { result: SimResult; stale?: boolean 
         </p>
       )}
       <div className={cn('grid gap-x-6 gap-y-4 @md:grid-cols-2', stale && 'grayscale [&_.text-text]:text-muted')}>
-        <Meter label="Compute units" value={result.computeUnits} max={CU_MAX} unit="CU" />
-        <Meter label="Transaction size" value={result.txBytes} max={BYTES_MAX} unit="bytes" />
+        <Meter label="Compute units" value={result.computeUnits} max={CU_LIMIT} unit="CU" />
+        <Meter label="Transaction size" value={result.txBytes} max={TX_BYTES_LIMIT} unit="bytes" />
       </div>
     </div>
   );

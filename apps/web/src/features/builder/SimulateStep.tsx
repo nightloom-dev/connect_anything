@@ -1,11 +1,8 @@
 import type { ReactNode } from 'react';
 import { CircleCheck, CircleX, CloudOff, TriangleAlert } from 'lucide-react';
 import type { SimResult } from '@connect-anything/core';
+import { CU_LIMIT, TX_BYTES_LIMIT } from '../../limits.ts';
 import { Alert, LogViewer, Meter, Skeleton, Spinner, cn } from '../../ui/index.ts';
-
-/** What one transaction may use: the compute budget Connect asks for, and the packet size of Solana. */
-export const CU_LIMIT = 200_000;
-export const BYTES_LIMIT = 1232;
 
 const grouped = (value: number) => new Intl.NumberFormat('en-US').format(value);
 
@@ -63,7 +60,7 @@ export function Meters({ computeUnits, txBytes }: { computeUnits: number; txByte
   return (
     <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
       <Meter label="Compute units" value={computeUnits} max={CU_LIMIT} unit="CU" format={grouped} />
-      <Meter label="Transaction size" value={txBytes} max={BYTES_LIMIT} unit="bytes" format={grouped} />
+      <Meter label="Transaction size" value={txBytes} max={TX_BYTES_LIMIT} unit="bytes" format={grouped} />
     </div>
   );
 }

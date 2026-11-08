@@ -10,7 +10,7 @@ import { expect, test } from './support.ts';
 
 const ALLOWED: RegExp[] = [];
 
-const headline = (page: Page) => page.getByRole('heading', { name: 'Any Solana program. One signature from any EVM chain.' });
+const headline = (page: Page) => page.getByRole('heading', { name: 'Any Anchor program. One signature from any EVM chain.' });
 
 const pages = [
   { name: 'the landing page', path: LANDING, ready: headline },

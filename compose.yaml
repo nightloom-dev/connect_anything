@@ -1,8 +1,8 @@
-# The whole app on one server: the web, the simulator of role R, and Caddy in front, with a certificate for DOMAIN.
-#   cp apps/web/.env.example apps/web/.env && cp crates/sim/.env.example crates/sim/.env   # then fill both in
+# The whole app on one server: the web, the simulator (crates/sim), and Caddy in front with a certificate for DOMAIN.
+#   cp apps/web/.env.example apps/web/.env && cp crates/sim/.env.example crates/sim/.env   # then fill in both
 #   DOMAIN=connect.example.com docker compose up -d --build
-# The domain's A record points at the server, and ports 80 and 443 are open. The Telegram watcher joins with
-# --profile watch, once TELEGRAM_BOT_TOKEN is in apps/watch/.env.
+# Point the domain's A record at the server and open ports 80 and 443. To add the Telegram watcher, put
+# TELEGRAM_BOT_TOKEN in apps/watch/.env and add --profile watch. See "Deployment" in README.md.
 include:
   - crates/sim/compose.yaml
 services:

@@ -4,7 +4,7 @@ export type { DevSection } from './types.ts';
 
 type Module = { sections?: DevSection[]; order?: number };
 
-// Every file here that exports `sections` joins the gallery, so a stream adds its own file and edits nothing shared.
+// Every file here that exports `sections` joins the gallery, so a new section is a new file and nothing shared changes.
 // `order` (default 100) sorts the files, then their names do.
 const modules = import.meta.glob<Module>('./*.tsx', { eager: true });
 

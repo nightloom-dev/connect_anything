@@ -2,13 +2,15 @@ import { useState, type ReactNode } from 'react';
 import { ArrowRight, ArrowUpRight, Blocks, Check, LifeBuoy, RotateCcw } from 'lucide-react';
 import { Link } from 'wouter';
 import { usePageTitle } from '../app/title.ts';
+import { CU_LIMIT, TX_BYTES_LIMIT } from '../limits.ts';
 import { buttonClass } from '../ui/Button.tsx';
 import { cn } from '../ui/cn.ts';
+import { ExternalLink } from '../ui/ExternalLink.tsx';
 import { Tooltip } from '../ui/Tooltip.tsx';
 import { CALLOUTS, FlowScheme, FlowSchemeNarrow, SourcePicker, type Source } from './landing/FlowScheme.tsx';
 import { useDrawOnView } from './landing/useDrawOnView.ts';
 import { WatcherPlot } from './landing/WatcherPlot.tsx';
-import { CU_LIMIT, FIXTURES_URL, PROOF_RUNS, SOLSCAN, SOURCE_CHAINS, TX_BYTES_LIMIT, VERIFIED, WATCHER_URL, type ProofRun, type VerifiedProgram } from './landing/facts.ts';
+import { FIXTURES_URL, PROOF_RUNS, SOLSCAN, SOURCE_CHAINS, VERIFIED, WATCHER_URL, type ProofRun, type VerifiedProgram } from './landing/facts.ts';
 
 // The landing page is drawn as a set of five sheets: the route of a run with its callouts, the problem, the steps,
 // the proof and the watcher. Each sheet spans the window and keeps its words to the content width.
@@ -20,16 +22,6 @@ const short = (value: string, chars = 5) => `${value.slice(0, chars)}…${value.
 const SHEETS = 5;
 
 const WIDTH = 'mx-auto w-full max-w-content px-4 sm:px-6';
-
-function External({ href, children, className }: { href: string; children: ReactNode; className?: string }) {
-  return (
-    <a href={href} target="_blank" rel="noreferrer" className={cn('link inline-flex items-center gap-1', className)}>
-      {children}
-      <ArrowUpRight className="size-3.5 shrink-0" aria-hidden />
-      <span className="sr-only"> (opens in a new tab)</span>
-    </a>
-  );
-}
 
 /** The rule a sheet starts with: an ink line and the sheet's number, as the frame of a drawing has it. */
 function SheetRule({ n, children }: { n: number; children?: ReactNode }) {
@@ -61,10 +53,7 @@ function Sheet({ n, id, label, title, lead, children, className }: { n: number; 
   );
 }
 
-/**
- * Under the drawing: Run again, which plays the same run once more, slower, so that the callouts can be followed. With
- * motion reduced there is no run to play again.
- */
+/** Under the drawing: Run again replays the run more slowly. With reduced motion there is nothing to replay. */
 function RunControls({ onAgain }: { onAgain: () => void }) {
   return (
     <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 md:mt-3">
@@ -98,7 +87,7 @@ function Hero() {
         <SheetRule n={1}>Built on Aurora Intents Connect</SheetRule>
         {/* from 640 px the second sentence has a line of its own, and the size keeps it to one line up to 60 px */}
         <h1 id="hero-title" className="mt-6 text-[2.125rem] leading-[1.06] font-semibold tracking-[-0.03em] sm:mt-8 sm:text-[clamp(2.125rem,calc(6.4vw-0.25rem),3.75rem)] sm:leading-[1.04] lg:mt-7">
-          Any Solana program. <span className="sm:block">One signature from any EVM chain.</span>
+          Any Anchor program. <span className="sm:block">One signature from any EVM chain.</span>
         </h1>
         {/* before the drawing in the page, so a phone shows both ways in on its first screen; under it from 960 px */}
         <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap md:order-last md:mt-0 md:items-center md:border-t md:border-border md:pt-6">
@@ -437,8 +426,10 @@ function Proof() {
       <ProofTable />
       <ProofList />
       <div className="mt-5 flex flex-col gap-3 text-sm text-muted sm:flex-row sm:items-center sm:justify-between">
-        <p>Paid from Base, Arbitrum or Ethereum.</p>
-        <External href={FIXTURES_URL}>How these were measured</External>
+        <p>Each row is a request this app wrote, kept in the repo with the simulator&apos;s answer. One command runs them all again on today&apos;s mainnet.</p>
+        <ExternalLink href={FIXTURES_URL} className="link gap-1">
+          How these were measured
+        </ExternalLink>
       </div>
       {PROOF_RUNS.length > 0 && <MainnetRuns runs={PROOF_RUNS} />}
     </Sheet>
@@ -475,9 +466,9 @@ function Watcher() {
         <p className="max-w-[62ch] text-sm text-muted">
           A repay lands about 3 minutes after the tap, so the line sits well before the edge. A position rings once, and again only after it falls 3 points under its line.
         </p>
-        <External href={WATCHER_URL} className="shrink-0 text-sm font-medium">
+        <ExternalLink href={WATCHER_URL} className="link shrink-0 gap-1 text-sm font-medium">
           Run your own watcher
-        </External>
+        </ExternalLink>
       </div>
     </Sheet>
   );

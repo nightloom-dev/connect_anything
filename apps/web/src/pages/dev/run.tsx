@@ -60,7 +60,7 @@ import { Address, Alert, Button, ChainIcon, Checkbox, Skeleton, Timeline, TokenI
 import { Demo, DemoGrid, Surface } from './kit.tsx';
 import type { DevSection } from './types.ts';
 
-// The 27 states of the run card (Execute, src/features/run/execute.tsx), numbered as in the redesign brief, and the states
+// The 27 states of the run card (Execute, src/features/run/execute.tsx), numbered as in run-states.spec.ts, and the states
 // of /r/:id. Each is drawn from the same presentational parts as the card, on made-up figures: nothing here asks a wallet
 // or Connect anything.
 

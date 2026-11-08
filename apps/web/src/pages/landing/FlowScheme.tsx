@@ -1,16 +1,11 @@
 import { useId, type CSSProperties } from 'react';
+import { CU_LIMIT } from '../../limits.ts';
 import { cn } from '../../ui/cn.ts';
+import { VERIFIED } from './facts.ts';
 
-// The hero drawing of the landing page: the route of one run, from the EVM chain you sign on, through Intents Connect,
-// to the program on Solana. Two drawings of the same route: across, with three numbered callouts, from 960 px; top to
-// bottom on a narrower screen, where the callouts are a list under it (Landing.tsx). Its styles are in
-// styles/landing.css.
-//
-// Everything is drawn at the first paint; only the run itself plays. The payment rides the head of the line as it is
-// drawn, Intents Connect rings when it arrives, the program's instructions get their checks, and each callout lights as
-// the run passes what it names. At the first paint it is over in 1.2 s. Run again plays it slower (`slow`), and a run
-// from another chain (`source`) takes that chain's way to the junction. The chains' boxes are the control that picks it:
-// SourcePicker lays a button over each.
+// The landing page's hero drawing: one run from an EVM chain, through Intents Connect, to a program on Solana.
+// Laid out across from 960 px and top to bottom below that; styles in styles/landing.css. The animation finishes within
+// 1.2 s of the first paint, `slow` replays it, and SourcePicker puts a button over each chain to pick the source.
 
 export const SCHEME_TITLE =
   'One payment from Base, Arbitrum or Ethereum goes through Intents Connect to a program on Solana: here the four instructions of a Kamino repay.';
@@ -25,8 +20,8 @@ export const SOURCES = ['Base', 'Arbitrum', 'Ethereum'] as const;
 export type Source = (typeof SOURCES)[number];
 
 const INSTRUCTIONS = ['refresh_reserve ×2', 'refresh_obligation', 'repay_obligation_liquidity_v2'];
-// 115,948 of the 200,000 compute units Connect allows for one transaction
-const CU_SHARE = 115_948 / 200_000;
+// the Kamino repay of the proof table, against what Connect allows
+const CU_SHARE = VERIFIED[0].computeUnits / CU_LIMIT;
 /** How much slower Run again plays, so that the eye can follow the callouts. */
 const SLOW = 1.8;
 
@@ -40,28 +35,21 @@ const BOXES = {
   narrow: { width: 420, height: 312, boxes: COLUMNS.map(x => [x, 10, 120, 36]) },
 };
 
-/** The run, in seconds from the first paint: when each part starts and how long it takes. The last ends at 1.18 s. */
+/** The run as [start, length] in seconds from the first paint. The last part ends at 1.18 s. */
 const RUN = {
-  /** The chain's dot, and callout 1. */
-  sign: [0, 0.45],
-  /** The line from the chain to Intents Connect, and the payment at its head. */
-  toHub: [0, 0.42],
-  /** Intents Connect rings as the payment arrives. */
-  hub: [0.4, 0.6],
-  /** Callout 2. */
-  bridge: [0.4, 0.45],
-  /** The line on to the program. */
+  sign: [0, 0.45], // the chain's dot and callout 1
+  toHub: [0, 0.42], // the line to Intents Connect, with the payment at its head
+  hub: [0.4, 0.6], // Intents Connect rings as the payment arrives
+  bridge: [0.4, 0.45], // callout 2
   toProgram: [0.48, 0.3],
-  /** One check per instruction. */
+  // one check per instruction
   checks: [
     [0.78, 0.22],
     [0.86, 0.22],
     [0.94, 0.22],
   ],
-  /** The compute units the instructions took. */
   units: [0.8, 0.36],
-  /** Callout 3. */
-  program: [0.73, 0.45],
+  program: [0.73, 0.45], // callout 3
 } satisfies Record<string, [number, number] | [number, number][]>;
 
 /** The animation's start and length as an inline style: `--flow-k` on the drawing stretches both. */

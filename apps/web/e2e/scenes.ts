@@ -8,7 +8,7 @@ import { HEALTHY, NEAR_LIQUIDATION, RECORDED_WALLET } from './mocks/kamino.ts';
 import { BUILDER, KAMINO, LANDING, NOT_FOUND, shared } from './paths.ts';
 import type { MockWallet } from './wallet.ts';
 
-// Every page, and the states of it that a person reaches and a judge sees, each reached through the mocks as a person
+// Every page, and the states of it that a visitor reaches, each reached through the mocks as a person
 // would. The screenshots, the 360 px check and axe all walk this one list, so a state added here is checked by all three.
 // Each scene ends on the words that prove it got there.
 
@@ -63,7 +63,7 @@ export const SCENES: Scene[] = [
     tablet: true,
     open: async ({ page }) => {
       await page.goto(LANDING);
-      await expect(page.getByRole('heading', { name: 'Any Solana program. One signature from any EVM chain.' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Any Anchor program. One signature from any EVM chain.' })).toBeVisible();
     },
   },
   {

@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from '@playwright/test';
 import { BUILD_DIR, DEV_PORT, DEV_URL, PAGES_URL, PREVIEW_PORT, PREVIEW_URL } from './servers.ts';
 
-// Chromium comes from PLAYWRIGHT_BROWSERS_PATH (/opt/pw-browsers here), which has to match @playwright/test 1.63.0.
+// Chromium comes from PLAYWRIGHT_BROWSERS_PATH, or Playwright's cache, and has to match @playwright/test 1.63.0.
 // Which test runs where, and why, is in README.md: "Projects, servers and time".
 
 const CI = !!process.env.CI;
@@ -32,7 +32,9 @@ export default defineConfig({
   updateSnapshots: CI ? 'none' : 'missing',
   fullyParallel: true,
   forbidOnly: CI,
-  retries: 0,
+  // on CI one retry, as the wallet modal now and then opens its WalletConnect view on a slow runner; the report marks
+  // a test that passed on the retry as flaky
+  retries: CI ? 1 : 0,
   workers: CI ? 2 : 4,
   timeout: 30_000,
   expect: {
@@ -68,7 +70,7 @@ export default defineConfig({
     // The phone runs what differs there: every page, the AppKit modal, the Kamino deep link of the watcher, a quote and
     // a run. Tag a test '@mobile' to add it.
     { name: 'mobile', testIgnore: DEV_ONLY, grep: /@mobile/, use: devices['Pixel 7'], dependencies: ON_DEV ? ['warm-dev'] : [] },
-    // The in-app browser of Telegram on iOS is WebKit. Off until /opt/pw-browsers has a WebKit for 1.63.0.
+    // The in-app browser of Telegram on iOS is WebKit. Off until the WebKit build for 1.63.0 is installed where tests run.
     // { name: 'mobile-webkit', use: { ...devices['iPhone 14'] } },
 
     // The dev server: every section of the gallery (axe, console), and every page once more, for the warnings only

@@ -24,6 +24,9 @@ export type Env = Record<string, string | undefined>;
 
 const PUBLIC_RPC = 'https://api.mainnet-beta.solana.com';
 const CONNECT_PROXY = '/api/intents-connect/';
+// The only calls the SDK (7.28.0) sends with the key: createExecution and createStepsExecution.
+// The wallet segment allows no '%', '/' or '\' and is never '.' or '..', so it cannot resolve to another path upstream.
+const CONNECT_CREATE = /^api\/v1\/executions\/(?!\.\.?(?:\/|\?|$))[\w.~-]+(?:\/steps)?(?:\?.*)?$/;
 const RECIPE_ID = /^[0-9a-f]{32}$/;
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
 const MAX_BODY = 4 * 1024 * 1024; // klend, one of the largest real IDLs, is 240 KB
@@ -89,13 +92,13 @@ function json(res: ServerResponse, status: number, body: unknown) {
   res.end(JSON.stringify(body));
 }
 
-// the detail stays in the log, it can name internals
-function logged(what: string, error: unknown) {
+// The detail goes to the log only, since it can name internals.
+function logError(what: string, error: unknown) {
   console.error(`[api] ${what}: ${String(error)}`);
 }
 
-// matches on core's messages, api.test.ts fails if one of them drifts
-async function idlAnswer(load: () => Promise<Idl>, failed: HttpError) {
+// Matches on core's error messages; api.test.ts fails if one of them changes.
+async function toIdlResponse(load: () => Promise<Idl>, failed: HttpError) {
   let idl: Idl;
   try {
     idl = await load();
@@ -104,7 +107,7 @@ async function idlAnswer(load: () => Promise<Idl>, failed: HttpError) {
     const message = error instanceof Error ? error.message : '';
     if (message.includes('no Anchor IDL account')) throw new HttpError(404, message, { upload: true });
     if (message.startsWith('Not an Anchor IDL')) throw new HttpError(422, message, { upload: true });
-    logged('IDL', error);
+    logError('IDL', error);
     throw failed;
   }
   try {
@@ -115,7 +118,7 @@ async function idlAnswer(load: () => Promise<Idl>, failed: HttpError) {
   }
 }
 
-function simRequestProblem(body: unknown): string | null {
+function validateSimRequest(body: unknown): string | null {
   if (!isObject(body)) return 'not an object';
   if (!isPubkey(body.intermediary)) return 'intermediary is not a public key';
   if (!isPubkey(body.fund?.mint)) return 'fund.mint is not a public key';
@@ -133,8 +136,8 @@ function simRequestProblem(body: unknown): string | null {
   return null;
 }
 
-// the public endpoint answers 429 often and waiting is all it asks for, the same steps as the Connection of web3.js
-const patient = (transport: RpcTransport): RpcTransport => async config => {
+// The public endpoint often answers 429 and only asks to wait: back off as web3.js Connection does.
+const retryOn429 = (transport: RpcTransport): RpcTransport => async config => {
   for (let delay = 500; ; delay *= 2) {
     try {
       return await transport({ ...config, signal: AbortSignal.timeout(RPC_TIMEOUT) });
@@ -146,10 +149,10 @@ const patient = (transport: RpcTransport): RpcTransport => async config => {
   }
 };
 
-const kaminoRpc = (url: string) => createSolanaRpcFromTransport(patient(createDefaultRpcTransport({ url })));
+const kaminoRpc = (url: string) => createSolanaRpcFromTransport(retryOn429(createDefaultRpcTransport({ url })));
 
-// the SDK's own math on only the reserves a wallet uses, because KaminoMarket.load pulls every reserve of a market
-// through getProgramAccounts on each call and the public RPC does not take that
+// The SDK's own math, on only the reserves a wallet uses: KaminoMarket.load reads every reserve of a market through
+// getProgramAccounts on each call, which the public RPC refuses.
 // Known limit: one getMultipleAccounts per kind of account, so a wallet using over 100 reserves gets a 502
 async function readObligations(wallet: string, rpc: ReturnType<typeof kaminoRpc>): Promise<RescuePosition[]> {
   // 170 MB and over a second to load, so only once somebody asks and never in a build
@@ -248,7 +251,7 @@ async function readObligations(wallet: string, rpc: ReturnType<typeof kaminoRpc>
 
 type Handler = (params: string[], context: { req: IncomingMessage; res: ServerResponse; query: string }) => Promise<unknown>;
 
-/** every /api route as one connect-style middleware, anything else goes on to next() */
+/** Every /api route as one connect-style middleware. Anything else goes on to next(). */
 export function createApi(env: Env) {
   const rpcUrl = env.SOLANA_RPC_URL || PUBLIC_RPC;
   const connection = new Connection(rpcUrl, { commitment: 'confirmed', fetch: (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(RPC_TIMEOUT) }) });
@@ -266,14 +269,16 @@ export function createApi(env: Env) {
       redirect: 'error',
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT),
     }).catch(error => {
-      logged('Connect', error);
+      logError('Connect', error);
       throw new HttpError(502, 'Intents Connect did not answer');
     });
 
-  // Known limit: any path on Connect goes through with the key, whoever can reach this server can spend it
+  // Known limit: anyone who can reach this server can still create executions with the key
   async function proxyConnect(url: string, req: IncomingMessage, res: ServerResponse) {
+    const path = url.slice(CONNECT_PROXY.length);
+    if (req.method !== 'POST' || !CONNECT_CREATE.test(path)) throw new HttpError(404, 'The key proxy only forwards the create calls of Intents Connect');
     const body = await readBody(req);
-    const upstream = await connect(url.slice(CONNECT_PROXY.length), req.method, body.length ? body : undefined);
+    const upstream = await connect(path, req.method, body.length ? body : undefined);
     const type = upstream.headers.get('content-type') ?? 'application/json';
     const bytes = Buffer.from(await upstream.arrayBuffer());
     // the status stays because the SDK acts on 409 and 503, but a gateway's HTML page is not an answer to pass on
@@ -286,7 +291,7 @@ export function createApi(env: Env) {
   const routes: [string, RegExp, Handler][] = [
     ['GET', /^\/api\/idl\/([^/]+)$/, async ([programId]) => {
       requirePubkey(programId);
-      return idlAnswer(
+      return toIdlResponse(
         () => loadIdl(programId, connection, converter),
         new HttpError(502, 'Could not read the IDL: the Solana RPC or the converter failed. Try again or upload a 0.30+ IDL file.', { upload: true }),
       );
@@ -296,7 +301,7 @@ export function createApi(env: Env) {
       const programId = new URLSearchParams(query).get('programId') ?? undefined;
       if (programId !== undefined) requirePubkey(programId);
       const file = await readJson(req);
-      return idlAnswer(
+      return toIdlResponse(
         () => parseIdl(file, { ...converter, programId }),
         new HttpError(422, 'Could not read this file: it is a malformed IDL, or the converter failed on it.', { upload: true }),
       );
@@ -304,7 +309,7 @@ export function createApi(env: Env) {
 
     ['POST', /^\/api\/simulate$/, async (_, { req }) => {
       const body = await readJson(req);
-      const problem = simRequestProblem(body);
+      const problem = validateSimRequest(body);
       if (problem) throw new HttpError(400, `Not a simulation request: ${problem}`);
       if (!env.SIM_URL) throw new HttpError(503, 'The simulator is offline: SIM_URL is not set');
       const upstream = await fetch(`${env.SIM_URL.replace(/\/$/, '')}/simulate`, {
@@ -314,7 +319,7 @@ export function createApi(env: Env) {
         redirect: 'error',
         signal: AbortSignal.timeout(UPSTREAM_TIMEOUT),
       }).catch(error => {
-        logged('simulator', error);
+        logError('simulator', error);
         throw new HttpError(503, 'The simulator is offline: it did not answer');
       });
       const result = (await upstream.json().catch(() => null)) as Record<string, any> | null;
@@ -354,7 +359,7 @@ export function createApi(env: Env) {
       try {
         return { obligations: await readObligations(wallet, kamino) };
       } catch (error) {
-        logged('Kamino', error);
+        logError('Kamino', error);
         throw new HttpError(502, 'Could not read the position from Solana, try again');
       }
     }],
@@ -375,7 +380,7 @@ export function createApi(env: Env) {
       requirePubkey(owner);
       requirePubkey(mint);
       const { value } = await connection.getParsedTokenAccountsByOwner(new PublicKey(owner), { mint: new PublicKey(mint) }).catch(error => {
-        logged('balance', error);
+        logError('balance', error);
         throw new HttpError(502, 'Could not read the balance from Solana, try again');
       });
       const accounts = value.map(({ pubkey, account }) => ({ account: pubkey.toBase58(), tokenProgram: account.owner.toBase58(), amount: String(account.data.parsed.info.tokenAmount.amount) }));
@@ -396,7 +401,7 @@ export function createApi(env: Env) {
       if (answer !== undefined) json(res, res.statusCode, answer);
     } catch (error) {
       if (error instanceof HttpError) return json(res, error.status, { error: error.message, ...error.extra });
-      logged(`${req.method} ${path}`, error);
+      logError(`${req.method} ${path}`, error);
       json(res, 500, { error: 'Internal error' });
     }
   };

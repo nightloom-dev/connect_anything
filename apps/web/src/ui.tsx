@@ -1,5 +1,5 @@
-import { Component, useEffect, useState, type ReactNode } from 'react';
-import { Check, Copy as CopyIcon, RotateCw } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { RotateCw } from 'lucide-react';
 import { explain } from './connect.ts';
 import { followsIntermediary, type Row } from './recipe.ts';
 import { Address, Alert, Badge, Button } from './ui/index.ts';
@@ -81,31 +81,6 @@ export function Failure({ error, retry }: { error: Error; retry?: () => void }) 
     >
       {error.message}
     </Alert>
-  );
-}
-
-/** An IDL is someone else's file: whatever one breaks shows as a message here, not as a blank page. */
-export class Boundary extends Component<{ children: ReactNode }, { error?: Error }> {
-  state: { error?: Error } = {};
-  static getDerivedStateFromError(error: Error) {
-    return { error };
-  }
-  render() {
-    return this.state.error ? <Failure error={this.state.error} /> : this.props.children;
-  }
-}
-
-export function Copy({ text }: { text: string }) {
-  const [done, setDone] = useState(false);
-  const copy = () =>
-    navigator.clipboard?.writeText(text).then(
-      () => setDone(true),
-      () => {}, // the text is on the page and can be selected by hand
-    );
-  return (
-    <Button size="sm" icon={done ? <Check className="text-success" /> : <CopyIcon />} onClick={copy}>
-      {done ? 'Copied' : 'Copy'}
-    </Button>
   );
 }
 

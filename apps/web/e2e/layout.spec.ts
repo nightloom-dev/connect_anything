@@ -3,7 +3,7 @@ import { overflow, settle, shifts, tooWide, watchShifts } from './look.ts';
 import { SCENES } from './scenes.ts';
 import { expect, test } from './support.ts';
 
-// The layout of every scene of scenes.ts: nothing scrolls sideways on a 360 px phone, the narrowest the spec names, and
+// The layout of every scene of scenes.ts: nothing scrolls sideways on a 360 px phone, the narrowest supported, and
 // a page opened by a link does not move under the reader while it loads (CLS, at 1440 and 390 px).
 
 const phone = (width: number, height: number) => ({

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { ArrowUpRight } from 'lucide-react';
 import { Link } from 'wouter';
+import { ExternalLink } from '../ui/ExternalLink.tsx';
 import { DOCS_URL, ISSUES_URL, LogoMark, REPO_URL, SELF_HOST_URL, WATCHER_URL } from './brand.tsx';
 
 // The footer of the product: what it is and where it runs, the ways in, and where its code and docs are. Its column
@@ -15,11 +15,9 @@ const CHAINS = [
 
 function External({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <a href={href} target="_blank" rel="noreferrer" className={`${link} inline-flex items-center gap-0.5`}>
+    <ExternalLink href={href} className={`${link} gap-0.5`} iconClassName="text-muted">
       {children}
-      <ArrowUpRight className="size-3.5 text-muted" aria-hidden />
-      <span className="sr-only"> (opens in a new tab)</span>
-    </a>
+    </ExternalLink>
   );
 }
 

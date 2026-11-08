@@ -3,6 +3,7 @@ name = "sim"
 version = "0.1.0"
 edition = "2021"
 publish = false
+license = "MIT"
 description = "Simulates a Connect Anything recipe on a fork of Solana mainnet"
 
 [dependencies]

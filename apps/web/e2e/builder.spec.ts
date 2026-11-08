@@ -104,16 +104,21 @@ test('an uploaded IDL lists its instructions, and a repay is added once its acco
   const add = page.getByRole('button', { name: 'Add to recipe' });
   await expect(add).toBeDisabled();
   await expect(page.getByRole('link', { name: 'repay_accounts.obligation needs an address' })).toBeVisible();
+  // a sysvar has one address, so it comes filled in
+  await expect(address(page, 'repay_accounts.instruction_sysvar_account')).toHaveValue('Sysvar1nstructions1111111111111111111111111');
   const entries = Object.entries(REPAY_ACCOUNTS);
   for (const [index, [name, value]] of entries.entries()) {
     await address(page, name).fill(value);
     // still one account short until the last
     if (index < entries.length - 1) await expect(add).toBeDisabled();
   }
-  // and the argument is empty: either a figure or the amount delivered
+  // the one amount argument takes the amount delivered from the start, and without it needs a figure
+  const delivered = page.getByLabel('Uses the amount delivered');
+  await expect(delivered).toBeChecked();
+  await delivered.uncheck();
   await expect(page.getByRole('link', { name: 'liquidity_amount needs a value' })).toBeVisible();
   await expect(add).toBeDisabled();
-  await page.getByLabel('Uses the amount delivered').check();
+  await delivered.check();
   await expect(page.getByLabel('liquidity_amount')).toBeDisabled();
   await expect(add).toBeEnabled();
   await expect(page.getByText('Ready to add: every argument and account is filled in.')).toBeVisible();
@@ -312,6 +317,27 @@ test('an example loads the IDL that ships with the page, with no request', async
   expect(api.requests.filter(({ path }) => path.startsWith('/api/idl'))).toEqual([]);
   // nothing was read from chain, so there is nothing recent
   await expect(page.getByRole('heading', { name: 'Recent programs' })).toHaveCount(0);
+});
+
+test('a ready recipe opens in step 2 with every account filled in, and simulates as it is', async ({ page, api }) => {
+  await page.goto(BUILDER);
+  await page.getByRole('button', { name: /^Repay a USDC debt Kamino Lend/ }).click();
+  await expect(page.getByRole('heading', { name: '2. Instruction' })).toBeVisible();
+  await expect(recipeSteps(page)).toHaveCount(4);
+  await expect(page.getByText('4 steps, every account filled in. Simulate it in step 3.')).toBeVisible();
+  await page.getByRole('button', { name: 'Next: simulate' }).click();
+  await expect(statusOf(page, 'The recipe passed simulation.')).toBeVisible();
+  const request = api.requests.find(({ path }) => path === '/api/simulate')?.body as Record<string, any>;
+  expect(request.instructions).toHaveLength(4);
+
+  // another one takes the place of the first, and says so
+  await stepper(page).getByRole('button', { name: 'Program' }).click();
+  await page.getByRole('button', { name: /^Swap USDC to SOL Orca Whirlpools/ }).click();
+  await expect(recipeSteps(page)).toHaveCount(1);
+  await expect(recipeSteps(page)).toContainText('swap_v2');
+  await expect(page.getByText('1 step, every account filled in, in place of the steps you had. Simulate it in step 3.')).toBeVisible();
+  // everything ships with the page
+  expect(api.requests.filter(({ path }) => path.startsWith('/api/idl'))).toEqual([]);
 });
 
 test('a dropped IDL file is read like a picked one', async ({ page, api }) => {
@@ -556,7 +582,7 @@ test('an example, Load and a recent program keep the focus while they read the I
   let release!: () => void;
   const requested = new Promise<void>(done => (reached = done));
   const released = new Promise<void>(done => (release = done));
-  await page.route(/orca-whirlpool-swap\.sim/, async route => {
+  await page.route(/orca-whirlpool-swap\.recipe/, async route => {
     reached();
     await released;
     await route.continue();

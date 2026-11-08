@@ -1,10 +1,6 @@
 // What the landing page claims, kept apart from how it looks so every figure has its source next to it.
 import { REPO_URL } from '../../app/brand.tsx';
 
-/** Connect's limits for one Solana transaction, as the Meter of the builder shows them. */
-export const CU_LIMIT = 200_000;
-export const TX_BYTES_LIMIT = 1232;
-
 export type VerifiedProgram = {
   name: string;
   programId: string;
@@ -89,7 +85,7 @@ export type ProofRun = {
 
 /**
  * Runs on mainnet with real money, with links to their transactions. The block that lists them shows only when this
- * has an entry, and the repository has no transaction links yet: whoever ran them adds them here.
+ * has an entry.
  */
 export const PROOF_RUNS: ProofRun[] = [];
 

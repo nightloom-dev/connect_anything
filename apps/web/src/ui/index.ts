@@ -16,6 +16,7 @@ export { CopyButton, copyText } from './CopyButton.tsx';
 export { Dialog } from './Dialog.tsx';
 export { Disclosure } from './Disclosure.tsx';
 export { EmptyState } from './EmptyState.tsx';
+export { ExternalLink } from './ExternalLink.tsx';
 export { HealthBar } from './HealthBar.tsx';
 export { IconButton, type IconButtonProps } from './IconButton.tsx';
 export { FIELD_SIZE, Field, Input, fieldBox, type InputProps, type InputSize } from './Input.tsx';

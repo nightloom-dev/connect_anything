@@ -1,5 +1,5 @@
 import { useRef, useState, type DragEvent, type FormEvent, type ReactNode, type RefObject } from 'react';
-import { ArrowRight, Clock, FileUp, X } from 'lucide-react';
+import { ArrowRight, Clock, FileUp, ListChecks, X } from 'lucide-react';
 import { AddressInput, Alert, Button, Card, IconButton, Spinner, cn, truncateMiddle } from '../../ui/index.ts';
 
 type DropZoneProps = {
@@ -167,7 +167,41 @@ export function ProgramForm({ programId, onProgramId, idError, onSubmit, onFile,
   );
 }
 
-export type ExampleView = { name: string; kind: string; program: string };
+export type ExampleView = { name: string; kind: string; program: string; ready: { what: string; steps: number } };
+
+type PickProps = {
+  title: string;
+  detail: ReactNode;
+  /** What stands in the square on the left. */
+  mark: ReactNode;
+  loading: boolean;
+  disabled: boolean;
+  onPick: () => void;
+};
+
+/** One card of a list to start from. */
+function PickButton({ title, detail, mark, loading, disabled, onPick }: PickProps) {
+  return (
+    <button
+      type="button"
+      // the one that loads keeps the focus, and takes no second click
+      disabled={disabled && !loading}
+      aria-busy={loading || undefined}
+      aria-disabled={loading || undefined}
+      onClick={loading ? undefined : onPick}
+      className="group flex w-full min-w-0 items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-left transition-[border-color,background-color] duration-120 ease-out enabled:hover:border-border-control enabled:hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60 aria-busy:cursor-progress"
+    >
+      <span aria-hidden className="flex size-8 shrink-0 items-center justify-center rounded-md border border-accent/40 bg-accent/8 font-mono text-sm font-semibold text-accent">
+        {loading ? <Spinner size="sm" /> : mark}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate text-sm font-medium text-text">{title}</span>
+        <span className="truncate text-xs text-muted">{detail}</span>
+      </span>
+      <ArrowRight className="size-4 shrink-0 text-faint transition-[color,translate] duration-120 group-enabled:group-hover:translate-x-0.5 group-enabled:group-hover:text-text" aria-hidden />
+    </button>
+  );
+}
 
 type ExamplesProps = {
   examples: ExampleView[];
@@ -177,6 +211,46 @@ type ExamplesProps = {
   disabled?: boolean;
 };
 
+const dot = (
+  <>
+    <span className="sr-only">, </span>
+    <span aria-hidden> · </span>
+  </>
+);
+
+/** Recipes with every account and argument filled in: one click and they are in step 2, ready to simulate. */
+export function ReadyRecipes({ examples, onPick, loading, disabled = false }: ExamplesProps) {
+  return (
+    <section aria-labelledby="ready-title" className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 id="ready-title" className="text-sm font-medium text-text">
+          Open a ready recipe
+        </h2>
+        <p className="text-xs text-muted">Every account filled in, as run on a fork of mainnet.</p>
+      </div>
+      <ul className="grid gap-2 sm:grid-cols-2">
+        {examples.map(({ name, program, ready }) => (
+          <li key={program} className="min-w-0">
+            <PickButton
+              title={ready.what}
+              detail={
+                <>
+                  {name}
+                  {dot}
+                  {ready.steps === 1 ? '1 instruction' : `${ready.steps} instructions`}
+                </>
+              }
+              mark={<ListChecks className="size-4" />}
+              loading={loading === program}
+              disabled={disabled}
+              onPick={() => onPick(program)}
+            />
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 /** Programs whose IDL ships with the page: one click and the instructions are on screen, with no request. */
 export function Examples({ examples, onPick, loading, disabled = false }: ExamplesProps) {
@@ -191,29 +265,20 @@ export function Examples({ examples, onPick, loading, disabled = false }: Exampl
       <ul className="grid gap-2 sm:grid-cols-2">
         {examples.map(({ name, kind, program }) => (
           <li key={program} className="min-w-0">
-            <button
-              type="button"
-              // the one that loads keeps the focus, and takes no second click
-              disabled={disabled && loading !== program}
-              aria-busy={loading === program || undefined}
-              aria-disabled={loading === program || undefined}
-              onClick={loading === program ? undefined : () => onPick(program)}
-              className="group flex w-full min-w-0 items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-left transition-[border-color,background-color] duration-120 ease-out enabled:hover:border-border-control enabled:hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60 aria-busy:cursor-progress"
-            >
-              <span aria-hidden className="flex size-8 shrink-0 items-center justify-center rounded-md border border-accent/40 bg-accent/8 font-mono text-sm font-semibold text-accent">
-                {loading === program ? <Spinner size="sm" /> : name[0].toUpperCase()}
-              </span>
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-sm font-medium text-text">{name}</span>
-                <span className="truncate text-xs text-muted">
+            <PickButton
+              title={name}
+              detail={
+                <>
                   {kind}
-                  <span className="sr-only">, </span>
-                  <span aria-hidden> · </span>
+                  {dot}
                   <span className="font-mono">{truncateMiddle(program)}</span>
-                </span>
-              </span>
-              <ArrowRight className="size-4 shrink-0 text-faint transition-[color,translate] duration-120 group-enabled:group-hover:translate-x-0.5 group-enabled:group-hover:text-text" aria-hidden />
-            </button>
+                </>
+              }
+              mark={name[0].toUpperCase()}
+              loading={loading === program}
+              disabled={disabled}
+              onPick={() => onPick(program)}
+            />
           </li>
         ))}
       </ul>

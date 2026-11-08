@@ -23,8 +23,8 @@ test('commands take a Solana wallet and a line in percent', () => {
   assert.deepEqual(parseCommand(`/watch ${wallet}`), { kind: 'watch', wallet, line: null });
   assert.deepEqual(parseCommand(`/watch@SomeBot ${wallet} 65%`), { kind: 'watch', wallet, line: 0.65 });
   assert.deepEqual(parseCommand(`/unwatch ${wallet}`), { kind: 'unwatch', wallet });
-  assert.equal(parseCommand('/watch 0x8825b6fEd25BC0639c62ac9526ba2F9B28951dDA').kind, 'error');
-  assert.equal(parseCommand(`/watch ${wallet} 120`).kind, 'error');
+  assert.equal(parseCommand('/watch 0x8825b6fEd25BC0639c62ac9526ba2F9B28951dDA')?.kind, 'error');
+  assert.equal(parseCommand(`/watch ${wallet} 120`)?.kind, 'error');
   assert.equal(parseCommand('hello'), null);
 });
 

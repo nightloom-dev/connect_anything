@@ -4,18 +4,19 @@ import { argFields, buildInstruction, flatten, listInstructions, type Idl, type 
 import { ArrowRight, CircleCheck, ListPlus, Play, Plus, SquareMousePointer } from 'lucide-react';
 import { checkCompat, issueText } from '../../compat.ts';
 import { bySymbol, fromAtomic, toAtomic, type Token, type TokenList } from '../../connect.ts';
+import { ErrorBoundary } from '../../app/ErrorBoundary.tsx';
 import { Execute } from '../run/execute.tsx';
 import { STAND_IN, defaultValue, destinationIssue, followsIntermediary, recipeCode, resolveStep, simulationRequest, toSolanaRecipe, type Row, type StoredRecipe, type StoredStep } from '../../recipe.ts';
-import { Boundary, Failure, FetchError, fetchJson, useAct, useAsync, useJson } from '../../ui.tsx';
+import { Failure, FetchError, fetchJson, useAct, useAsync, useJson } from '../../ui.tsx';
 import { Alert, Button, Card, EmptyState, Input, Spinner, Stepper, Switch, cn, isSolanaAddress, solanaAddressProblem, toast, type StepItem } from '../../ui/index.ts';
 import { AccountsPanel, type AccountGroup, type AccountView } from './AccountsPanel.tsx';
 import { breakable } from './breakable.tsx';
-import { EXAMPLES, exampleOf, loadExample } from './examples.ts';
+import { EXAMPLES, exampleOf, loadExample, loadReady } from './examples.ts';
 import { ExportTabs } from './ExportPanel.tsx';
 import { Labeled, type KeyPicks } from './FieldInput.tsx';
 import { InstructionPicker, ProgramBar, type InstructionOption } from './InstructionPicker.tsx';
 import { KNOWN, suggestionsFor, type QuickPick } from './known.ts';
-import { Examples, HowItWorks, ProgramForm, RecentPrograms } from './ProgramStep.tsx';
+import { Examples, HowItWorks, ProgramForm, ReadyRecipes, RecentPrograms } from './ProgramStep.tsx';
 import { Readiness, type ReadinessItem } from './Readiness.tsx';
 import { RecipeTray, type TrayStep } from './RecipeTray.tsx';
 import { RemainingAccounts, remainingAnchor } from './RemainingAccounts.tsx';
@@ -30,10 +31,16 @@ const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.
 
 type HeadingRef = Ref<HTMLHeadingElement>;
 
-function ProgramScreen({ onLoad, heading, hint }: { onLoad: (idl: Idl) => void; heading: HeadingRef; hint?: string }) {
+// an IDL is someone else's file: whatever one breaks shows as a message in place, not as a crashed page
+const idlFailure = (error: Error) => <Failure error={error} />;
+
+type ProgramScreenProps = { onLoad: (idl: Idl) => void; onRecipe: (recipe: StoredRecipe) => void; heading: HeadingRef; hint?: string };
+
+function ProgramScreen({ onLoad, onRecipe, heading, hint }: ProgramScreenProps) {
   const [programId, setProgramId] = useState('');
   const [idError, setIdError] = useState<string>();
   const [example, setExample] = useState<string>();
+  const [ready, setReady] = useState<string>();
   const [rereading, setRereading] = useState<string>();
   const [recent, setRecent] = useState(readRecent);
   const { working, error, act } = useAct();
@@ -79,8 +86,17 @@ function ProgramScreen({ onLoad, heading, hint }: { onLoad: (idl: Idl) => void; 
               if (!refuse()) fromFile(file);
             }}
             working={working}
-            exampleWorking={!!example}
+            exampleWorking={!!example || !!ready}
             error={error}
+          />
+          <ReadyRecipes
+            examples={EXAMPLES}
+            loading={ready}
+            disabled={working}
+            onPick={program => {
+              setReady(program);
+              act(async () => onRecipe(await loadReady(exampleOf(program)!)))().finally(() => setReady(undefined));
+            }}
           />
           <Examples
             examples={EXAMPLES}
@@ -156,12 +172,27 @@ function Docs({ text }: { text: string }) {
   );
 }
 
+const AMOUNT = /(?:^|_)amount(?:_in)?$/;
+
 /** One instruction's arguments and accounts, and the way into the recipe once they are complete. */
 export function InstructionForm({ idl, ixName, mint, symbol, onAdd }: { idl: Idl; ixName: string; mint: string; symbol: string; onAdd: (step: StoredStep) => void }) {
   const fields = useMemo(() => argFields(idl, ixName), [idl, ixName]);
   const [args, setArgs] = useState<Record<string, unknown>>(() => Object.fromEntries(fields.map(field => [field.name, defaultValue(field)])));
-  const [amountArg, setAmountArg] = useState<string>();
-  const [inputs, setInputs] = useState<Record<string, string>>({});
+  // One argument named as the amount takes the amount delivered from the start: a recipe mostly spends what it receives.
+  const [amountArg, setAmountArg] = useState(() => {
+    const amounts = fields.filter(field => field.kind === 'int' && field.min === '0' && AMOUNT.test(field.name));
+    return amounts.length === 1 ? amounts[0].name : undefined;
+  });
+  // An account whose name leaves one known address, a sysvar or a program, starts with it typed in.
+  const [inputs, setInputs] = useState<Record<string, string>>(() => {
+    const open = resolveStep(idl, { program: idl.address, ixName, args: {}, inputs: {} }, { intermediary: STAND_IN, mint, amount: '1' }).accounts;
+    return Object.fromEntries(
+      open.flatMap(row => {
+        const only = row.pubkey ? [] : suggestionsFor(row.name);
+        return only.length === 1 ? [[row.name, only[0].address]] : [];
+      }),
+    );
+  });
   const [remaining, setRemaining] = useState<{ pubkey: string; isWritable: boolean }[]>([]);
 
   const instruction = idl.instructions.find(ix => ix.name === ixName)!;
@@ -404,7 +435,7 @@ function InstructionScreen({ idl, idls, list, targets, token, onTarget, steps, o
               {instructions.length === 0 ? <Alert>This IDL has no instructions.</Alert> : <InstructionPicker options={options} value={ixName} onChange={setChosen} />}
               {ixName && !token && <Alert>Pick the token the recipe receives first: the accounts depend on it.</Alert>}
               {ixName && token && (
-                <Boundary key={`${idl.address} ${ixName}`}>
+                <ErrorBoundary key={`${idl.address} ${ixName}`} fallback={idlFailure}>
                   <InstructionForm
                     idl={idl}
                     ixName={ixName}
@@ -415,7 +446,7 @@ function InstructionScreen({ idl, idls, list, targets, token, onTarget, steps, o
                       toast.success(`Added ${step.ixName} to the recipe`, { description: `Step ${steps.length + 1}. Add another, or simulate.` });
                     }}
                   />
-                </Boundary>
+                </ErrorBoundary>
               )}
               {!ixName && instructions.length > 0 && (
                 <EmptyState compact level={2} icon={<SquareMousePointer />} title="Pick an instruction above">
@@ -660,6 +691,19 @@ export function Builder() {
     setScreen(2);
   };
 
+  // A ready recipe takes the place of the steps there were, as a handed-over one does.
+  const onRecipe = (opened: StoredRecipe) => {
+    const replaced = steps.length > 0;
+    setIdl(opened.idls[opened.steps.at(-1)!.program]);
+    setIdls(known => ({ ...known, ...opened.idls }));
+    setSteps(opened.steps);
+    setTarget(opened.destination.assetId);
+    setLookupTables(opened.lookupTables);
+    setScreen(2);
+    const count = opened.steps.length === 1 ? '1 step' : `${opened.steps.length} steps`;
+    toast.success('Ready recipe opened', { description: `${count}, every account filled in${replaced ? ', in place of the steps you had' : ''}. Simulate it in step 3.` });
+  };
+
   // The handed-over recipe is read once: the key goes, and a reload brings back the session instead.
   const announced = useRef(false);
   useEffect(() => {
@@ -713,9 +757,9 @@ export function Builder() {
       )}
       {/* a new screen for each step, which slides in from the side of the step it comes from */}
       <div key={screen} className={cn(from !== 0 && 'animate-step-in motion-reduce:animate-none')} style={{ '--step-from': `${from * 0.75}rem` } as CSSProperties}>
-        {screen === 1 && <ProgramScreen onLoad={onLoad} heading={heading} hint={idl || !initial.asked ? undefined : NOTHING_YET[initial.asked]} />}
+        {screen === 1 && <ProgramScreen onLoad={onLoad} onRecipe={onRecipe} heading={heading} hint={idl || !initial.asked ? undefined : NOTHING_YET[initial.asked]} />}
         {screen === 2 && (
-          <Boundary>
+          <ErrorBoundary fallback={idlFailure}>
             <InstructionScreen
               idl={idl}
               idls={idls}
@@ -731,7 +775,7 @@ export function Builder() {
               onNext={() => setScreen(3)}
               heading={heading}
             />
-          </Boundary>
+          </ErrorBoundary>
         )}
         {screen === 3 && <SimulateScreen stored={stored} token={token} pending={pending} onBack={() => setScreen(idl ? 2 : 1)} onRun={() => setScreen(4)} heading={heading} />}
         {screen === 4 && (

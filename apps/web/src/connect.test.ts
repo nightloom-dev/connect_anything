@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createIntentsConnectApi, type Execution, type FetchLike, type SolanaRecipe, type SolanaStep } from '@aurora-is-near/intents-connect';
+import { EVM_CHAIN_IDS, createIntentsConnectApi, type Execution, type ExecutionPlan, type FetchLike, type SolanaRecipe, type SolanaStep } from '@aurora-is-near/intents-connect';
 import { usdToAtomic } from '@connect-anything/kamino-rescue';
 import { STAGE_OF, bridgeKeeps, bridgePlan, existingOffer, explain, fromAtomic, isQuoteMoved, legs, refundBody, retry503, retryPlan, stoppedFollowing, toAtomic, type Token } from './connect.ts';
-import { BASE_USDC, SOLANA_USDC, supplyPlan } from './kamino.ts';
 
 const answering = (...statuses: number[]) => {
   const seen: string[] = [];
@@ -84,8 +83,32 @@ test('a failed execution holds its money at the destination of a bridge-in and a
   assert.equal(legs(refundBody({ account: 'ATA', tokenProgram: 'Tokenkeg', token: { assetId: sol, decimals: 6, symbol: 'USDC' } as Token, amount: '1', backTo: base, recipient: '0xabc', dry: true }).quote).isRefund, true, 'as this app sends it');
 });
 
-const BASE: Token = { assetId: BASE_USDC.assetId, symbol: 'USDC', blockchain: 'base', contractAddress: BASE_USDC.contractAddress, decimals: BASE_USDC.decimals };
-const supply = supplyPlan('5000000');
+const SOLANA_USDC = 'nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near';
+const BASE: Token = { assetId: 'nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near', symbol: 'USDC', blockchain: 'base', contractAddress: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', decimals: 6 };
+
+// The plan of the first run on mainnet, a supply of 5 USDC to Kamino from Base, written by hand with the figures of
+// Aurora's own Kamino example. A generated recipe has to come out the same way.
+const SUPPLY: SolanaRecipe = {
+  id: 'kamino-supply-usdc',
+  intent: 'kamino_supply',
+  title: 'Supply USDC to Kamino',
+  type: 'solana',
+  flow: 'bridge-in',
+  destination: { chain: 'sol', assetId: SOLANA_USDC, tokenAddress: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' },
+  buildSteps: () => {
+    throw new Error('the plan alone is compared here');
+  },
+};
+const supply: ExecutionPlan = {
+  recipe: SUPPLY,
+  params: undefined,
+  feeStrategy: { kind: 'threeRound', amountReserveBps: 25 },
+  quote: { originAsset: BASE.assetId, destinationAsset: SOLANA_USDC, amount: '5000000', swapType: 'EXACT_INPUT', slippageTolerance: 100, deadline: '' },
+  originChain: 'base',
+  originToken: { contractAddress: BASE.contractAddress, decimals: 6 },
+  originChainId: EVM_CHAIN_IDS.base ?? null,
+  depositViaWallet: true,
+};
 
 test('the plan of a generated recipe is the plan of the Kamino supply that ran on mainnet', () => {
   const { quote: { deadline: _a, ...quote }, ...plan } = bridgePlan(supply.recipe as SolanaRecipe, BASE, '5000000');
