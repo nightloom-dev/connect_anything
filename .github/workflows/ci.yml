@@ -43,7 +43,8 @@ jobs:
       - run: npm ci
       - name: Unit tests (packages/core, apps/web, recipes/kamino-rescue, apps/watch)
         run: npm test
-      - run: npm run typecheck -w packages/core
+      - name: Typecheck (every workspace)
+        run: npm run typecheck
       - run: npm run build
       - name: Bundle budget (first load of /, gzip)
         run: npm run budget

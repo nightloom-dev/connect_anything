@@ -9,10 +9,15 @@
     "node": ">=22.18"
   },
   "scripts": {
-    "test": "node --test '*.test.ts'"
+    "test": "node --test '*.test.ts'",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@connect-anything/core": "*",
     "@solana/web3.js": "^1.99.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^7.0.2"
   }
 }

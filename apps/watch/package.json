@@ -8,6 +8,11 @@
   },
   "scripts": {
     "start": "node --env-file-if-exists=.env watch.ts",
-    "test": "node --test '*.test.ts'"
+    "test": "node --test '*.test.ts'",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^7.0.2"
   }
 }
