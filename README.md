@@ -285,7 +285,6 @@ only after its LTV falls 3 points under the line.
 | `crates/sim`            | The simulator: a Rust service that forks mainnet into LiteSVM, and the legacy IDL converter            |
 | `fixtures`              | Simulation requests and the simulator's recorded answers, the source of truth for its contract         |
 | `compose.yaml`          | The web, the simulator and Caddy on one server, with the watcher as an optional profile                |
-| `TZ.md`, `tz/`          | The team's original spec and role split, in Russian. Planning notes from the first days; parts are out of date |
 
 The JavaScript side is one npm workspace (`apps/*`, `packages/*`, `recipes/*`). The Rust side is one Cargo workspace
 (`crates/*`), with the toolchain pinned in `rust-toolchain.toml`.

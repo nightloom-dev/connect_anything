@@ -52,9 +52,6 @@ bytes. Then point the web at the simulator in `apps/web/.env`: `SIM_URL=http://1
 | `SIM_PORT`       | `8790`                                | The port                                                     |
 | `RUST_LOG`       | `sim=info`                            | Log filter. Each simulation logs its slot, CU, bytes and verdict, never the RPC URL |
 
-The original spec (`TZ.md`) also names `SURFPOOL_URL`. It is not used; see
-[Why LiteSVM and not Surfpool](#why-litesvm-and-not-surfpool).
-
 ## Deploy on a VPS
 
 The simulator is one stateless binary that needs outbound HTTPS to the RPC. Each simulation is a fork in memory. The
@@ -190,7 +187,7 @@ and 934 bytes, of which Connect's part is about 555 CU and 200 bytes.
 
 ## Why LiteSVM and not Surfpool
 
-The original spec asks for Surfpool and allows LiteSVM as the fallback, which is what this uses. Surfpool keeps the
+Surfpool was the first choice, with LiteSVM as the fallback, and the fallback is what this uses. Surfpool keeps the
 first copy of every account it reads. Within minutes the oracle prices on the fork go stale, and klend's
 `refresh_reserve` rejects them, so a repay that passes on mainnet fails there. Concurrent requests would also share, and
 race on, the intermediary's balance. A new fork per request reads prices, reserves and the clock at one slot. That takes
