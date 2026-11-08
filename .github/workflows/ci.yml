@@ -1,7 +1,8 @@
 # The checks of every push and pull request. What each one covers, and how to run it locally, is in
 # apps/web/e2e/README.md.
 #
-# Blocking: unit tests, the build, the bundle budget, the end-to-end tests (behaviour, axe, keyboard, layout).
+# Blocking: unit tests, the build, the bundle budget, the simulator (fmt, clippy, tests), the end-to-end tests
+# (behaviour, axe, keyboard, layout).
 # Not blocking: the screenshots, whose baselines are drawn on the team's Linux machine, and Lighthouse, whose scores
 # move with the runner. Both upload what they saw.
 name: CI
@@ -46,6 +47,20 @@ jobs:
       - run: npm run build
       - name: Bundle budget (first load of /, gzip)
         run: npm run budget
+
+  sim:
+    name: Simulator (Rust)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      # installs the toolchain that rust-toolchain.toml pins, with clippy and rustfmt
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy -p sim --all-targets --locked -- -D warnings
+      # the fork test (--ignored) needs a mainnet RPC and is run by hand, see fixtures/README.md
+      - run: cargo test -p sim --locked
 
   e2e:
     name: End-to-end tests (Chromium)
