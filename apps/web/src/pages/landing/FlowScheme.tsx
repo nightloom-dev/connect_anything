@@ -1,16 +1,9 @@
 import { useId, type CSSProperties } from 'react';
 import { cn } from '../../ui/cn.ts';
 
-// The hero drawing of the landing page: the route of one run, from the EVM chain you sign on, through Intents Connect,
-// to the program on Solana. Two drawings of the same route: across, with three numbered callouts, from 960 px; top to
-// bottom on a narrower screen, where the callouts are a list under it (Landing.tsx). Its styles are in
-// styles/landing.css.
-//
-// Everything is drawn at the first paint; only the run itself plays. The payment rides the head of the line as it is
-// drawn, Intents Connect rings when it arrives, the program's instructions get their checks, and each callout lights as
-// the run passes what it names. At the first paint it is over in 1.2 s. Run again plays it slower (`slow`), and a run
-// from another chain (`source`) takes that chain's way to the junction. The chains' boxes are the control that picks it:
-// SourcePicker lays a button over each.
+// The landing page's hero drawing: one run from an EVM chain, through Intents Connect, to a program on Solana.
+// Laid out across from 960 px and top to bottom below that; styles in styles/landing.css. The animation finishes within
+// 1.2 s of the first paint, `slow` replays it, and SourcePicker puts a button over each chain to pick the source.
 
 export const SCHEME_TITLE =
   'One payment from Base, Arbitrum or Ethereum goes through Intents Connect to a program on Solana: here the four instructions of a Kamino repay.';

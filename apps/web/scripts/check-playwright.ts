@@ -1,7 +1,7 @@
 // Playwright's parts must agree, or every e2e test fails at its first line with "Executable doesn't exist":
 // @playwright/test (the runner), playwright-core (pinned by the overrides of the root package.json) and the Chromium
-// build that playwright-core drives, in PLAYWRIGHT_BROWSERS_PATH (/opt/pw-browsers on the team's cloud machines) or
-// in Playwright's cache (CI, after npx playwright install).
+// build that playwright-core drives, in PLAYWRIGHT_BROWSERS_PATH when it is set or in Playwright's cache (CI, after
+// npx playwright install).
 //
 //   node scripts/check-playwright.ts      (npm run e2e:check)
 

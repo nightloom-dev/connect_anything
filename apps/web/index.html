@@ -7,13 +7,10 @@
     <meta name="theme-color" content="#f6f8fb" />
     <title>Connect Anything</title>
     <meta name="description" content="Turn an Anchor program into a button anyone can press from Base, Arbitrum or Ethereum. Aurora Intents Connect bridges the money and runs the instructions on Solana." />
-    <!-- first, because AppKit hands the first icon link to wallets as the app's icon, and a 180 px PNG suits them best.
-         The PNGs are the mark of favicon.svg: at 32 px on nothing, and at 128 on a white 180 px square, whose corners iOS
-         rounds itself. favicon.svg turns light on a dark tab; the PNG, for browsers without SVG icons, cannot. -->
+    <!-- AppKit gives wallets the first icon link as the app icon, so the 180 px PNG comes first -->
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <!-- og.png is drawn by /dev/og (src/pages/OgImage.tsx); vite preview makes its URL absolute (vite.config.ts) -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Connect Anything" />
     <meta property="og:title" content="Any Solana program. One signature from any EVM chain." />

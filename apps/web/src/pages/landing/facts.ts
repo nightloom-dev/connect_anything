@@ -89,7 +89,7 @@ export type ProofRun = {
 
 /**
  * Runs on mainnet with real money, with links to their transactions. The block that lists them shows only when this
- * has an entry, and the repository has no transaction links yet: whoever ran them adds them here.
+ * has an entry.
  */
 export const PROOF_RUNS: ProofRun[] = [];
 

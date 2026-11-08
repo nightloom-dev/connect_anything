@@ -165,7 +165,7 @@ test('a debt with no farm leaves out both farm accounts, and one with a farm der
   assert.ok(!('farms_accounts.obligation_farm_user_state' in farmed));
 });
 
-test('the compute estimate covers the real repays and passes the limit where the spec says it does', () => {
+test('the compute estimate covers the real repays and passes the limit at 4 reserves', () => {
   // klend-repay-plain measured 112673 and klend-repay-farms 135304, both with two reserves
   assert.equal(estimateCu(position(), row()), 117_000);
   assert.equal(estimateCu(position(), row({ debtFarm: 'farm' })), 147_000);

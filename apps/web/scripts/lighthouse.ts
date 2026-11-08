@@ -5,7 +5,7 @@
 //   npm run build && npm run lighthouse        (PORT=5384 serves the build elsewhere than on 4174; LIGHTHOUSE_CHROME
 //                                               names another Chrome)
 //
-// The reports go to e2e/lighthouse/<page>-<form factor>.report.html and .json. The spec's thresholds: Accessibility
+// The reports go to e2e/lighthouse/<page>-<form factor>.report.html and .json. Thresholds: Accessibility
 // and Best Practices at least 95 on every page, Performance at least 80 on / at desktop. The other scores are printed
 // for the record. Exits 1 when a threshold is missed.
 
@@ -36,7 +36,7 @@ const web = join(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(web, 'e2e', 'lighthouse');
 const port = Number(process.env.PORT ?? 4174);
 const origin = `http://localhost:${port}`;
-// the binary itself: CHROME_PATH may name a wrapper script (it does on the team's cloud machines)
+// the binary itself: CHROME_PATH may name a wrapper script rather than Chromium
 const chrome = process.env.LIGHTHOUSE_CHROME ?? chromium.executablePath();
 
 // vite preview, in a process group of its own so that npx and vite stop together
@@ -113,6 +113,6 @@ const missed = rows.flatMap(({ page, form, scores }) =>
   THRESHOLDS.filter(({ category, min, applies }) => applies(page, form) && scores[category] < min).map(({ category, min }) => `${page} (${form}): ${category} ${scores[category]} < ${min}`),
 );
 console.log(`\nReports: ${out}`);
-if (missed.length) console.error(`\nUnder the spec's thresholds:\n  ${missed.join('\n  ')}`);
-else console.log("All of the spec's thresholds are met.");
+if (missed.length) console.error(`\nBelow the thresholds:\n  ${missed.join('\n  ')}`);
+else console.log('All thresholds are met.');
 process.exit(missed.length ? 1 : 0);

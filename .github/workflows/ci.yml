@@ -3,7 +3,7 @@
 #
 # Blocking: unit tests, the build, the bundle budget, the simulator (fmt, clippy, tests), the end-to-end tests
 # (behaviour, axe, keyboard, layout).
-# Not blocking: the screenshots, whose baselines are drawn on the team's Linux machine, and Lighthouse, whose scores
+# Not blocking: the screenshots, whose baselines are drawn on a Linux machine, and Lighthouse, whose scores
 # move with the runner. Both upload what they saw.
 name: CI
 
@@ -26,7 +26,7 @@ permissions:
   contents: read
 
 env:
-  # the Node of the team's machines
+  # the Node the baselines and the bundle budget were measured with
   NODE_VERSION: 22.23.4
 
 jobs:
