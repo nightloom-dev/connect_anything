@@ -5,7 +5,13 @@ import { Card } from '../ui/Card.tsx';
 import { CopyButton } from '../ui/CopyButton.tsx';
 import { Disclosure } from '../ui/Disclosure.tsx';
 
-type Props = { children: ReactNode; /** A new value, such as the next route, clears the error. */ resetKey?: unknown };
+type Props = {
+  children: ReactNode;
+  /** A new value, such as the next route, clears the error. */
+  resetKey?: unknown;
+  /** What shows instead of the children. The default is a whole-page crash screen with a reload. */
+  fallback?: (error: Error) => ReactNode;
+};
 
 function Crash({ error }: { error: Error }) {
   const details = [error.name && error.name !== 'Error' ? `${error.name}: ${error.message}` : error.message, error.stack].filter(Boolean).join('\n\n');
@@ -40,7 +46,7 @@ function Crash({ error }: { error: Error }) {
   );
 }
 
-/** Catches what a page throws while rendering, including a chunk that failed to load, and offers a reload. */
+/** Catches what its children throw while rendering, including a chunk that failed to load. A page offers a reload. */
 export class ErrorBoundary extends Component<Props, { error?: Error }> {
   state: { error?: Error } = {};
   static getDerivedStateFromError(error: Error) {
@@ -50,6 +56,8 @@ export class ErrorBoundary extends Component<Props, { error?: Error }> {
     if (this.state.error && previous.resetKey !== this.props.resetKey) this.setState({ error: undefined });
   }
   render() {
-    return this.state.error ? <Crash error={this.state.error} /> : this.props.children;
+    const { error } = this.state;
+    if (!error) return this.props.children;
+    return this.props.fallback ? this.props.fallback(error) : <Crash error={error} />;
   }
 }

@@ -35,28 +35,21 @@ const BOXES = {
   narrow: { width: 420, height: 312, boxes: COLUMNS.map(x => [x, 10, 120, 36]) },
 };
 
-/** The run, in seconds from the first paint: when each part starts and how long it takes. The last ends at 1.18 s. */
+/** The run as [start, length] in seconds from the first paint. The last part ends at 1.18 s. */
 const RUN = {
-  /** The chain's dot, and callout 1. */
-  sign: [0, 0.45],
-  /** The line from the chain to Intents Connect, and the payment at its head. */
-  toHub: [0, 0.42],
-  /** Intents Connect rings as the payment arrives. */
-  hub: [0.4, 0.6],
-  /** Callout 2. */
-  bridge: [0.4, 0.45],
-  /** The line on to the program. */
+  sign: [0, 0.45], // the chain's dot and callout 1
+  toHub: [0, 0.42], // the line to Intents Connect, with the payment at its head
+  hub: [0.4, 0.6], // Intents Connect rings as the payment arrives
+  bridge: [0.4, 0.45], // callout 2
   toProgram: [0.48, 0.3],
-  /** One check per instruction. */
+  // one check per instruction
   checks: [
     [0.78, 0.22],
     [0.86, 0.22],
     [0.94, 0.22],
   ],
-  /** The compute units the instructions took. */
   units: [0.8, 0.36],
-  /** Callout 3. */
-  program: [0.73, 0.45],
+  program: [0.73, 0.45], // callout 3
 } satisfies Record<string, [number, number] | [number, number][]>;
 
 /** The animation's start and length as an inline style: `--flow-k` on the drawing stretches both. */

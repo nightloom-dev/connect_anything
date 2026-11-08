@@ -5,6 +5,7 @@ import { usePageTitle } from '../app/title.ts';
 import { CU_LIMIT, TX_BYTES_LIMIT } from '../limits.ts';
 import { buttonClass } from '../ui/Button.tsx';
 import { cn } from '../ui/cn.ts';
+import { ExternalLink } from '../ui/ExternalLink.tsx';
 import { Tooltip } from '../ui/Tooltip.tsx';
 import { CALLOUTS, FlowScheme, FlowSchemeNarrow, SourcePicker, type Source } from './landing/FlowScheme.tsx';
 import { useDrawOnView } from './landing/useDrawOnView.ts';
@@ -21,16 +22,6 @@ const short = (value: string, chars = 5) => `${value.slice(0, chars)}…${value.
 const SHEETS = 5;
 
 const WIDTH = 'mx-auto w-full max-w-content px-4 sm:px-6';
-
-function External({ href, children, className }: { href: string; children: ReactNode; className?: string }) {
-  return (
-    <a href={href} target="_blank" rel="noreferrer" className={cn('link inline-flex items-center gap-1', className)}>
-      {children}
-      <ArrowUpRight className="size-3.5 shrink-0" aria-hidden />
-      <span className="sr-only"> (opens in a new tab)</span>
-    </a>
-  );
-}
 
 /** The rule a sheet starts with: an ink line and the sheet's number, as the frame of a drawing has it. */
 function SheetRule({ n, children }: { n: number; children?: ReactNode }) {
@@ -436,7 +427,9 @@ function Proof() {
       <ProofList />
       <div className="mt-5 flex flex-col gap-3 text-sm text-muted sm:flex-row sm:items-center sm:justify-between">
         <p>Each row is a request this app wrote, kept in the repo with the simulator&apos;s answer. One command runs them all again on today&apos;s mainnet.</p>
-        <External href={FIXTURES_URL}>How these were measured</External>
+        <ExternalLink href={FIXTURES_URL} className="link gap-1">
+          How these were measured
+        </ExternalLink>
       </div>
       {PROOF_RUNS.length > 0 && <MainnetRuns runs={PROOF_RUNS} />}
     </Sheet>
@@ -473,9 +466,9 @@ function Watcher() {
         <p className="max-w-[62ch] text-sm text-muted">
           A repay lands about 3 minutes after the tap, so the line sits well before the edge. A position rings once, and again only after it falls 3 points under its line.
         </p>
-        <External href={WATCHER_URL} className="shrink-0 text-sm font-medium">
+        <ExternalLink href={WATCHER_URL} className="link shrink-0 gap-1 text-sm font-medium">
           Run your own watcher
-        </External>
+        </ExternalLink>
       </div>
     </Sheet>
   );

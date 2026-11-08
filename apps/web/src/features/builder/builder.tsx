@@ -4,9 +4,10 @@ import { argFields, buildInstruction, flatten, listInstructions, type Idl, type 
 import { ArrowRight, CircleCheck, ListPlus, Play, Plus, SquareMousePointer } from 'lucide-react';
 import { checkCompat, issueText } from '../../compat.ts';
 import { bySymbol, fromAtomic, toAtomic, type Token, type TokenList } from '../../connect.ts';
+import { ErrorBoundary } from '../../app/ErrorBoundary.tsx';
 import { Execute } from '../run/execute.tsx';
 import { STAND_IN, defaultValue, destinationIssue, followsIntermediary, recipeCode, resolveStep, simulationRequest, toSolanaRecipe, type Row, type StoredRecipe, type StoredStep } from '../../recipe.ts';
-import { Boundary, Failure, FetchError, fetchJson, useAct, useAsync, useJson } from '../../ui.tsx';
+import { Failure, FetchError, fetchJson, useAct, useAsync, useJson } from '../../ui.tsx';
 import { Alert, Button, Card, EmptyState, Input, Spinner, Stepper, Switch, cn, isSolanaAddress, solanaAddressProblem, toast, type StepItem } from '../../ui/index.ts';
 import { AccountsPanel, type AccountGroup, type AccountView } from './AccountsPanel.tsx';
 import { breakable } from './breakable.tsx';
@@ -29,6 +30,9 @@ const WHO = 'the intermediary of whoever runs this';
 const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 type HeadingRef = Ref<HTMLHeadingElement>;
+
+// an IDL is someone else's file: whatever one breaks shows as a message in place, not as a crashed page
+const idlFailure = (error: Error) => <Failure error={error} />;
 
 type ProgramScreenProps = { onLoad: (idl: Idl) => void; onRecipe: (recipe: StoredRecipe) => void; heading: HeadingRef; hint?: string };
 
@@ -431,7 +435,7 @@ function InstructionScreen({ idl, idls, list, targets, token, onTarget, steps, o
               {instructions.length === 0 ? <Alert>This IDL has no instructions.</Alert> : <InstructionPicker options={options} value={ixName} onChange={setChosen} />}
               {ixName && !token && <Alert>Pick the token the recipe receives first: the accounts depend on it.</Alert>}
               {ixName && token && (
-                <Boundary key={`${idl.address} ${ixName}`}>
+                <ErrorBoundary key={`${idl.address} ${ixName}`} fallback={idlFailure}>
                   <InstructionForm
                     idl={idl}
                     ixName={ixName}
@@ -442,7 +446,7 @@ function InstructionScreen({ idl, idls, list, targets, token, onTarget, steps, o
                       toast.success(`Added ${step.ixName} to the recipe`, { description: `Step ${steps.length + 1}. Add another, or simulate.` });
                     }}
                   />
-                </Boundary>
+                </ErrorBoundary>
               )}
               {!ixName && instructions.length > 0 && (
                 <EmptyState compact level={2} icon={<SquareMousePointer />} title="Pick an instruction above">
@@ -755,7 +759,7 @@ export function Builder() {
       <div key={screen} className={cn(from !== 0 && 'animate-step-in motion-reduce:animate-none')} style={{ '--step-from': `${from * 0.75}rem` } as CSSProperties}>
         {screen === 1 && <ProgramScreen onLoad={onLoad} onRecipe={onRecipe} heading={heading} hint={idl || !initial.asked ? undefined : NOTHING_YET[initial.asked]} />}
         {screen === 2 && (
-          <Boundary>
+          <ErrorBoundary fallback={idlFailure}>
             <InstructionScreen
               idl={idl}
               idls={idls}
@@ -771,7 +775,7 @@ export function Builder() {
               onNext={() => setScreen(3)}
               heading={heading}
             />
-          </Boundary>
+          </ErrorBoundary>
         )}
         {screen === 3 && <SimulateScreen stored={stored} token={token} pending={pending} onBack={() => setScreen(idl ? 2 : 1)} onRun={() => setScreen(4)} heading={heading} />}
         {screen === 4 && (

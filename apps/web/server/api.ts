@@ -151,8 +151,8 @@ const retryOn429 = (transport: RpcTransport): RpcTransport => async config => {
 
 const kaminoRpc = (url: string) => createSolanaRpcFromTransport(retryOn429(createDefaultRpcTransport({ url })));
 
-// the SDK's own math on only the reserves a wallet uses, because KaminoMarket.load pulls every reserve of a market
-// through getProgramAccounts on each call and the public RPC does not take that
+// The SDK's own math, on only the reserves a wallet uses: KaminoMarket.load reads every reserve of a market through
+// getProgramAccounts on each call, which the public RPC refuses.
 // Known limit: one getMultipleAccounts per kind of account, so a wallet using over 100 reserves gets a 502
 async function readObligations(wallet: string, rpc: ReturnType<typeof kaminoRpc>): Promise<RescuePosition[]> {
   // 170 MB and over a second to load, so only once somebody asks and never in a build
@@ -251,7 +251,7 @@ async function readObligations(wallet: string, rpc: ReturnType<typeof kaminoRpc>
 
 type Handler = (params: string[], context: { req: IncomingMessage; res: ServerResponse; query: string }) => Promise<unknown>;
 
-/** every /api route as one connect-style middleware, anything else goes on to next() */
+/** Every /api route as one connect-style middleware. Anything else goes on to next(). */
 export function createApi(env: Env) {
   const rpcUrl = env.SOLANA_RPC_URL || PUBLIC_RPC;
   const connection = new Connection(rpcUrl, { commitment: 'confirmed', fetch: (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(RPC_TIMEOUT) }) });

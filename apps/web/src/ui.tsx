@@ -1,4 +1,4 @@
-import { Component, useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { RotateCw } from 'lucide-react';
 import { explain } from './connect.ts';
 import { followsIntermediary, type Row } from './recipe.ts';
@@ -82,17 +82,6 @@ export function Failure({ error, retry }: { error: Error; retry?: () => void }) 
       {error.message}
     </Alert>
   );
-}
-
-/** An IDL is someone else's file: whatever one breaks shows as a message here, not as a blank page. */
-export class Boundary extends Component<{ children: ReactNode }, { error?: Error }> {
-  state: { error?: Error } = {};
-  static getDerivedStateFromError(error: Error) {
-    return { error };
-  }
-  render() {
-    return this.state.error ? <Failure error={this.state.error} /> : this.props.children;
-  }
 }
 
 export const short = (value: string) => `${value.slice(0, 4)}…${value.slice(-4)}`;
