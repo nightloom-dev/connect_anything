@@ -219,6 +219,10 @@ Read from `apps/web/.env` or from the environment.
 On `/r/:id`, before anything can be signed, the page lists the recipe's programs, instructions and accounts, says that
 whoever shared the link made it, and compares it with the IDL the program publishes, where there is one.
 
+Two more routes exist only under `npm run dev`, and the production bundle leaves them out. `/dev/states` is a gallery of
+every component and every state of the run card, which the end-to-end suite checks for accessibility and layout.
+`/dev/og` draws the picture that links to the site unfurl into, `public/og.png`.
+
 ### Server routes
 
 `apps/web/server/api.ts` holds every route. A small Vite plugin mounts it into both `vite` and `vite preview`.
@@ -251,6 +255,11 @@ start the Telegram watcher once `TELEGRAM_BOT_TOKEN` is in `apps/watch/.env`; it
 
 Without Docker, run `npm run build && ALLOWED_HOSTS=<domain> npm run preview -w apps/web -- --host`, which serves on
 port 4173. `vite preview` answers 403 to any host that is not in `ALLOWED_HOSTS`.
+
+`vite preview` serves the built pages and the server routes from one process, which is all this app needs on one server,
+and it is what the end-to-end suite runs against. Vite presents it as a way to check a build, not as a production
+server. For more traffic, `createApi` in `server/api.ts` is plain Node middleware with no tie to Vite, so it can be
+mounted in any Node server, with the built `dist/` served as static files.
 
 To run the simulator on its own server, with Docker or systemd, see
 [crates/sim/README.md](crates/sim/README.md#deploy-on-a-vps).
@@ -297,6 +306,11 @@ only after its LTV falls 3 points under the line.
 | `fixtures`              | Simulation requests and the simulator's recorded answers, the source of truth for its contract         |
 | `compose.yaml`          | The web, the simulator and Caddy on one server, with the watcher as an optional profile                |
 
+In `apps/web/src`, `features/` holds the three flows, each with its page, screens and state: `builder`, `kamino`, and
+`run` (signing, progress and the shared page). `pages/` holds the routes that are not a flow: the landing page, the
+404, and the dev-only pages. `ui/` is the component library, `app/` the shell: header, footer, routes, wallet and error
+boundary.
+
 The JavaScript side is one npm workspace (`apps/*`, `packages/*`, `recipes/*`). The Rust side is one Cargo workspace
 (`crates/*`), with the toolchain pinned in `rust-toolchain.toml`.
 
@@ -304,14 +318,15 @@ The JavaScript side is one npm workspace (`apps/*`, `packages/*`, `recipes/*`). 
 
 ```bash
 npm test                     # unit tests of every workspace
+npm run typecheck            # TypeScript, every workspace
 cargo test -p sim            # the simulator, offline
 npm run e2e                  # end-to-end, in Chromium
 ```
 
 | Suite                   | Command                             | Tests on 2026-11-08 |
 | ----------------------- | ----------------------------------- | ------------------: |
-| `packages/core`         | `npm test -w packages/core`         |                  53 |
-| `apps/web`              | `npm test -w apps/web`              |                 133 |
+| `packages/core`         | `npm test -w packages/core`         |                  54 |
+| `apps/web`              | `npm test -w apps/web`              |                 142 |
 | `recipes/kamino-rescue` | `npm test -w recipes/kamino-rescue` |                  16 |
 | `apps/watch`            | `npm test -w apps/watch`            |                   4 |
 | `crates/sim`            | `cargo test -p sim`                 |                  24 |
