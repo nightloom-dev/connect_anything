@@ -15,7 +15,7 @@ const KAMINO_CODE = /\/src\/features\/kamino\/page\.tsx|\/assets\/page-[\w-]{8}\
 
 test('the landing page', { tag: '@mobile' }, async ({ page }, testInfo) => {
   await page.goto(LANDING);
-  await expect(page.getByRole('heading', { name: 'Any Solana program. One signature from any EVM chain.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Any Anchor program. One signature from any EVM chain.' })).toBeVisible();
   await audit(page, testInfo);
 });
 

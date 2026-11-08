@@ -61,14 +61,10 @@ function Sheet({ n, id, label, title, lead, children, className }: { n: number; 
   );
 }
 
-/**
- * Under the drawing: how to pick the chain (its boxes are buttons, see SourcePicker), and Run again, which replays the
- * run more slowly. With reduced motion there is nothing to replay.
- */
+/** Under the drawing: Run again replays the run more slowly. With reduced motion there is nothing to replay. */
 function RunControls({ onAgain }: { onAgain: () => void }) {
   return (
     <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 md:mt-3">
-      <p className="text-sm text-muted">Press Base, Arbitrum or Ethereum on the drawing to pay from it.</p>
       <button
         type="button"
         onClick={onAgain}
@@ -99,7 +95,7 @@ function Hero() {
         <SheetRule n={1}>Built on Aurora Intents Connect</SheetRule>
         {/* from 640 px the second sentence has a line of its own, and the size keeps it to one line up to 60 px */}
         <h1 id="hero-title" className="mt-6 text-[2.125rem] leading-[1.06] font-semibold tracking-[-0.03em] sm:mt-8 sm:text-[clamp(2.125rem,calc(6.4vw-0.25rem),3.75rem)] sm:leading-[1.04] lg:mt-7">
-          Any Solana program. <span className="sm:block">One signature from any EVM chain.</span>
+          Any Anchor program. <span className="sm:block">One signature from any EVM chain.</span>
         </h1>
         {/* before the drawing in the page, so a phone shows both ways in on its first screen; under it from 960 px */}
         <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap md:order-last md:mt-0 md:items-center md:border-t md:border-border md:pt-6">
@@ -438,7 +434,7 @@ function Proof() {
       <ProofTable />
       <ProofList />
       <div className="mt-5 flex flex-col gap-3 text-sm text-muted sm:flex-row sm:items-center sm:justify-between">
-        <p>Simulated, so no money moved. In the app, each is paid from Base, Arbitrum or Ethereum.</p>
+        <p>Each row is a request this app wrote, kept in the repo with the simulator&apos;s answer. One command runs them all again on today&apos;s mainnet.</p>
         <External href={FIXTURES_URL}>How these were measured</External>
       </div>
       {PROOF_RUNS.length > 0 && <MainnetRuns runs={PROOF_RUNS} />}

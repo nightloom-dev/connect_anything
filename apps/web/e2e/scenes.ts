@@ -63,7 +63,7 @@ export const SCENES: Scene[] = [
     tablet: true,
     open: async ({ page }) => {
       await page.goto(LANDING);
-      await expect(page.getByRole('heading', { name: 'Any Solana program. One signature from any EVM chain.' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Any Anchor program. One signature from any EVM chain.' })).toBeVisible();
     },
   },
   {

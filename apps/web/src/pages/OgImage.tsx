@@ -21,7 +21,7 @@ export default function OgImage() {
         <span className="label-caps text-[13px]! text-muted">Built on Aurora Intents Connect</span>
       </div>
       <h1 className="mt-9 text-[54px] leading-[1.06] font-semibold tracking-[-0.03em]">
-        Any Solana program.
+        Any Anchor program.
         <br />
         One signature from any EVM chain.
       </h1>
