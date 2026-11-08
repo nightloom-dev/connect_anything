@@ -16,7 +16,8 @@
     "e2e:types": "tsc -p e2e/tsconfig.json",
     "e2e:check": "node scripts/check-playwright.ts",
     "budget": "node scripts/bundle-budget.ts dist",
-    "lighthouse": "node scripts/lighthouse.ts"
+    "lighthouse": "node scripts/lighthouse.ts",
+    "vercel": "npm run build && node scripts/vercel.ts"
   },
   "dependencies": {
     "@aurora-is-near/intents-connect": "7.28.0",

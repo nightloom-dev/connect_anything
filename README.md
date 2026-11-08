@@ -82,6 +82,11 @@ has to be the same in both files. Shared recipes are kept in a Docker volume. Th
 Without Docker it is `npm run build && ALLOWED_HOSTS=<domain> npm run preview -w apps/web -- --host`, on port 4173:
 `vite preview` answers 403 to a host that is not in `ALLOWED_HOSTS`.
 
+The live site, https://connect-anything-pi.vercel.app, runs on Vercel without the simulator and the watcher: the pages
+are static, the server routes are one function. `npm run vercel -w apps/web` builds both into `.vercel/output`, then
+`npx vercel deploy --prebuilt --prod` with `AURORA_KEY` set in the project. Its disk lasts as long as the function, so
+a shared `/r/:id` link stays up until Vercel recycles it.
+
 ### Telegram watcher
 
 `apps/watch` watches the LTV of Kamino positions and sends a link to `/kamino` that repays from Base. It reads positions

@@ -4,3 +4,5 @@ dist/
 apps/web/data/
 target/
 apps/watch/data/
+.vercel/
+.env.local
