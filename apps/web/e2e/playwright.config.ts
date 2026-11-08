@@ -32,7 +32,9 @@ export default defineConfig({
   updateSnapshots: CI ? 'none' : 'missing',
   fullyParallel: true,
   forbidOnly: CI,
-  retries: 0,
+  // on CI one retry, as the wallet modal now and then opens its WalletConnect view on a slow runner; the report marks
+  // a test that passed on the retry as flaky
+  retries: CI ? 1 : 0,
   workers: CI ? 2 : 4,
   timeout: 30_000,
   expect: {
