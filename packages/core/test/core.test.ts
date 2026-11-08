@@ -819,6 +819,34 @@ test('the funded mint goes to the one account that spends it and picks no side',
   for (const name of ['user_base_token_account', 'user_quote_token_account', 'user_pool_token_account']) assert.equal(rowOf(deposit, name).pubkey, null, name);
 });
 
+test('a swap pays out the mint of the pair that is not the funded one, through its own token program', async () => {
+  const me = ANY_KEY;
+  const PYUSD = '2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo';
+  const SOL = 'So11111111111111111111111111111111111111112';
+  const dlmm = await onChainIdl('meteora_dlmm');
+  const sides = { token_x_mint: SOL, token_y_mint: USDC, token_x_program: TOKEN_PROGRAM_ID.toBase58(), token_y_program: TOKEN_PROGRAM_ID.toBase58() };
+  const swap = resolveAccounts(dlmm, 'swap', {}, { intermediary: me, mint: USDC }, sides);
+  assert.equal(rowOf(swap, 'user_token_in').pubkey, ata(me, USDC));
+  assert.deepEqual([rowOf(swap, 'user_token_out').pubkey, rowOf(swap, 'user_token_out').source], [ata(me, SOL), 'auto']);
+  // a funded mint that is neither of the pair says nothing about the output
+  assert.equal(rowOf(resolveAccounts(dlmm, 'swap', {}, { intermediary: me, mint: PYUSD }, sides), 'user_token_out').pubkey, null);
+
+  // DAMM v2 names them input_token_account and output_token_account, with a token program for each side
+  const damm = handIdl([
+    { name: 'input_token_account' },
+    { name: 'output_token_account' },
+    { name: 'token_a_mint' },
+    { name: 'token_b_mint' },
+    { name: 'payer', signer: true },
+    { name: 'token_a_program' },
+    { name: 'token_b_program' },
+  ]);
+  const hints = { token_a_mint: PYUSD, token_b_mint: USDC, token_a_program: T22, token_b_program: TOKEN_PROGRAM_ID.toBase58() };
+  const cp = resolveAccounts(damm, 'ix', {}, { intermediary: me, mint: USDC }, hints);
+  assert.equal(rowOf(cp, 'input_token_account').pubkey, ata(me, USDC));
+  assert.equal(rowOf(cp, 'output_token_account').pubkey, ata(me, PYUSD, T22));
+});
+
 test('a mint or token program on the other side, or in another group, is not the one of this account', async () => {
   const me = ANY_KEY;
   const PYUSD = '2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo';

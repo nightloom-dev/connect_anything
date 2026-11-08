@@ -106,12 +106,12 @@ function argSeed(idl: Idl, ix: IdlInstruction, args: Record<string, unknown>, pa
 // stay open. A wrong answer shows as auto and fails simulation, and a hint or input corrects it. Replace with a real
 // marker if IDLs ever carry one.
 const OWN_TOKEN_ACCOUNT =
-  /^(?:token_owner_account(?:_.+)?|(?:user|owner|payer|signer|funder|authority|wallet)_(?!.*vault)(?:.*_)?(?:tokens?(?:_(?:account|[abxy]))?|ata(?:_acc)?|ta|liquidity|collateral|source|destination|in|out))$/;
+  /^(?:token_owner_account(?:_.+)?|(?:input|output)_token_account|(?:user|owner|payer|signer|funder|authority|wallet)_(?!.*vault)(?:.*_)?(?:tokens?(?:_(?:account|[abxy]))?|ata(?:_acc)?|ta|liquidity|collateral|source|destination|in|out))$/;
 const OUTGOING = /(?:^|_)(?:destination|out|output)(?:_|$)/;
 const INCOMING = /(?:^|_)(?:source|in|input)(?:_|$)/;
 const MINT = /(?:^|_)mint(?:_(?:[a-z0-9]|input|intermediate|output))?$/;
 const TOKEN_PROGRAM = /^(?!associated)(?!.*metadata).*token.*program/;
-const FILLER = new Set(['user', 'owner', 'payer', 'signer', 'funder', 'authority', 'wallet', 'token', 'tokens', 'account', 'ata', 'ta', 'mint', 'source', 'destination', 'in', 'out', 'reserve', 'program']);
+const FILLER = new Set(['user', 'owner', 'payer', 'signer', 'funder', 'authority', 'wallet', 'token', 'tokens', 'account', 'ata', 'ta', 'mint', 'source', 'destination', 'in', 'out', 'input', 'output', 'reserve', 'program']);
 const nameWords = (name: string) => name.split('_').filter(word => !FILLER.has(word));
 
 // By full path or by plain name. hasOwn, because an IDL can name an account anything, `constructor` included.
@@ -120,8 +120,8 @@ const entryFor = <T>(record: Record<string, T> | undefined, { path, account }: F
   return Object.hasOwn(record, path) ? record[path] : Object.hasOwn(record, account.name) ? record[account.name] : undefined;
 };
 
-// The one account that shares the name's words and does not face the other way, looking first in the name's own group.
-function sibling(accounts: FlatAccount[], pattern: RegExp, { scope, account: { name } }: FlatAccount): FlatAccount | undefined {
+// The accounts that share the name's words and do not face the other way: those in the name's own group if there are any.
+function siblings(accounts: FlatAccount[], pattern: RegExp, { scope, account: { name } }: FlatAccount): FlatAccount[] {
   const words = nameWords(name);
   const opposite = OUTGOING.test(name) ? INCOMING : INCOMING.test(name) ? OUTGOING : null;
   const fits = accounts.filter(({ account: other }) => {
@@ -130,7 +130,12 @@ function sibling(accounts: FlatAccount[], pattern: RegExp, { scope, account: { n
     return !words.length || !own.length || (own.length === words.length && own.every(word => words.includes(word)));
   });
   const near = fits.filter(other => other.scope.join() === scope.join());
-  const [only, more] = near.length ? near : fits;
+  return near.length ? near : fits;
+}
+
+// The one sibling, if there is only one.
+function sibling(accounts: FlatAccount[], pattern: RegExp, flat: FlatAccount): FlatAccount | undefined {
+  const [only, more] = siblings(accounts, pattern, flat);
   return more ? undefined : only;
 }
 
@@ -187,10 +192,19 @@ export function resolveAccounts(idl: Idl, ixName: string, args: Record<string, u
     nameWords(flat.account.name).every(word => word === 'liquidity' || word === 'collateral') &&
     !accountSeed(sibling(accounts, MINT, flat));
 
+  // `user_token_out` between two mints, one of them the funded mint: a swap pays out the other one.
+  const otherOfPair = (flat: FlatAccount): SeedValue | null => {
+    if (!fundedMint || !OUTGOING.test(flat.account.name)) return null;
+    const pair = siblings(accounts, MINT, flat).map(accountSeed);
+    if (pair.length !== 2) return null;
+    const [a, b] = pair;
+    return a === fundedMint && b !== fundedMint ? b : b === fundedMint && a !== fundedMint ? a : null;
+  };
+
   const ownTokenAccount = (flat: FlatAccount): Derived | null => {
     if (!isOwnTokenAccount(flat)) return null;
     const funded = fundedMint ? accounts.filter(wantsFundedMint) : [];
-    const mint = accountSeed(sibling(accounts, MINT, flat)) ?? (funded.length === 1 && funded[0] === flat ? fundedMint : null);
+    const mint = accountSeed(sibling(accounts, MINT, flat)) ?? (funded.length === 1 && funded[0] === flat ? fundedMint : null) ?? otherOfPair(flat);
     if (!mint) return null;
     // `user_token_in` next to token_x_program and token_y_program: the mint it turned out to hold says which side it is.
     const held = accounts.find(other => MINT.test(other.account.name) && accountSeed(other) === mint);
